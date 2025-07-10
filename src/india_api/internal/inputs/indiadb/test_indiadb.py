@@ -88,32 +88,32 @@ class TestIndiaDBClient:
         sites_from_api = client.get_sites(email="test@test.com")
         assert sites_from_api[0].client_site_name == "ruvnl_pv_testID1"
         site = client.put_site(
-            site_uuid=sites[0].site_uuid,
+            site_uuid=sites[0].location_uuid,
             site_properties=SiteProperties(client_site_name="test_zzz"),
             email="test@test.com",
         )
-        assert site.client_site_name == "test_zzz"
+        assert site.client_location_name == "test_zzz"
         assert site.latitude is not None
 
     def test_get_site_forecast(self, client, sites, forecast_values_site) -> None:
-        out = client.get_site_forecast(site_uuid=str(sites[0].site_uuid), email="test@test.com")
+        out = client.get_site_forecast(site_uuid=str(sites[0].location_uuid), email="test@test.com")
         assert len(out) > 0
 
     def test_get_site_forecast_no_forecast_values(self, client, sites) -> None:
-        out = client.get_site_forecast(site_uuid=sites[0].site_uuid, email="test@test.com")
+        out = client.get_site_forecast(site_uuid=sites[0].location_uuid, email="test@test.com")
         assert len(out) == 0
 
     def test_get_site_forecast_no_access(self, client, sites) -> None:
         with pytest.raises(Exception):
-            _ = client.get_site_forecast(site_uuid=sites[0].site_uuid, email="test2@test.com")
+            _ = client.get_site_forecast(site_uuid=sites[0].location_uuid, email="test2@test.com")
 
     def test_get_site_generation(self, client, sites, generations) -> None:
-        out = client.get_site_generation(site_uuid=str(sites[0].site_uuid), email="test@test.com")
+        out = client.get_site_generation(site_uuid=str(sites[0].location_uuid), email="test@test.com")
         assert len(out) > 0
 
     def test_post_site_generation(self, client, sites) -> None:
         client.post_site_generation(
-            site_uuid=sites[0].site_uuid,
+            site_uuid=sites[0].location_uuid,
             generation=[ActualPower(Time=1, PowerKW=1)],
             email="test@test.com",
         )
@@ -121,7 +121,7 @@ class TestIndiaDBClient:
     def test_post_site_generation_exceding_max_capacity(self, client, sites):
         try:
             client.post_site_generation(
-                site_uuid=sites[0].site_uuid,
+                site_uuid=sites[0].location_uuid,
                 generation=[ActualPower(Time=1, PowerKW=1000)],
                 email="test@test.com",
             )

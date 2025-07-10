@@ -18,7 +18,7 @@ from pvsite_datamodel.read import (
     get_site_by_uuid,
 )
 from pvsite_datamodel.write.generation import insert_generation_values
-from pvsite_datamodel.sqlmodels import SiteAssetType, ForecastValueSQL
+from pvsite_datamodel.sqlmodels import LocationAssetType, ForecastValueSQL
 from pvsite_datamodel.write.database import save_api_call_to_db
 from pvsite_datamodel.write.user_and_site import edit_site
 from pvsite_datamodel.pydantic_models import PVSiteEditMetadata
@@ -60,7 +60,7 @@ class Client(internal.DatabaseInterface):
     def get_predicted_power_production_for_location(
         self,
         location: str,
-        asset_type: SiteAssetType,
+        asset_type: LocationAssetType,
         ml_model_name: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: Optional[int] = None,
@@ -115,14 +115,14 @@ class Client(internal.DatabaseInterface):
             # read actual generations
             values = get_latest_forecast_values_by_site(
                 session,
-                site_uuids=[site.site_uuid],
+                site_uuids=[site.location_uuid],
                 start_utc=start,
                 day_ahead_hours=day_ahead_hours,
                 day_ahead_timezone_delta_hours=day_ahead_timezone_delta_hours,
                 forecast_horizon_minutes=forecast_horizon_minutes,
                 model_name=ml_model_name,
             )
-            forecast_values: [ForecastValueSQL] = values[site.site_uuid]
+            forecast_values: [ForecastValueSQL] = values[site.location_uuid]
 
         # convert ForecastValueSQL to PredictedPower
         values = [
@@ -145,7 +145,7 @@ class Client(internal.DatabaseInterface):
     def get_generation_for_location(
         self,
         location: str,
-        asset_type: SiteAssetType,
+        asset_type: LocationAssetType,
     ) -> [internal.PredictedPower]:
         """Gets the predicted power production for a location."""
 
@@ -162,7 +162,7 @@ class Client(internal.DatabaseInterface):
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site.site_uuid], start_utc=start, end_utc=end
+                session=session, site_uuids=[site.location_uuid], start_utc=start, end_utc=end
             )
 
         # convert from GenerationSQL to ActualPower
@@ -200,7 +200,7 @@ class Client(internal.DatabaseInterface):
 
         return self.get_predicted_power_production_for_location(
             location=location,
-            asset_type=SiteAssetType.pv,
+            asset_type=LocationAssetType.pv,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
             smooth_flag=smooth_flag,
@@ -229,7 +229,7 @@ class Client(internal.DatabaseInterface):
 
         return self.get_predicted_power_production_for_location(
             location=location,
-            asset_type=SiteAssetType.wind,
+            asset_type=LocationAssetType.wind,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
             smooth_flag=smooth_flag,
@@ -241,14 +241,14 @@ class Client(internal.DatabaseInterface):
     ) -> list[internal.PredictedPower]:
         """Gets the actual solar power production for a location."""
 
-        return self.get_generation_for_location(location=location, asset_type=SiteAssetType.pv)
+        return self.get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
     def get_actual_wind_power_production_for_location(
         self, location: str
     ) -> list[internal.PredictedPower]:
         """Gets the actual wind power production for a location."""
 
-        return self.get_generation_for_location(location=location, asset_type=SiteAssetType.wind)
+        return self.get_generation_for_location(location=location, asset_type=LocationAssetType.wind)
 
     def get_wind_regions(self) -> list[str]:
         """Gets the valid wind regions."""
@@ -269,8 +269,8 @@ class Client(internal.DatabaseInterface):
             sites = []
             for site_sql in sites_sql:
                 site = internal.Site(
-                    site_uuid=str(site_sql.site_uuid),
-                    client_site_name=site_sql.client_site_name,
+                    site_uuid=str(site_sql.location_uuid),
+                    client_site_name=site_sql.client_location_name,
                     orientation=site_sql.orientation,
                     tilt=site_sql.tilt,
                     capacity_kw=site_sql.capacity_kw,
@@ -290,11 +290,14 @@ class Client(internal.DatabaseInterface):
         with self._get_session() as session:
             user = get_user_by_email(session, email)
             site = get_site_by_uuid(session, site_uuid)
-            check_user_has_access_to_site(session, email, site.site_uuid)
+            check_user_has_access_to_site(session, email, site.location_uuid)
 
-            site_info = PVSiteEditMetadata(
-                **site_properties.model_dump(exclude_unset=True, exclude_none=False)
-            )
+            site_dict = site_properties.model_dump(exclude_unset=True, exclude_none=False)
+            if "client_site_name" in site_dict:
+                site_dict["client_location_name"] = site_dict["client_site_name"]
+                site_dict.pop("client_site_name")
+
+            site_info = PVSiteEditMetadata(**site_dict)
 
             site, _ = edit_site(
                 session=session,
@@ -434,7 +437,7 @@ def check_user_has_access_to_site(session: Session, email: str, site_uuid: str):
     """
 
     user = get_user_by_email(session=session, email=email)
-    site_uuids = [str(site.site_uuid) for site in user.site_group.sites]
+    site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)
 
     if site_uuid not in site_uuids:

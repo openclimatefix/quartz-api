@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta
 
 import pytest
-from pvsite_datamodel.sqlmodels import Base, ForecastSQL, ForecastValueSQL, GenerationSQL, SiteSQL
+from pvsite_datamodel.sqlmodels import Base, ForecastSQL, ForecastValueSQL, GenerationSQL, LocationSQL
 from pvsite_datamodel.read.user import get_user_by_email
 from pvsite_datamodel.read.model import get_or_create_model
 from sqlalchemy import create_engine
@@ -58,8 +58,8 @@ def sites(db_session):
 
     sites = []
     # PV site
-    site = SiteSQL(
-        client_site_id=1,
+    site = LocationSQL(
+        client_location_id=1,
         latitude=20.59,
         longitude=78.96,
         capacity_kw=4,
@@ -67,14 +67,14 @@ def sites(db_session):
         asset_type="pv",
         country="india",
         region="testID",
-        client_site_name="ruvnl_pv_testID1",
+        client_location_name="ruvnl_pv_testID1",
     )
     db_session.add(site)
     sites.append(site)
 
     # Wind site
-    site = SiteSQL(
-        client_site_id=2,
+    site = LocationSQL(
+        client_location_id=2,
         latitude=20.59,
         longitude=78.96,
         capacity_kw=4,
@@ -82,7 +82,7 @@ def sites(db_session):
         asset_type="wind",
         country="india",
         region="testID",
-        client_site_name="ruvnl_wind_testID",
+        client_location_name="ruvnl_wind_testID",
     )
     db_session.add(site)
     sites.append(site)
@@ -91,7 +91,7 @@ def sites(db_session):
 
     # create user
     user = get_user_by_email(session=db_session, email="test@test.com")
-    user.site_group.sites = sites
+    user.location_group.locations = sites
 
     db_session.commit()
 
@@ -108,7 +108,7 @@ def generations(db_session, sites):
     for site in sites:
         for i in range(0, 10):
             generation = GenerationSQL(
-                site_uuid=site.site_uuid,
+                location_uuid=site.location_uuid,
                 generation_power_kw=i,
                 start_utc=start_times[i],
                 end_utc=start_times[i] + timedelta(minutes=5),
@@ -158,7 +158,7 @@ def make_fake_forecast_values(db_session, sites, model_name):
     for site in sites:
         for timestamp in timestamps:
             forecast: ForecastSQL = ForecastSQL(
-                site_uuid=site.site_uuid, forecast_version=forecast_version, timestamp_utc=timestamp
+                location_uuid=site.location_uuid, forecast_version=forecast_version, timestamp_utc=timestamp
             )
 
             db_session.add(forecast)
