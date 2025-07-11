@@ -19,7 +19,7 @@ classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 42.0.7",
     "fastapi >= 0.105.0",
-    "pvsite-datamodel@git+https://github.com/openclimatefix/pv-site-datamodel.git#egg=site-location",
+    "pvsite-datamodel == 1.2.0",
     "pyjwt >= 2.8.0",
     "pyproj >= 3.3.0",
     "pytz >= 2023.3",
