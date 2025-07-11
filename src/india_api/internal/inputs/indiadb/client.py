@@ -293,9 +293,6 @@ class Client(internal.DatabaseInterface):
             check_user_has_access_to_site(session, email, site.location_uuid)
 
             site_dict = site_properties.model_dump(exclude_unset=True, exclude_none=False)
-            if "client_site_name" in site_dict:
-                site_dict["client_location_name"] = site_dict["client_site_name"]
-                site_dict.pop("client_site_name")
 
             site_info = PVSiteEditMetadata(**site_dict)
 
