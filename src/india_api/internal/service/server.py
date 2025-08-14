@@ -21,29 +21,24 @@ log = logging.getLogger(__name__)
 folder = os.path.dirname(os.path.abspath(__file__))
 version = "0.2.0"
 
-
 tags_metadata = [
     {
         "name": "API Information",
-        "description": "General API information,",
+        "description": "General API information.",
     },
     {
         "name": "Sites",
-        "description": "A site is a specific point location, for example (52.15, 1.25) in latitude and longitude. "
-        "Each site will have one source of energy "
-        "and there is forecast and generation data for each site. ",
+        "description": (
+            "A site is a specific point location, for example (52.15, 1.25) in latitude and longitude. "
+            "Each site will have one source of energy, and there is forecast and generation data for each site."
+        ),
     },
-    # I want to keep this here, as we might add this back in the future
-    # {
-    #     "name": "Regions",
-    #     "description": "A region is an area of land e.g. Alaska in the USA. "
-    #     "There is forecast and generation data for each region "
-    #     "and there may be different sources of energy in one region.",
-    # },
+    # Future addition for regions can be enabled as needed.
 ]
 
+# Updated API description with forecast submission guidelines
 title = "India API"
-description = """ API providing OCF Forecast for India.
+description = """API providing OCF Forecast for India.
 
 ## Regions
 
@@ -52,28 +47,30 @@ The regions routes are used to get solar and wind forecasts.
 ## Sites
 
 The sites routes are used to get site level forecasts. 
-A user can
-- **/sites**: Get information about your sites
-- **/sites/{site_uuid}/forecast**: Get a forecast for a specific site
-- **/sites/{site_uuid}/forecast**: Get and post generation for a specific site
+A user can:
+- **/sites**: Get information about your sites.
+- **/sites/{site_uuid}/forecast**: Get a forecast for a specific site.
+- **/sites/{site_uuid}/forecast**: Get and post generation for a specific site.
+
+### Forecast Submission Deadline
+
+Day-ahead forecasts must be submitted before 9:00 AM IST on the day prior to the forecast date.
+For example, a forecast for **2024-06-03 at 12:00 IST** must be submitted before **2024-06-02 at 09:00 IST**.
 
 ### Authentication and Example
+
 If you need an authentication route, please get your access token with the following code. 
 You'll need a username and password. 
-```
-export AUTH=$(curl --request POST 
-   --url https://nowcasting-pro.eu.auth0.com/oauth/token 
-   --header 'content-type: application/json' 
-   --data '{"client_id":"TODO", "audience":"https://api.nowcasting.io/", "grant_type":"password", "username":"username", "password":"password"}'
-)
+
+export AUTH=$(curl --request POST \\
+   --url https://nowcasting-pro.eu.auth0.com/oauth/token \\
+   --header 'content-type: application/json' \\
+   --data '{"client_id":"TODO", "audience":"https://api.nowcasting.io/", "grant_type":"password", "username":"username", "password":"password"}')
 
 export TOKEN=$(echo "${AUTH}" | jq '.access_token' | tr -d '"')
-```
-You can then use
-```
-curl -X GET 'https://api.quartz.energy/sites' -H "Authorization: Bearer $TOKEN"
-```
 
+You can then use:
+curl -X GET 'https://api.quartz.energy/sites' -H "Authorization: Bearer $TOKEN"
 """
 
 server = FastAPI(
