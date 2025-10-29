@@ -18,16 +18,16 @@ sentry_sdk.init(
     traces_sample_rate=1
 )
 
-sentry_sdk.set_tag("app_name", "india_api")
+sentry_sdk.set_tag("app_name", "quartz_api")
 sentry_sdk.set_tag("version",version)
 
 match cfg.SOURCE:
-    case "indiadb":
+    case "quartzdb":
         if cfg.DB_URL == "" or cfg.DB_URL is None:
             raise OSError(f"DB_URL env var is required using db source: {cfg.SOURCE}")
 
         def get_db_client_override() -> internal.DatabaseInterface:
-            return internal.inputs.indiadb.Client(cfg.DB_URL)
+            return internal.inputs.quartzdb.Client(cfg.DB_URL)
     case "dummydb":
 
         def get_db_client_override() -> internal.DatabaseInterface:
@@ -42,7 +42,7 @@ server.dependency_overrides[get_db_client] = get_db_client_override
 def run() -> None:
     """Run the API using a uvicorn server."""
     uvicorn.run(
-        "india_api.internal.service.server:server",
+        "quartz_api.internal.service.server:server",
         host="0.0.0.0",
         port=cfg.PORT,
         reload=True,

@@ -42,8 +42,10 @@ tags_metadata = [
     # },
 ]
 
-title = "India API"
-description = """ API providing OCF Forecast for India.
+title = "Quartz API"
+description = """ API providing OCF Forecast for Quartz.
+
+TODO: Update description
 
 ## Regions
 

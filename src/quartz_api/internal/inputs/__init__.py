@@ -1,6 +1,6 @@
-from . import dummydb, indiadb
+from . import dummydb, quartzdb
 
 __all__ = [
-    "indiadb",
+    "quartzdb",
     "dummydb",
 ]
