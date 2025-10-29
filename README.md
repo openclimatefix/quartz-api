@@ -1,4 +1,4 @@
-# India API
+# Quartz API
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-7-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
@@ -19,14 +19,14 @@ so there is nothing to configure.
 You can either download the latest image from GitHub container registry:
 
 ```sh
-$ docker run ghcr.io/openclimatefix/india-api:latest
+$ docker run ghcr.io/openclimatefix/quartz-api:latest
 ```
 
 Or build and run locally using the Containerfile:
 
 ```sh
-$ docker build -t india-api .
-$ docker run india-api
+$ docker build -t quartz-api .
+$ docker run quartz-api
 ```
 
 ### Using python(v3.11.x)
@@ -39,7 +39,7 @@ Install the dependencies with
 $ pip install -e .
 ```
 
-The service is then runnable via the command `india-api`.
+The service is then runnable via the command `quartz-api`.
 You should see the following output:
 
 ```shell
@@ -63,7 +63,7 @@ Install all the dependencies with
 pip install -e ".[all]"
 ```
 
-You can run the service with the command `india-api`.
+You can run the service with the command `quartz-api`.
 Changes will be hot-reloaded by the server.
 
 
