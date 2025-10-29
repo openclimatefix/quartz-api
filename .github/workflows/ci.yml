@@ -105,7 +105,7 @@ jobs:
       # * Produce JUnit XML report
       - name: Run unit tests
         run: |
-          .venv/bin/python3 -m pytest src/india_api --cov -s src/india_api --cov-report=xml
+          .venv/bin/python3 -m pytest src/quartz_api --cov -s src/quartz_api --cov-report=xml
 
       # Create test summary to be visualised on the job summary screen on GitHub
       # * Runs even if previous steps fail
