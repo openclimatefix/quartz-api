@@ -1,8 +1,8 @@
 import pandas as pd
 from datetime import datetime
 
-from india_api.internal import PredictedPower
-from india_api.internal.models import ForecastHorizon
+from quartz_api.internal import PredictedPower
+from quartz_api.internal.models import ForecastHorizon
 
 
 def format_csv_and_created_time(values: list[PredictedPower], forecast_horizon: ForecastHorizon) -> (pd.DataFrame, datetime):

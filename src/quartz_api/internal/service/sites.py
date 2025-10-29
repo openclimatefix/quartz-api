@@ -2,9 +2,9 @@ from starlette import status
 
 from fastapi import APIRouter, Depends
 
-from india_api.internal import ActualPower, PredictedPower, Site, SiteProperties
-from india_api.internal.service.database_client import DBClientDependency
-from india_api.internal.service.auth import auth
+from quartz_api.internal import ActualPower, PredictedPower, Site, SiteProperties
+from quartz_api.internal.service.database_client import DBClientDependency
+from quartz_api.internal.service.auth import auth
 
 router = APIRouter(
     tags=["Sites"],

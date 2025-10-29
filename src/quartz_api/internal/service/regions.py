@@ -9,13 +9,13 @@ from pydantic import BaseModel
 from starlette import status
 from starlette.requests import Request
 
-from india_api.internal import ActualPower, PredictedPower
-from india_api.internal.models import ForecastHorizon
-from india_api.internal.service.auth import auth
-from india_api.internal.service.constants import local_tz
-from india_api.internal.service.csv import format_csv_and_created_time
-from india_api.internal.service.database_client import DBClientDependency
-from india_api.internal.service.resample import resample_generation
+from quartz_api.internal import ActualPower, PredictedPower
+from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal.service.auth import auth
+from quartz_api.internal.service.constants import local_tz
+from quartz_api.internal.service.csv import format_csv_and_created_time
+from quartz_api.internal.service.database_client import DBClientDependency
+from quartz_api.internal.service.resample import resample_generation
 
 router = APIRouter(
     tags=["Regions"],

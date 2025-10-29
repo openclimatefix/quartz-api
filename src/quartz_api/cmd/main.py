@@ -5,9 +5,9 @@ import uvicorn
 import sentry_sdk
 
 
-from india_api import internal
-from india_api.internal.config import Config
-from india_api.internal.service import get_db_client, server, version
+from quartz_api import internal
+from quartz_api.internal.config import Config
+from quartz_api.internal.service import get_db_client, server, version
 
 
 cfg = Config()

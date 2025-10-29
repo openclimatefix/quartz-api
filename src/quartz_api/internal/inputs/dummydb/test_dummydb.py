@@ -2,7 +2,7 @@ import unittest
 
 from .client import Client
 
-from india_api.internal import ActualPower
+from quartz_api.internal import ActualPower
 
 client = Client()
 

@@ -2,7 +2,7 @@ import logging
 from fastapi import HTTPException
 import pytest
 
-from india_api.internal import PredictedPower, ActualPower, SiteProperties
+from quartz_api.internal import PredictedPower, ActualPower, SiteProperties
 
 from pvsite_datamodel.sqlmodels import APIRequestSQL
 
