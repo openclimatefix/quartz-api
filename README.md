@@ -19,14 +19,14 @@ so there is nothing to configure.
 You can either download the latest image from GitHub container registry:
 
 ```sh
-$ docker run ghcr.io/openclimatefix/india-api:latest
+$ docker run ghcr.io/openclimatefix/quartz-api:latest
 ```
 
 Or build and run locally using the Containerfile:
 
 ```sh
-$ docker build -t india-api .
-$ docker run india-api
+$ docker build -t quartz-api .
+$ docker run quartz-api
 ```
 
 ### Using python(v3.11.x)
@@ -39,7 +39,7 @@ Install the dependencies with
 $ pip install -e .
 ```
 
-The service is then runnable via the command `india-api`.
+The service is then runnable via the command `quartz-api`.
 You should see the following output:
 
 ```shell
@@ -63,7 +63,7 @@ Install all the dependencies with
 pip install -e ".[all]"
 ```
 
-You can run the service with the command `india-api`.
+You can run the service with the command `quartz-api`.
 Changes will be hot-reloaded by the server.
 
 
@@ -93,13 +93,13 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/rahul-maurya11b"><img src="https://avatars.githubusercontent.com/u/98907006?v=4?s=100" width="100px;" alt="Rahul Maurya"/><br /><sub><b>Rahul Maurya</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=rahul-maurya11b" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/DubraskaS"><img src="https://avatars.githubusercontent.com/u/87884444?v=4?s=100" width="100px;" alt="Dubraska Solórzano"/><br /><sub><b>Dubraska Solórzano</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=DubraskaS" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/ProfessionalCaddie"><img src="https://avatars.githubusercontent.com/u/180212671?v=4?s=100" width="100px;" alt="Nicholas Tucker"/><br /><sub><b>Nicholas Tucker</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=ProfessionalCaddie" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/devsjc"><img src="https://avatars.githubusercontent.com/u/47188100?v=4?s=100" width="100px;" alt="devsjc"/><br /><sub><b>devsjc</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=devsjc" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="http://suvanbanerjee.github.io"><img src="https://avatars.githubusercontent.com/u/104707806?v=4?s=100" width="100px;" alt="Suvan Banerjee"/><br /><sub><b>Suvan Banerjee</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=suvanbanerjee" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/rahul-maurya11b"><img src="https://avatars.githubusercontent.com/u/98907006?v=4?s=100" width="100px;" alt="Rahul Maurya"/><br /><sub><b>Rahul Maurya</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=rahul-maurya11b" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/DubraskaS"><img src="https://avatars.githubusercontent.com/u/87884444?v=4?s=100" width="100px;" alt="Dubraska Solórzano"/><br /><sub><b>Dubraska Solórzano</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=DubraskaS" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/ProfessionalCaddie"><img src="https://avatars.githubusercontent.com/u/180212671?v=4?s=100" width="100px;" alt="Nicholas Tucker"/><br /><sub><b>Nicholas Tucker</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=ProfessionalCaddie" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/devsjc"><img src="https://avatars.githubusercontent.com/u/47188100?v=4?s=100" width="100px;" alt="devsjc"/><br /><sub><b>devsjc</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=devsjc" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="http://suvanbanerjee.github.io"><img src="https://avatars.githubusercontent.com/u/104707806?v=4?s=100" width="100px;" alt="Suvan Banerjee"/><br /><sub><b>Suvan Banerjee</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=suvanbanerjee" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="http://anaskhan.me"><img src="https://avatars.githubusercontent.com/u/83116240?v=4?s=100" width="100px;" alt="Anas Khan"/><br /><sub><b>Anas Khan</b></sub></a><br /><a href="#infra-anxkhn" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Edwardcg17"><img src="https://avatars.githubusercontent.com/u/123040852?v=4?s=100" width="100px;" alt="Edwardcg17"/><br /><sub><b>Edwardcg17</b></sub></a><br /><a href="https://github.com/openclimatefix/india-api/commits?author=Edwardcg17" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Edwardcg17"><img src="https://avatars.githubusercontent.com/u/123040852?v=4?s=100" width="100px;" alt="Edwardcg17"/><br /><sub><b>Edwardcg17</b></sub></a><br /><a href="https://github.com/openclimatefix/quartz-api/commits?author=Edwardcg17" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

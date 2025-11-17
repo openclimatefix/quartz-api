@@ -6,14 +6,15 @@ build-backend = "setuptools.build_meta"
 
 # Metadata (see https://peps.python.org/pep-0621/)
 [project]
-name = "india-api"
+name = "quartz-api"
 dynamic = ["version"] # Set automatically using git: https://setuptools-git-versioning.readthedocs.io/en/stable/
-description = "India API for wind and solar data"
+description = "Quartz API for wind and solar data"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.11.0"
 license = {text = "MIT License"}
 authors = [
-    { name = "Sol Cotton", email = "sol@openclimatefix.org"}
+    { name = "Sol Cotton", email = "sol@openclimatefix.org"},
+    { name = "Open Climate Fix", email = "info@openclimatefix.org"}
 ]
 classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
@@ -40,20 +41,15 @@ lint = [
     "mypy >= 1.7.1",
     "ruff >= 0.1.7",
 ]
-vim = [
-    "ruff-lsp >= 0.0.48",
-    "python-lsp-server >= 1.9.0",
-    "pylsp-mypy >= 0.6.8",
-]
 all = [
-    "india-api[test,lint,vim]",
+    "quartz-api[test,lint]",
 ]
 
 [project.urls]
-repository = "https://github.com/openclimatefix/india-api"
+repository = "https://github.com/openclimatefix/quartz-api"
 
 [project.scripts]
-india-api = "india_api.cmd.main:run"
+quartz-api = "quartz.cmd.main:run"
 
 [tool.setuptools]
 include-package-data = false

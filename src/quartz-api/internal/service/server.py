@@ -170,7 +170,7 @@ def custom_openapi():
         },
         license_info={
             "name": "MIT License",
-            "url": "https://github.com/openclimatefix/india-api/blob/main/LICENSE",
+            "url": "https://github.com/openclimatefix/quartz-api/blob/main/LICENSE",
         },
         routes=server.routes,
     )
