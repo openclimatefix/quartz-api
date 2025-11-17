@@ -5,9 +5,9 @@ import uvicorn
 import sentry_sdk
 
 
-from india_api import internal
-from india_api.internal.config import Config
-from india_api.internal.service import get_db_client, server, version
+from quartz_api import internal
+from quartz_api.internal.config import Config
+from quartz_api.internal.service import get_db_client, server, version
 
 
 cfg = Config()
@@ -18,7 +18,7 @@ sentry_sdk.init(
     traces_sample_rate=1
 )
 
-sentry_sdk.set_tag("app_name", "india_api")
+sentry_sdk.set_tag("app_name", "quartz_api")
 sentry_sdk.set_tag("version",version)
 
 match cfg.SOURCE:
@@ -42,7 +42,7 @@ server.dependency_overrides[get_db_client] = get_db_client_override
 def run() -> None:
     """Run the API using a uvicorn server."""
     uvicorn.run(
-        "india_api.internal.service.server:server",
+        "quartz_api.internal.service.server:server",
         host="0.0.0.0",
         port=cfg.PORT,
         reload=True,

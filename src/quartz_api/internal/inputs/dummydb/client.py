@@ -6,8 +6,8 @@ from uuid import uuid4
 from typing import Optional
 
 
-from india_api import internal
-from india_api.internal.models import ForecastHorizon
+from quartz_api import internal
+from quartz_api.internal.models import ForecastHorizon
 
 from ._models import DummyDBPredictedPowerProduction
 from ..utils import get_window

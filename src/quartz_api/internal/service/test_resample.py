@@ -1,5 +1,5 @@
-from india_api.internal.models import ActualPower
-from india_api.internal.service.resample import resample_generation
+from quartz_api.internal.models import ActualPower
+from quartz_api.internal.service.resample import resample_generation
 import pandas as pd
 
 

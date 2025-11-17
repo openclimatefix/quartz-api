@@ -10,10 +10,10 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
 
-from india_api.internal.service.database_client import get_db_client
-from india_api.internal.service.regions import router as regions_router
-from india_api.internal.service.sites import router as sites_router
-from india_api.cmd.redoc_theme import get_redoc_html_with_theme
+from quartz_api.internal.service.database_client import get_db_client
+from quartz_api.internal.service.regions import router as regions_router
+from quartz_api.internal.service.sites import router as sites_router
+from quartz_api.cmd.redoc_theme import get_redoc_html_with_theme
 
 
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)

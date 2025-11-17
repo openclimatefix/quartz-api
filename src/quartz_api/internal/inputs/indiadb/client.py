@@ -24,10 +24,10 @@ from pvsite_datamodel.write.user_and_site import edit_site
 from pvsite_datamodel.pydantic_models import PVSiteEditMetadata
 from sqlalchemy.orm import Session
 
-from india_api import internal
-from india_api.internal.inputs.utils import get_window
-from india_api.internal.inputs.indiadb.smooth import smooth_forecast
-from india_api.internal.models import ForecastHorizon
+from quartz_api import internal
+from quartz_api.internal.inputs.utils import get_window
+from quartz_api.internal.inputs.indiadb.smooth import smooth_forecast
+from quartz_api.internal.models import ForecastHorizon
 
 log = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from india_api.internal import DatabaseInterface
+from quartz_api.internal import DatabaseInterface
 
 
 def get_db_client() -> DatabaseInterface:

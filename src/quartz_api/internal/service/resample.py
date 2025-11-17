@@ -1,5 +1,5 @@
 import pandas as pd
-from india_api.internal import (
+from quartz_api.internal import (
     ActualPower
 )
 
