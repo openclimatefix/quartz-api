@@ -30,6 +30,7 @@ dependencies = [
     "str2bool",
     "ruff",
     "pytest",
+    "testcontainers",
 ]
 
 [project.optional-dependencies]
