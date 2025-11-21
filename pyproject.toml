@@ -27,7 +27,8 @@ dependencies = [
     "uvicorn >= 0.24.0",
     "numpy",
     "sentry-sdk == 2.1.1",
-    "str2bool"
+    "str2bool",
+    "ruff",
 ]
 
 [project.optional-dependencies]
