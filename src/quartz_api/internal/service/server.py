@@ -20,7 +20,7 @@ from quartz_api.cmd.redoc_theme import get_redoc_html_with_theme
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 log = logging.getLogger(__name__)
 folder = os.path.dirname(os.path.abspath(__file__))
-__version__ = version("quartz-api")
+version = version("quartz-api")
 
 
 tags_metadata = [
