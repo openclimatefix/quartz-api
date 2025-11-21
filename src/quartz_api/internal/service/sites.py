@@ -1,6 +1,7 @@
 from starlette import status
+import numpy as np
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from quartz_api.internal import ActualPower, PredictedPower, Site, SiteProperties
 from quartz_api.internal.service.database_client import DBClientDependency
@@ -127,5 +128,13 @@ def post_generation(
 
     # get email from auth
     email = auth["https://openclimatefix.org/email"]
+
+    # check for nans
+    for entry in generation:
+        if np.isnan(entry.PowerKW):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="PowerKW values must be floating point numbers (no NaNs allowed).",
+            )
 
     db.post_site_generation(site_uuid=site_uuid, generation=generation, email=email)
