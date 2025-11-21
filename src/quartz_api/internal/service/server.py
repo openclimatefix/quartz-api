@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
+from importlib.metadata import version
 
 from quartz_api.internal.service.database_client import get_db_client
 from quartz_api.internal.service.regions import router as regions_router
@@ -19,7 +20,7 @@ from quartz_api.cmd.redoc_theme import get_redoc_html_with_theme
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 log = logging.getLogger(__name__)
 folder = os.path.dirname(os.path.abspath(__file__))
-version = "0.2.1"
+__version__ = version("quartz-api")
 
 
 tags_metadata = [

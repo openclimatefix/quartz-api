@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn >= 0.24.0",
     "numpy==1.26.4",
     "sentry-sdk == 2.1.1",
+    "str2bool"
 ]
 
 [project.optional-dependencies]
@@ -60,6 +61,7 @@ include-package-data = false
 
 [tool.setuptools-git-versioning]
 enabled = true
+dirty_template = "{tag}"
 
 # --- LINTING AND TYPING CONFIGURATION --- #
 
