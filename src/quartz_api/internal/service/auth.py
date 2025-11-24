@@ -5,6 +5,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 token_auth_scheme = HTTPBearer()
 
+EMAIL_KEY = "https://openclimatefix.org/email"
+
 
 class DummyAuth:
     """Dummy auth dependency for testing purposes."""
@@ -15,7 +17,10 @@ class DummyAuth:
         self._algorithm = algorithm
 
     def __call__(self):
-        return {"https://openclimatefix.org/email": "test@test.com"}
+        return {
+            EMAIl_KEY: "test@test.com",
+            "sub": "google-oath2|012345678909876543210",
+        }
 
 
 class Auth:

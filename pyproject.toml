@@ -43,7 +43,6 @@ dev = [
 lsp = [
     "pylsp-mypy>=0.7.0",
     "python-lsp-server>=1.13.1",
-    "ty>=0.0.1a26",
 ]
 
 [tool.uv.sources]

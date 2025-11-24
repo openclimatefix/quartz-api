@@ -131,11 +131,11 @@ class Client(internal.DatabaseInterface):
         """Gets the valid solar regions."""
         return ["dummy_solar_region1", "dummy_solar_region2"]
 
-    def save_api_call_to_db(self, url: str, email=None):
+    def save_api_call_to_db(self, url: str, authdata: dict[str, str]):
         """Saves an API call to the database. This does nothing"""
         pass
 
-    def get_sites(self, email: str) -> list[internal.Site]:
+    def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
         """Get a list of sites"""
 
         uuid = str(uuid4())
@@ -151,12 +151,12 @@ class Client(internal.DatabaseInterface):
         return [site]
 
     def put_site(
-            self, site_uuid: str, site_properties: internal.SiteProperties, email: str
+            self, site_uuid: str, site_properties: internal.SiteProperties, authdata: dict[str, str],
     ) -> internal.Site:
         pass
 
     def get_site_forecast(
-        self, site_uuid: str, email: Optional[str] = None
+        self, site_uuid: str, authdata: dict[str, str],
     ) -> list[internal.PredictedPower]:
         """Get a forecast for a site, this is for a solar site"""
 
@@ -165,7 +165,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     def get_site_generation(
-        self, site_uuid: str, email: Optional[str] = None
+        self, site_uuid: str, authdata: dict[str, str]
     ) -> list[internal.ActualPower]:
         """Get the generation for a site, this is for a solar site"""
 
@@ -174,7 +174,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], email: Optional[str] = None
+        self, site_uuid: str, generation: list[internal.ActualPower], authdata: dict[str, str],
     ):
         """Post generation for a site"""
         pass

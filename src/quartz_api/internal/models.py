@@ -124,7 +124,14 @@ class DatabaseInterface(abc.ABC):
         forecast_horizon_minutes: Optional[int] = None,
         smooth_flag: bool = True,
     ) -> list[PredictedPower]:
-        """Returns a list of predicted solar power production for a given location."""
+        """Returns a list of predicted solar power production for a given location.
+
+        Args:
+            location: The location for which to fetch predicted power.
+            forecast_horizon: The forecast horizon to use.
+            forecast_horizon_minutes: The forecast horizon in minutes to use.
+            smooth_flag: Whether to smooth the forecast data.
+        """
         pass
 
     @abc.abstractmethod
@@ -164,26 +171,26 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_sites(self, email: str) -> list[Site]:
+    def get_sites(self, authdata: dict[str, str]) -> list[Site]:
         """Get a list of sites"""
         pass
 
     @abc.abstractmethod
-    def put_site(self, site_uuid: str, site_properties: SiteProperties, email:str) -> Site:
+    def put_site(self, site_uuid: str, site_properties: SiteProperties, authdata: dict[str, str]) -> Site:
         """Update site info"""
         pass
 
     @abc.abstractmethod
-    def get_site_forecast(self, site_uuid: str, email:str) -> list[PredictedPower]:
+    def get_site_forecast(self, site_uuid: str, authdata: dict[str, str]) -> list[PredictedPower]:
         """Get a forecast for a site"""
         pass
 
     @abc.abstractmethod
-    def get_site_generation(self, site_uuid: str, email:str) -> list[ActualPower]:
+    def get_site_generation(self, site_uuid: str, authdata: dict[str, str]) -> list[ActualPower]:
         """Get the generation for a site"""
         pass
 
     @abc.abstractmethod
-    def post_site_generation(self, site_uuid: str, generation: list[ActualPower], email:str) -> None:
+    def post_site_generation(self, site_uuid: str, generation: list[ActualPower], authdata: dict[str, str]) -> None:
         """Post the generation for a site"""
         pass

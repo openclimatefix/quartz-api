@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from quartz_api import internal
 from quartz_api.internal.inputs.utils import get_window
 from quartz_api.internal.inputs.indiadb.smooth import smooth_forecast
+from quartz_api.internal.service.auth import EMAIL_KEY
 from quartz_api.internal.models import ForecastHorizon
 
 log = logging.getLogger(__name__)
@@ -49,12 +50,12 @@ class Client(internal.DatabaseInterface):
         else:
             return self.session
 
-    def save_api_call_to_db(self, url: str, email=""):
+    def save_api_call_to_db(self, url: str, authdata: dict[str, str]):
         """Saves an API call to the database."""
         with self._get_session() as session:
             # save the API call
             log.info(f"Saving API call ({url=}) to database")
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             save_api_call_to_db(url=url, session=session, user=user)
 
     def get_predicted_power_production_for_location(
@@ -258,12 +259,12 @@ class Client(internal.DatabaseInterface):
         """Gets the valid solar regions."""
         return ["ruvnl"]
 
-    def get_sites(self, email: str) -> list[internal.Site]:
+    def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
         """Get a list of sites"""
 
         # get sites uuids from user
         with self._get_session() as session:
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             sites_sql = get_sites_from_user(session, user=user)
 
             sites = []
@@ -282,15 +283,15 @@ class Client(internal.DatabaseInterface):
             return sites
 
     def put_site(
-        self, site_uuid: str, site_properties: internal.SiteProperties, email: str
+        self, site_uuid: str, site_properties: internal.SiteProperties, authdata: dict[str, str]
     ) -> internal.Site:
         """update site information for a single site."""
 
         # get sites uuids from user
         with self._get_session() as session:
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             site = get_site_by_uuid(session, site_uuid)
-            check_user_has_access_to_site(session, email, site.location_uuid)
+            check_user_has_access_to_site(session, authdata[EMAIL_KEY], site.location_uuid)
 
             site_dict = site_properties.model_dump(exclude_unset=True, exclude_none=False)
 
@@ -305,7 +306,7 @@ class Client(internal.DatabaseInterface):
 
             return site
 
-    def get_site_forecast(self, site_uuid: str, email: str) -> list[internal.PredictedPower]:
+    def get_site_forecast(self, site_uuid: str, authdata: dict[str, str]) -> list[internal.PredictedPower]:
         """Get a forecast for a site, this is for a solar site"""
 
         # TODO feels like there is some duplicated code here which could be refactored
@@ -317,7 +318,7 @@ class Client(internal.DatabaseInterface):
         start, _ = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
 
             # get site and the get the ml model name
             site = get_site_by_uuid(session=session, site_uuid=site_uuid)
@@ -347,7 +348,7 @@ class Client(internal.DatabaseInterface):
 
         return values
 
-    def get_site_generation(self, site_uuid: str, email: str) -> list[internal.ActualPower]:
+    def get_site_generation(self, site_uuid: str, authdata: dict[str, str]) -> list[internal.ActualPower]:
         """Get the generation for a site, this is for a solar site"""
 
         # TODO feels like there is some duplicated code here which could be refactored
@@ -356,7 +357,7 @@ class Client(internal.DatabaseInterface):
         start, end = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
 
             if isinstance(site_uuid, str):
                 site_uuid = UUID(site_uuid)
@@ -380,12 +381,12 @@ class Client(internal.DatabaseInterface):
         return values
 
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], email: str
+        self, site_uuid: str, generation: list[internal.ActualPower], authdata: dict[str, str]
     ):
         """Post generation for a site"""
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
 
             generations = []
             for pv_actual_value in generation:
@@ -428,19 +429,19 @@ class Client(internal.DatabaseInterface):
             session.commit()
 
 
-def check_user_has_access_to_site(session: Session, email: str, site_uuid: str):
+def check_user_has_access_to_site(session: Session, authdata: dict[str, str], site_uuid: str):
     """
     Checks if a user has access to a site.
     """
 
-    user = get_user_by_email(session=session, email=email)
+    user = get_user_by_email(session=session, email=authdata[EMAIL_KEY])
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)
 
     if site_uuid not in site_uuids:
         raise HTTPException(
             status_code=403,
-            detail=f"Forbidden. User ({email}) "
+            detail=f"Forbidden. User ({authdata[EMAIL_KEY]}) "
             f"does not have access to this site {site_uuid}. "
             f"User has access to {site_uuids}",
         )
