@@ -56,7 +56,7 @@ all = [
 repository = "https://github.com/openclimatefix/quartz-api"
 
 [project.scripts]
-quartz-api = "quartz.cmd.main:run"
+quartz-api = "quartz_api.cmd.main:run"
 
 [tool.setuptools]
 include-package-data = false
