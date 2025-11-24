@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   libatlas-base-dev \
   libgdal-dev \
-  gfortran
+  gfortran \
+  git
 
 # Copy required files.
 WORKDIR /app
