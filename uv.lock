@@ -1462,7 +1462,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.2.0.post3+git.8db06fb9.dirty"
+version = "0.2.0.post4+git.25422658"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

@@ -40,16 +40,10 @@ dev = [
     "pytest >= 8.0.0",
     "pytest-cov >= 4.1.0",
     "testcontainers == 3.7.1",
-    "mypy >= 1.7.1",
     "ruff >= 0.1.7",
-]
-vim = [
     "ruff-lsp >= 0.0.48",
     "python-lsp-server >= 1.9.0",
     "pylsp-mypy >= 0.6.8",
-]
-all = [
-    "quartz-api[test,lint,vim]",
 ]
 
 [tool.uv.sources]
