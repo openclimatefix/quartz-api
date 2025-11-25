@@ -21,12 +21,12 @@ sentry_sdk.set_tag("app_name", "quartz_api")
 sentry_sdk.set_tag("version",version)
 
 match cfg.SOURCE:
-    case "indiadb":
+    case "quartzdb":
         if cfg.DB_URL == "" or cfg.DB_URL is None:
             raise OSError(f"DB_URL env var is required using db source: {cfg.SOURCE}")
 
         def get_db_client_override() -> internal.DatabaseInterface:
-            return internal.inputs.indiadb.Client(cfg.DB_URL)
+            return internal.inputs.quartzdb.Client(cfg.DB_URL)
     case "dummydb":
 
         def get_db_client_override() -> internal.DatabaseInterface:

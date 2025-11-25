@@ -18,7 +18,7 @@ from quartz_api.internal.service.sites import router as sites_router
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 log = logging.getLogger(__name__)
 folder = os.path.dirname(os.path.abspath(__file__))
-version = "0.2.0"
+version = version("quartz-api")
 
 
 tags_metadata = [
@@ -41,8 +41,10 @@ tags_metadata = [
     # },
 ]
 
-title = "India API"
-description = """ API providing OCF Forecast for India.
+title = "Quartz API"
+description = """ API providing OCF Forecast for Quartz.
+
+TODO: Update description
 
 ## Regions
 

@@ -21,14 +21,17 @@ dependencies = [
     "cryptography >= 42.0.7",
     "dp-sdk",
     "fastapi >= 0.105.0",
-    "pvsite-datamodel == 1.2.0",
+    "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
     "pyproj >= 3.3.0",
     "pytz >= 2023.3",
     "structlog >= 23.2.0",
     "uvicorn >= 0.24.0",
-    "numpy==1.26.4",
+    "numpy",
     "sentry-sdk == 2.1.1",
+    "str2bool",
+    "pytest",
+    "testcontainers",
 ]
 
 [dependency-groups]
@@ -40,9 +43,13 @@ dev = [
     "mypy >= 1.7.1",
     "ruff >= 0.1.7",
 ]
-lsp = [
-    "pylsp-mypy>=0.7.0",
-    "python-lsp-server>=1.13.1",
+vim = [
+    "ruff-lsp >= 0.0.48",
+    "python-lsp-server >= 1.9.0",
+    "pylsp-mypy >= 0.6.8",
+]
+all = [
+    "quartz-api[test,lint,vim]",
 ]
 
 [tool.uv.sources]
@@ -59,6 +66,7 @@ include-package-data = false
 
 [tool.setuptools-git-versioning]
 enabled = true
+dirty_template = "{tag}"
 
 # --- LINTING AND TYPING CONFIGURATION --- #
 
