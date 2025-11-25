@@ -1,32 +1,31 @@
 """Quartz DB client that conforms to the DatabaseInterface."""
-import os
 import datetime as dt
-import pandas as pd
 import logging
-from typing import Optional
-from fastapi import HTTPException
+import os
 from uuid import UUID
-import sentry_sdk
 
+import pandas as pd
+import sentry_sdk
+from fastapi import HTTPException
 from pvsite_datamodel import DatabaseConnection
+from pvsite_datamodel.pydantic_models import PVSiteEditMetadata
 from pvsite_datamodel.read import (
-    get_sites_by_country,
     get_latest_forecast_values_by_site,
     get_pv_generation_by_sites,
-    get_user_by_email,
-    get_sites_from_user,
     get_site_by_uuid,
+    get_sites_by_country,
+    get_sites_from_user,
+    get_user_by_email,
 )
-from pvsite_datamodel.write.generation import insert_generation_values
-from pvsite_datamodel.sqlmodels import LocationAssetType, ForecastValueSQL
+from pvsite_datamodel.sqlmodels import ForecastValueSQL, LocationAssetType
 from pvsite_datamodel.write.database import save_api_call_to_db
+from pvsite_datamodel.write.generation import insert_generation_values
 from pvsite_datamodel.write.user_and_site import edit_site
-from pvsite_datamodel.pydantic_models import PVSiteEditMetadata
 from sqlalchemy.orm import Session
 
 from quartz_api import internal
-from quartz_api.internal.inputs.utils import get_window
 from quartz_api.internal.inputs.quartzdb.smooth import smooth_forecast
+from quartz_api.internal.inputs.utils import get_window
 from quartz_api.internal.models import ForecastHorizon
 
 log = logging.getLogger(__name__)
@@ -39,7 +38,6 @@ class Client(internal.DatabaseInterface):
 
     def __init__(self, database_url: str) -> None:
         """Initialize the client with a SQLAlchemy database connection and session."""
-
         self.connection = DatabaseConnection(url=database_url, echo=False)
 
     def _get_session(self):
@@ -63,7 +61,7 @@ class Client(internal.DatabaseInterface):
         asset_type: LocationAssetType,
         ml_model_name: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: Optional[int] = None,
+        forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
         """Gets the predicted power production for a location.
@@ -76,7 +74,6 @@ class Client(internal.DatabaseInterface):
             forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
             smooth_flag: Flag to smooth the forecast
         """
-
         # Get the window
         start, end = get_window()
 
@@ -148,7 +145,6 @@ class Client(internal.DatabaseInterface):
         asset_type: LocationAssetType,
     ) -> [internal.PredictedPower]:
         """Gets the predicted power production for a location."""
-
         # Get the window
         start, end = get_window()
 
@@ -162,7 +158,7 @@ class Client(internal.DatabaseInterface):
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site.location_uuid], start_utc=start, end_utc=end
+                session=session, site_uuids=[site.location_uuid], start_utc=start, end_utc=end,
             )
 
         # convert from GenerationSQL to ActualPower
@@ -182,11 +178,10 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: Optional[int] = None,
+        forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> [internal.PredictedPower]:
-        """
-        Gets the predicted solar power production for a location.
+        """Gets the predicted solar power production for a location.
 
         Args:
             location: The location to get the predicted solar power production for.
@@ -194,7 +189,6 @@ class Client(internal.DatabaseInterface):
             forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
             smooth_flag: Flag to smooth the forecast
         """
-
         # set this to be hard coded for now
         model_name = "pvnet_india"
 
@@ -211,11 +205,10 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: Optional[int] = None,
+        forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        """
-        Gets the predicted wind power production for a location.
+        """Gets the predicted wind power production for a location.
 
         Args:
             location: The location to get the predicted wind power production for.
@@ -223,7 +216,6 @@ class Client(internal.DatabaseInterface):
             forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
             smooth_flag: Flag to smooth the forecast
         """
-
         # set this to be hard coded for now
         model_name = "windnet_india_adjust"
 
@@ -237,17 +229,15 @@ class Client(internal.DatabaseInterface):
         )
 
     def get_actual_solar_power_production_for_location(
-        self, location: str
+        self, location: str,
     ) -> list[internal.PredictedPower]:
         """Gets the actual solar power production for a location."""
-
         return self.get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
     def get_actual_wind_power_production_for_location(
-        self, location: str
+        self, location: str,
     ) -> list[internal.PredictedPower]:
         """Gets the actual wind power production for a location."""
-
         return self.get_generation_for_location(location=location, asset_type=LocationAssetType.wind)
 
     def get_wind_regions(self) -> list[str]:
@@ -260,7 +250,6 @@ class Client(internal.DatabaseInterface):
 
     def get_sites(self, email: str) -> list[internal.Site]:
         """Get a list of sites"""
-
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, email)
@@ -282,10 +271,9 @@ class Client(internal.DatabaseInterface):
             return sites
 
     def put_site(
-        self, site_uuid: str, site_properties: internal.SiteProperties, email: str
+        self, site_uuid: str, site_properties: internal.SiteProperties, email: str,
     ) -> internal.Site:
-        """update site information for a single site."""
-
+        """Update site information for a single site."""
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, email)
@@ -307,7 +295,6 @@ class Client(internal.DatabaseInterface):
 
     def get_site_forecast(self, site_uuid: str, email: str) -> list[internal.PredictedPower]:
         """Get a forecast for a site, this is for a solar site"""
-
         # TODO feels like there is some duplicated code here which could be refactored
 
         # hard coded model name
@@ -329,7 +316,7 @@ class Client(internal.DatabaseInterface):
                 site_uuid = UUID(site_uuid)
 
             values = get_latest_forecast_values_by_site(
-                session, site_uuids=[site_uuid], start_utc=start, model_name=ml_model_name
+                session, site_uuids=[site_uuid], start_utc=start, model_name=ml_model_name,
             )
             forecast_values: [ForecastValueSQL] = values[site_uuid]
 
@@ -349,7 +336,6 @@ class Client(internal.DatabaseInterface):
 
     def get_site_generation(self, site_uuid: str, email: str) -> list[internal.ActualPower]:
         """Get the generation for a site, this is for a solar site"""
-
         # TODO feels like there is some duplicated code here which could be refactored
 
         # Get the window
@@ -363,7 +349,7 @@ class Client(internal.DatabaseInterface):
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site_uuid], start_utc=start, end_utc=end
+                session=session, site_uuids=[site_uuid], start_utc=start, end_utc=end,
             )
 
         # convert from GenerationSQL to PredictedPower
@@ -380,10 +366,9 @@ class Client(internal.DatabaseInterface):
         return values
 
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], email: str
+        self, site_uuid: str, generation: list[internal.ActualPower], email: str,
     ):
         """Post generation for a site"""
-
         with self._get_session() as session:
             check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
 
@@ -394,7 +379,7 @@ class Client(internal.DatabaseInterface):
                         "start_utc": pv_actual_value.Time,
                         "power_kw": pv_actual_value.PowerKW,
                         "site_uuid": site_uuid,
-                    }
+                    },
                 )
 
             generation_values_df = pd.DataFrame(generations)
@@ -411,7 +396,7 @@ class Client(internal.DatabaseInterface):
                     f"One (or more) values are larger than {capacity_factor} "
                     f"times the site capacity of {site_capacity_kw} kWp. "
                     # f"User: {auth['https://openclimatefix.org/email']}"
-                    f"Site: {site_uuid}"
+                    f"Site: {site_uuid}",
                 )
                 raise HTTPException(
                     status_code=422,
@@ -429,10 +414,8 @@ class Client(internal.DatabaseInterface):
 
 
 def check_user_has_access_to_site(session: Session, email: str, site_uuid: str):
+    """Checks if a user has access to a site.
     """
-    Checks if a user has access to a site.
-    """
-
     user = get_user_by_email(session=session, email=email)
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)

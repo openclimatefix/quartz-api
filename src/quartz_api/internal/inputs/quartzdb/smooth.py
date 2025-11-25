@@ -1,4 +1,5 @@
 import pandas as pd
+
 from quartz_api.internal import PredictedPower
 
 
@@ -9,7 +10,7 @@ def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
         {
             "Time": [value.Time for value in values],
             "PowerKW": [value.PowerKW for value in values],
-        }
+        },
     )
 
     # smooth and make sure it is symmetrical

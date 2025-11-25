@@ -1,4 +1,5 @@
 """India DB client that conforms to the DatabaseInterface."""
+
 import datetime as dt
 import logging
 import os
@@ -151,7 +152,10 @@ class Client(internal.DatabaseInterface):
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site.location_uuid], start_utc=start, end_utc=end,
+                session=session,
+                site_uuids=[site.location_uuid],
+                start_utc=start,
+                end_utc=end,
             )
 
         # convert from GenerationSQL to ActualPower
@@ -209,15 +213,19 @@ class Client(internal.DatabaseInterface):
 
     @override
     def get_actual_solar_power_production_for_location(
-        self, location: str,
+        self,
+        location: str,
     ) -> list[internal.PredictedPower]:
         return self.get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
     @override
     def get_actual_wind_power_production_for_location(
-        self, location: str,
+        self,
+        location: str,
     ) -> list[internal.PredictedPower]:
-        return self.get_generation_for_location(location=location, asset_type=LocationAssetType.wind)
+        return self.get_generation_for_location(
+            location=location, asset_type=LocationAssetType.wind,
+        )
 
     @override
     def get_wind_regions(self) -> list[str]:
@@ -251,7 +259,10 @@ class Client(internal.DatabaseInterface):
 
     @override
     def put_site(
-        self, site_uuid: str, site_properties: internal.SiteProperties, authdata: dict[str, str],
+        self,
+        site_uuid: str,
+        site_properties: internal.SiteProperties,
+        authdata: dict[str, str],
     ) -> internal.Site:
         # get sites uuids from user
         with self._get_session() as session:
@@ -273,7 +284,9 @@ class Client(internal.DatabaseInterface):
             return site
 
     @override
-    def get_site_forecast(self, site_uuid: str, authdata: dict[str, str]) -> list[internal.PredictedPower]:
+    def get_site_forecast(
+        self, site_uuid: str, authdata: dict[str, str],
+    ) -> list[internal.PredictedPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # hard coded model name
@@ -283,7 +296,9 @@ class Client(internal.DatabaseInterface):
         start, _ = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid,
+            )
 
             # get site and the get the ml model name
             site = get_site_by_uuid(session=session, site_uuid=site_uuid)
@@ -295,7 +310,10 @@ class Client(internal.DatabaseInterface):
                 site_uuid = UUID(site_uuid)
 
             values = get_latest_forecast_values_by_site(
-                session, site_uuids=[site_uuid], start_utc=start, model_name=ml_model_name,
+                session,
+                site_uuids=[site_uuid],
+                start_utc=start,
+                model_name=ml_model_name,
             )
             forecast_values: [ForecastValueSQL] = values[site_uuid]
 
@@ -314,21 +332,28 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_site_generation(self, site_uuid: str, authdata: dict[str, str]) -> list[internal.ActualPower]:
+    def get_site_generation(
+        self, site_uuid: str, authdata: dict[str, str],
+    ) -> list[internal.ActualPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # Get the window
         start, end = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid,
+            )
 
             if isinstance(site_uuid, str):
                 site_uuid = UUID(site_uuid)
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site_uuid], start_utc=start, end_utc=end,
+                session=session,
+                site_uuids=[site_uuid],
+                start_utc=start,
+                end_utc=end,
             )
 
         # convert from GenerationSQL to PredictedPower
@@ -346,10 +371,15 @@ class Client(internal.DatabaseInterface):
 
     @override
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], authdata: dict[str, str],
+        self,
+        site_uuid: str,
+        generation: list[internal.ActualPower],
+        authdata: dict[str, str],
     ):
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session, email=authdata[EMAIL_KEY], site_uuid=site_uuid,
+            )
 
             generations = []
             for pv_actual_value in generation:
@@ -392,17 +422,16 @@ class Client(internal.DatabaseInterface):
             session.commit()
 
 
-def check_user_has_access_to_site(session: Session, authdata: dict[str, str], site_uuid: str):
-    """Checks if a user has access to a site.
-    """
-    user = get_user_by_email(session=session, email=authdata[EMAIL_KEY])
+def check_user_has_access_to_site(session: Session, email: str, site_uuid: str) -> None:
+    """Checks if a user has access to a site."""
+    user = get_user_by_email(session=session, email=email)
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)
 
     if site_uuid not in site_uuids:
         raise HTTPException(
             status_code=403,
-            detail=f"Forbidden. User ({authdata[EMAIL_KEY]}) "
+            detail=f"Forbidden. User ({email}) "
             f"does not have access to this site {site_uuid}. "
             f"User has access to {site_uuids}",
         )

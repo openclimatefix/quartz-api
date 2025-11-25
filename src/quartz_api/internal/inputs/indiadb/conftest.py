@@ -1,7 +1,7 @@
 """Test fixtures to set up fake database for testing."""
+import datetime as dt
 import logging
 import os
-from datetime import datetime, timedelta
 
 import pytest
 from pvsite_datamodel.read.model import get_or_create_model
@@ -104,7 +104,7 @@ def sites(db_session):
 @pytest.fixture()
 def generations(db_session, sites):
     """Create some fake generations"""
-    start_times = [datetime.today() - timedelta(minutes=x) for x in range(10)]
+    start_times = [dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(minutes=x) for x in range(10)]
 
     all_generations = []
 
@@ -114,7 +114,7 @@ def generations(db_session, sites):
                 location_uuid=site.location_uuid,
                 generation_power_kw=i,
                 start_utc=start_times[i],
-                end_utc=start_times[i] + timedelta(minutes=5),
+                end_utc=start_times[i] + dt.timedelta(minutes=5),
             )
             all_generations.append(generation)
 
@@ -147,7 +147,7 @@ def make_fake_forecast_values(db_session, sites, model_name):
     num_forecasts = 10
     num_values_per_forecast = 11
 
-    timestamps = [datetime.utcnow() - timedelta(minutes=10 * i) for i in range(num_forecasts)]
+    timestamps = [dt.datetime.now().astimezone(dt.UTC) - dt.timedelta(minutes=10 * i) for i in range(num_forecasts)]
 
     # To make things trickier we make a second forecast at the same for one of the timestamps.
     timestamps = timestamps + timestamps[-1:]
@@ -171,8 +171,8 @@ def make_fake_forecast_values(db_session, sites, model_name):
                 forecast_value: ForecastValueSQL = ForecastValueSQL(
                     forecast_power_kw=i,
                     forecast_uuid=forecast.forecast_uuid,
-                    start_utc=timestamp + timedelta(minutes=horizon),
-                    end_utc=timestamp + timedelta(minutes=horizon + duration),
+                    start_utc=timestamp + dt.timedelta(minutes=horizon),
+                    end_utc=timestamp + dt.timedelta(minutes=horizon + duration),
                     horizon_minutes=horizon,
                 )
                 forecast_value.ml_model = ml_model

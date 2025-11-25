@@ -1,12 +1,19 @@
-""" Test fixtures to set up fake database for testing. """
+"""Test fixtures to set up fake database for testing."""
+
+import datetime as dt
 import logging
 import os
-from datetime import datetime, timedelta
 
 import pytest
-from pvsite_datamodel.sqlmodels import Base, ForecastSQL, ForecastValueSQL, GenerationSQL, LocationSQL
-from pvsite_datamodel.read.user import get_user_by_email
 from pvsite_datamodel.read.model import get_or_create_model
+from pvsite_datamodel.read.user import get_user_by_email
+from pvsite_datamodel.sqlmodels import (
+    Base,
+    ForecastSQL,
+    ForecastValueSQL,
+    GenerationSQL,
+    LocationSQL,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
@@ -17,7 +24,6 @@ log = logging.getLogger(__name__)
 @pytest.fixture(scope="session")
 def engine():
     """Database engine fixture."""
-
     with PostgresContainer("postgres:14.5") as postgres:
         url = postgres.get_connection_url()
         os.environ["DB_URL"] = url
@@ -36,7 +42,6 @@ def tables(engine):
 @pytest.fixture()
 def db_session(engine, tables):
     """Return a sqlalchemy session, which tears down everything properly post-test."""
-
     connection = engine.connect()
     # begin the nested transaction
     transaction = connection.begin()
@@ -55,7 +60,6 @@ def db_session(engine, tables):
 @pytest.fixture()
 def sites(db_session):
     """Seed some initial data into DB."""
-
     sites = []
     # PV site
     site = LocationSQL(
@@ -101,7 +105,7 @@ def sites(db_session):
 @pytest.fixture()
 def generations(db_session, sites):
     """Create some fake generations"""
-    start_times = [datetime.today() - timedelta(minutes=x) for x in range(10)]
+    start_times = [dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(minutes=x) for x in range(10)]
 
     all_generations = []
 
@@ -111,7 +115,7 @@ def generations(db_session, sites):
                 location_uuid=site.location_uuid,
                 generation_power_kw=i,
                 start_utc=start_times[i],
-                end_utc=start_times[i] + timedelta(minutes=5),
+                end_utc=start_times[i] + dt.timedelta(minutes=5),
             )
             all_generations.append(generation)
 
@@ -124,19 +128,18 @@ def generations(db_session, sites):
 @pytest.fixture()
 def forecast_values(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "pvnet_india")
+
 
 @pytest.fixture()
 def forecast_values_wind(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "windnet_india_adjust")
+
 
 @pytest.fixture()
 def forecast_values_site(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "pvnet_ad_sites")
 
 
@@ -147,7 +150,10 @@ def make_fake_forecast_values(db_session, sites, model_name):
     num_forecasts = 10
     num_values_per_forecast = 11
 
-    timestamps = [datetime.utcnow() - timedelta(minutes=10 * i) for i in range(num_forecasts)]
+    timestamps = [
+        dt.datetime.now().astimezone(dt.UTC) - dt.timedelta(minutes=10 * i)
+        for i in range(num_forecasts)
+    ]
 
     # To make things trickier we make a second forecast at the same for one of the timestamps.
     timestamps = timestamps + timestamps[-1:]
@@ -158,7 +164,9 @@ def make_fake_forecast_values(db_session, sites, model_name):
     for site in sites:
         for timestamp in timestamps:
             forecast: ForecastSQL = ForecastSQL(
-                location_uuid=site.location_uuid, forecast_version=forecast_version, timestamp_utc=timestamp
+                location_uuid=site.location_uuid,
+                forecast_version=forecast_version,
+                timestamp_utc=timestamp,
             )
 
             db_session.add(forecast)
@@ -171,8 +179,8 @@ def make_fake_forecast_values(db_session, sites, model_name):
                 forecast_value: ForecastValueSQL = ForecastValueSQL(
                     forecast_power_kw=i,
                     forecast_uuid=forecast.forecast_uuid,
-                    start_utc=timestamp + timedelta(minutes=horizon),
-                    end_utc=timestamp + timedelta(minutes=horizon + duration),
+                    start_utc=timestamp + dt.timedelta(minutes=horizon),
+                    end_utc=timestamp + dt.timedelta(minutes=horizon + duration),
                     horizon_minutes=horizon,
                 )
                 forecast_value.ml_model = ml_model

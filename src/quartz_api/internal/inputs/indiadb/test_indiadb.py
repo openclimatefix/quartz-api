@@ -2,9 +2,9 @@ import logging
 
 import pytest
 from fastapi import HTTPException
-from quartz_api.internal.service.auth import EMAIL_KEY
 
 from quartz_api.internal import ActualPower, PredictedPower, SiteProperties
+from quartz_api.internal.service.auth import EMAIL_KEY
 
 from .client import Client
 

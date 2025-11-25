@@ -1,10 +1,9 @@
 import logging
-from fastapi import HTTPException
+
 import pytest
+from fastapi import HTTPException
 
-from quartz_api.internal import PredictedPower, ActualPower, SiteProperties
-
-from pvsite_datamodel.sqlmodels import APIRequestSQL
+from quartz_api.internal import ActualPower, PredictedPower, SiteProperties
 
 from .client import Client
 
@@ -24,7 +23,7 @@ def client(engine, db_session):
 
 class TestIndiaDBClient:
     def test_get_predicted_wind_power_production_for_location(
-        self, client, forecast_values_wind
+        self, client, forecast_values_wind,
     ) -> None:
         locID = "testID"
         result = client.get_predicted_wind_power_production_for_location(locID)
@@ -34,14 +33,14 @@ class TestIndiaDBClient:
             assert isinstance(record, PredictedPower)
 
     def test_get_predicted_wind_power_production_for_location_raise_error(
-        self, client, forecast_values_wind
+        self, client, forecast_values_wind,
     ) -> None:
 
         with pytest.raises(Exception):
             result = client.get_predicted_wind_power_production_for_location("testID2")
 
     def test_get_predicted_solar_power_production_for_location(
-        self, client, forecast_values
+        self, client, forecast_values,
     ) -> None:
         locID = "testID"
         result = client.get_predicted_solar_power_production_for_location(locID)
@@ -128,3 +127,4 @@ class TestIndiaDBClient:
         except HTTPException as e:
             assert e.status_code == 422
             assert "generation values" in str(e.detail)
+
