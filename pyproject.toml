@@ -27,11 +27,8 @@ dependencies = [
     "pytz >= 2023.3",
     "structlog >= 23.2.0",
     "uvicorn >= 0.24.0",
-    "numpy",
+    "numpy == 1.25.0",
     "sentry-sdk == 2.1.1",
-    "str2bool",
-    "pytest",
-    "testcontainers",
 ]
 
 [dependency-groups]
