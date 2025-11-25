@@ -1,13 +1,13 @@
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
 
 from quartz_api.internal import PredictedPower
 from quartz_api.internal.models import ForecastHorizon
 
 
 def format_csv_and_created_time(values: list[PredictedPower], forecast_horizon: ForecastHorizon) -> (pd.DataFrame, datetime):
-    """
-    Format the predicted power values into a pandas dataframe ready for CSV export.
+    """Format the predicted power values into a pandas dataframe ready for CSV export.
 
     We also get the maximum created time of these forecasts
 

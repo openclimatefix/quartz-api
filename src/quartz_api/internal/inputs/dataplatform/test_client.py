@@ -2,7 +2,6 @@ import dataclasses
 import datetime as dt
 import unittest
 import uuid
-from collections.abc import Callable
 from unittest.mock import AsyncMock, patch
 
 from betterproto.lib.google.protobuf import Struct, Value
@@ -27,7 +26,7 @@ def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsRespons
                         fields={
                             "orientation": Value(number_value=180.0),
                             "tilt": Value(number_value=30.0),
-                        }
+                        },
                     ),
                 ),
             ],
@@ -42,11 +41,11 @@ def mock_get_forecast(
     return dp.GetForecastAsTimeseriesResponse(
         values=[
             dp.GetForecastAsTimeseriesResponseValue(
-                target_timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0),
+                target_timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0, tzinfo=dt.UTC),
                 p50_value_fraction=0.5,
                 effective_capacity_watts=1e6,
-                initialization_timestamp_utc=dt.datetime(2023, 12, 31, 23, 0, 0),
-                created_timestamp_utc=dt.datetime(2023, 12, 31, 22, 49, 0),
+                initialization_timestamp_utc=dt.datetime(2023, 12, 31, 23, 0, 0, tzinfo=dt.UTC),
+                created_timestamp_utc=dt.datetime(2023, 12, 31, 22, 49, 0, tzinfo=dt.UTC),
                 other_statistics_fractions={"p90": 0.9, "p10": 0.1},
                 metadata=Struct(fields={}),
             )
@@ -61,7 +60,7 @@ def mock_get_observations(
     return dp.GetObservationsAsTimeseriesResponse(
         values=[
             dp.GetObservationsAsTimeseriesResponseValue(
-                timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0),
+                timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0, tzinfo=dt.UTC),
                 value_fraction=0.5,
                 effective_capacity_watts=1e6,
             )
@@ -179,7 +178,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_observations_as_timeseries = AsyncMock(
-                side_effect=mock_get_observations
+                side_effect=mock_get_observations,
             )
 
             with self.subTest(tc.name):

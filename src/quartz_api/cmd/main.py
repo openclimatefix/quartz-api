@@ -1,21 +1,20 @@
 """The main entrypoint to the application."""
 
 import os
-import uvicorn
-import sentry_sdk
 
+import sentry_sdk
+import uvicorn
 
 from quartz_api import internal
 from quartz_api.internal.config import Config
 from quartz_api.internal.service import get_db_client, server, version
-
 
 cfg = Config()
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
     environment=os.getenv("ENVIRONMENT", "local"),
-    traces_sample_rate=1
+    traces_sample_rate=1,
 )
 
 sentry_sdk.set_tag("app_name", "quartz_api")

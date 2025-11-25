@@ -1,14 +1,12 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
-import asyncio
-from fastapi import HTTPException
 from typing import override
 
 from dp_sdk.ocf import dp
+from fastapi import HTTPException
 
 from quartz_api import internal
 from quartz_api.internal.models import ForecastHorizon
-from quartz_api.internal.service.auth import EMAIL_KEY
 
 from ..utils import get_window
 
@@ -33,7 +31,6 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        """Overrides parent function."""
         values = await self._get_predicted_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
@@ -51,7 +48,6 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        """Overrides parent function."""
         values = self._get_predicted_power_production_for_location(
             location,
             dp.EnergySource.WIND,
@@ -66,7 +62,6 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
     ) -> list[internal.ActualPower]:
-        """Overrides parent function."""
         return self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
@@ -77,7 +72,6 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
     ) -> list[internal.ActualPower]:
-        """Overrides parent function."""
         return self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.WIND,
@@ -85,7 +79,6 @@ class Client(internal.DatabaseInterface):
 
     @override
     async def get_wind_regions(self) -> list[str]:
-        """Overrides parent method."""
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.WIND,
             location_type_filter=dp.LocationType.SITE,
@@ -95,7 +88,6 @@ class Client(internal.DatabaseInterface):
 
     @override
     async def get_solar_regions(self) -> list[str]:
-        """Overrides parent method."""
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.SITE,
@@ -105,7 +97,6 @@ class Client(internal.DatabaseInterface):
 
     @override
     async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
-        """Overrides parent method."""
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.SITE,
@@ -136,7 +127,6 @@ class Client(internal.DatabaseInterface):
         site_properties: internal.SiteProperties,
         authdata: dict[str, str],
     ) -> internal.Site:
-        """Overrides parent method."""
         raise NotImplementedError("Data Platform client doesn't yet support site writing.")
 
     @override
@@ -145,7 +135,6 @@ class Client(internal.DatabaseInterface):
         site_uuid: str,
         authdata: dict[str, str],
     ) -> list[internal.PredictedPower]:
-        """Overrides parent method."""
         start, end = get_window()
         forecast = await self._get_predicted_power_production_for_location(
             site_uuid,
@@ -160,7 +149,6 @@ class Client(internal.DatabaseInterface):
         site_uuid: str,
         authdata: dict[str, str],
     ) -> list[internal.ActualPower]:
-        """Overrides parent method."""
         start, end = get_window()
         generation = await self._get_actual_power_production_for_location(
             site_uuid,
@@ -176,12 +164,10 @@ class Client(internal.DatabaseInterface):
         generation: list[internal.ActualPower],
         authdata: dict[str, str],
     ) -> None:
-        """Overrides parent method."""
         raise NotImplementedError("Data Platform client doesn't yet support site writing.")
 
     @override
     async def save_api_call_to_db(self, url: str, authdata: dict[str, str]):
-        """Overrides parent method."""
         raise NotImplementedError("Data Platform client doesn't yet support API call logging.")
 
     async def _get_actual_power_production_for_location(

@@ -1,6 +1,7 @@
+import pandas as pd
+
 from quartz_api.internal.models import ActualPower
 from quartz_api.internal.service.resample import resample_generation
-import pandas as pd
 
 
 def test_resample_generation_1_period():

@@ -1,9 +1,11 @@
+"""Routes for regions related endpoints."""
+
+# ruff: noqa: B008
 import datetime as dt
-from typing import Optional, Annotated
+from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter
-from fastapi import Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette import status
@@ -33,9 +35,8 @@ class GetSourcesResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-def get_sources_route(auth: dict = Depends(auth)) -> GetSourcesResponse:
+async def get_sources_route(auth: dict = Depends(auth)) -> GetSourcesResponse:
     """Function for the sources route."""
-
     return GetSourcesResponse(sources=["wind", "solar"])
 
 
@@ -63,18 +64,17 @@ ValidSourceDependency = Annotated[str, Depends(validate_source)]
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-def get_regions_route(
+async def get_regions_route(
     source: ValidSourceDependency,
     db: DBClientDependency,
     auth: dict = Depends(auth),
     # TODO: add auth scopes
 ) -> GetRegionsResponse:
     """Function for the regions route."""
-
     if source == "wind":
-        regions = db.get_wind_regions()
+        regions = await db.get_wind_regions()
     elif source == "solar":
-        regions = db.get_solar_regions()
+        regions = await db.get_solar_regions()
     return GetRegionsResponse(regions=regions)
 
 
@@ -89,23 +89,23 @@ class GetHistoricGenerationResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-def get_historic_timeseries_route(
+async def get_historic_timeseries_route(
     source: ValidSourceDependency,
     request: Request,
     region: str,
     db: DBClientDependency,
     auth: dict = Depends(auth),
     # TODO: add auth scopes
-    resample_minutes: Optional[int] = None,
+    resample_minutes: int | None = None,
 ) -> GetHistoricGenerationResponse:
     """Function for the historic generation route."""
     values: list[ActualPower] = []
 
     try:
         if source == "wind":
-            values = db.get_actual_wind_power_production_for_location(location=region)
+            values = await db.get_actual_wind_power_production_for_location(location=region)
         elif source == "solar":
-            values = db.get_actual_solar_power_production_for_location(location=region)
+            values = await db.get_actual_solar_power_production_for_location(location=region)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -131,14 +131,14 @@ class GetForecastGenerationResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-def get_forecast_timeseries_route(
+async def get_forecast_timeseries_route(
     source: ValidSourceDependency,
     region: str,
     db: DBClientDependency,
     auth: dict = Depends(auth),
     # TODO: add auth scopes
     forecast_horizon: ForecastHorizon = ForecastHorizon.day_ahead,
-    forecast_horizon_minutes: Optional[int] = None,
+    forecast_horizon_minutes: int | None = None,
     smooth_flag: bool = True,
 ) -> GetForecastGenerationResponse:
     """Function for the forecast generation route.
@@ -157,14 +157,14 @@ def get_forecast_timeseries_route(
 
     try:
         if source == "wind":
-            values = db.get_predicted_wind_power_production_for_location(
+            values = await db.get_predicted_wind_power_production_for_location(
                 location=region,
                 forecast_horizon=forecast_horizon,
                 forecast_horizon_minutes=forecast_horizon_minutes,
                 smooth_flag=smooth_flag,
             )
         elif source == "solar":
-            values = db.get_predicted_solar_power_production_for_location(
+            values = await db.get_predicted_solar_power_production_for_location(
                 location=region,
                 forecast_horizon=forecast_horizon,
                 forecast_horizon_minutes=forecast_horizon_minutes,
@@ -186,29 +186,29 @@ def get_forecast_timeseries_route(
     response_class=FileResponse,
     include_in_schema=False,
 )
-def get_forecast_csv(
+async def get_forecast_csv(
     source: ValidSourceDependency,
     region: str,
     db: DBClientDependency,
     auth: dict = Depends(auth),
-    forecast_horizon: Optional[ForecastHorizon] = ForecastHorizon.latest,
-):
-    """
-    Route to get the day ahead forecast as a CSV file.
+    forecast_horizon: ForecastHorizon | None = ForecastHorizon.latest,
+) -> StreamingResponse:
+    """Route to get the day ahead forecast as a CSV file.
+
     By default, the CSV file will be for the latest forecast, from now forwards.
     The forecast_horizon can be set to 'latest' or 'day_ahead'.
     - latest: The latest forecast, from now forwards.
     - day_ahead: The forecast for the next day, from 00:00.
     """
+    if forecast_horizon is not None and forecast_horizon not in [
+        ForecastHorizon.latest, ForecastHorizon.day_ahead,
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid forecast_horizon {forecast_horizon}. Must be 'latest' or 'day_ahead'.",
+        )
 
-    if forecast_horizon is not None:
-        if forecast_horizon not in [ForecastHorizon.latest, ForecastHorizon.day_ahead]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid forecast_horizon {forecast_horizon}. Must be 'latest' or 'day_ahead'.",
-            )
-
-    forecasts: GetForecastGenerationResponse = get_forecast_timeseries_route(
+    forecasts: GetForecastGenerationResponse = await get_forecast_timeseries_route(
         source=source,
         region=region,
         db=db,
@@ -218,7 +218,9 @@ def get_forecast_csv(
     )
 
     # format to dataframe
-    df, created_time = format_csv_and_created_time(forecasts.values, forecast_horizon=forecast_horizon)
+    df, created_time = format_csv_and_created_time(
+        forecasts.values, forecast_horizon=forecast_horizon,
+    )
 
     # make file format
     now_ist = pd.Timestamp.now(tz="Asia/Kolkata")

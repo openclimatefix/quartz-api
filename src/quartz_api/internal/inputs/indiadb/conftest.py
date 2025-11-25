@@ -1,12 +1,18 @@
-""" Test fixtures to set up fake database for testing. """
+"""Test fixtures to set up fake database for testing."""
 import logging
 import os
 from datetime import datetime, timedelta
 
 import pytest
-from pvsite_datamodel.sqlmodels import Base, ForecastSQL, ForecastValueSQL, GenerationSQL, LocationSQL
-from pvsite_datamodel.read.user import get_user_by_email
 from pvsite_datamodel.read.model import get_or_create_model
+from pvsite_datamodel.read.user import get_user_by_email
+from pvsite_datamodel.sqlmodels import (
+    Base,
+    ForecastSQL,
+    ForecastValueSQL,
+    GenerationSQL,
+    LocationSQL,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
@@ -17,7 +23,6 @@ log = logging.getLogger(__name__)
 @pytest.fixture(scope="session")
 def engine():
     """Database engine fixture."""
-
     with PostgresContainer("postgres:14.5") as postgres:
         url = postgres.get_connection_url()
         os.environ["DB_URL"] = url
@@ -36,7 +41,6 @@ def tables(engine):
 @pytest.fixture()
 def db_session(engine, tables):
     """Return a sqlalchemy session, which tears down everything properly post-test."""
-
     connection = engine.connect()
     # begin the nested transaction
     transaction = connection.begin()
@@ -55,7 +59,6 @@ def db_session(engine, tables):
 @pytest.fixture()
 def sites(db_session):
     """Seed some initial data into DB."""
-
     sites = []
     # PV site
     site = LocationSQL(
@@ -124,19 +127,16 @@ def generations(db_session, sites):
 @pytest.fixture()
 def forecast_values(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "pvnet_india")
 
 @pytest.fixture()
 def forecast_values_wind(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "windnet_india_adjust")
 
 @pytest.fixture()
 def forecast_values_site(db_session, sites):
     """Create some fake forecast values"""
-
     make_fake_forecast_values(db_session, sites, "pvnet_ad_sites")
 
 
@@ -158,7 +158,7 @@ def make_fake_forecast_values(db_session, sites, model_name):
     for site in sites:
         for timestamp in timestamps:
             forecast: ForecastSQL = ForecastSQL(
-                location_uuid=site.location_uuid, forecast_version=forecast_version, timestamp_utc=timestamp
+                location_uuid=site.location_uuid, forecast_version=forecast_version, timestamp_utc=timestamp,
             )
 
             db_session.add(forecast)

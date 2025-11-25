@@ -1,10 +1,11 @@
+"""Routes for site management."""
+# ruff: noqa: B008
+from fastapi import APIRouter, Depends
 from starlette import status
 
-from fastapi import APIRouter, Depends
-
 from quartz_api.internal import ActualPower, PredictedPower, Site, SiteProperties
-from quartz_api.internal.service.database_client import DBClientDependency
 from quartz_api.internal.service.auth import auth
+from quartz_api.internal.service.database_client import DBClientDependency
 
 router = APIRouter(
     tags=["Sites"],
@@ -15,26 +16,23 @@ router = APIRouter(
     "/sites",
     status_code=status.HTTP_200_OK,
 )
-def get_sites(db: DBClientDependency, auth: dict = Depends(auth)) -> list[Site]:
-    """Get sites"""
-
-    # get email from auth
-    email = auth["https://openclimatefix.org/email"]
-
-    sites = db.get_sites(email=email)
-
+async def get_sites(
+    db: DBClientDependency,
+    auth: dict = Depends(auth),
+) -> list[Site]:
+    """Get sites."""
+    sites = await db.get_sites(authdata=auth)
     return sites
 
 
 @router.put("/sites/{site_uuid}", response_model=SiteProperties, status_code=status.HTTP_200_OK)
-def put_site_info(
+async def put_site_info(
     site_uuid: str,
     site_info: SiteProperties,
     db: DBClientDependency,
     auth: dict = Depends(auth),
 ) -> SiteProperties:
-    """
-    ### This route allows a user to update site information for a single site.
+    """### This route allows a user to update site information for a single site.
 
     #### Parameters
     - **site_uuid**: The site uuid, for example '8d39a579-8bed-490e-800e-1395a8eb6535'
@@ -42,28 +40,21 @@ def put_site_info(
         You can update one or more fields at a time. For example :
         {"orientation": 170, "tilt": 35, "capacity_kw": 5}
     """
-
-    # get email from auth
-    email = auth["https://openclimatefix.org/email"]
-
-    site = db.put_site(site_uuid=site_uuid, site_properties=site_info, email=email)
-
+    site = await db.put_site(site_uuid=site_uuid, site_properties=site_info, authdata=auth)
     return site
+
 
 @router.get(
     "/sites/{site_uuid}/forecast",
     status_code=status.HTTP_200_OK,
 )
-def get_forecast(
-    site_uuid: str, db: DBClientDependency, auth: dict = Depends(auth)
+async def get_forecast(
+    site_uuid: str,
+    db: DBClientDependency,
+    auth: dict = Depends(auth),
 ) -> list[PredictedPower]:
-    """Get forecast of a site"""
-
-    # get email from auth
-    email = auth["https://openclimatefix.org/email"]
-
-    forecast = db.get_site_forecast(site_uuid=site_uuid, email=email)
-
+    """Get forecast of a site."""
+    forecast = db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
     return forecast
 
 
@@ -71,16 +62,13 @@ def get_forecast(
     "/sites/{site_uuid}/generation",
     status_code=status.HTTP_200_OK,
 )
-def get_generation(
-    site_uuid: str, db: DBClientDependency, auth: dict = Depends(auth)
+async def get_generation(
+    site_uuid: str,
+    db: DBClientDependency,
+    auth: dict = Depends(auth),
 ) -> list[ActualPower]:
-    """Get get generation fo a site"""
-
-    # get email from auth
-    email = auth["https://openclimatefix.org/email"]
-
-    generation = db.get_site_generation(site_uuid=site_uuid, email=email)
-
+    """Get get generation fo a site."""
+    generation = await db.get_site_generation(site_uuid=site_uuid, authdata=auth)
     return generation
 
 
@@ -88,14 +76,14 @@ def get_generation(
     "/sites/{site_uuid}/generation",
     status_code=status.HTTP_200_OK,
 )
-def post_generation(
+async def post_generation(
     site_uuid: str,
     generation: list[ActualPower],
     db: DBClientDependency,
     auth: dict = Depends(auth),
-):
-    """Get sites
-    
+) -> None:
+    """Post observed generation data.
+
     ### This route is used to input actual PV/Wind generation.
 
     Users will upload actual PV/Wind generation
@@ -124,8 +112,4 @@ def post_generation(
     **Note**: Users should wait up to 1 day(s) to start experiencing the full
     effects from using live PV data.
     """
-
-    # get email from auth
-    email = auth["https://openclimatefix.org/email"]
-
-    db.post_site_generation(site_uuid=site_uuid, generation=generation, email=email)
+    await db.post_site_generation(site_uuid=site_uuid, generation=generation, authdata=auth)

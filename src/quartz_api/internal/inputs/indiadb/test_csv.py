@@ -1,17 +1,13 @@
 import logging
 
 import pandas as pd
-from fastapi import HTTPException
 import pytest
 
-from quartz_api.internal import PredictedPower, ActualPower, SiteProperties
+from quartz_api.internal import PredictedPower
 
-from pvsite_datamodel.sqlmodels import APIRequestSQL
-
-from .client import Client
-from .conftest import forecast_values
 from ...models import ForecastHorizon
 from ...service.csv import format_csv_and_created_time
+from .client import Client
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +28,7 @@ class TestCsvExport:
     def test_format_csv_and_created_time(self, client, forecast_values_wind) -> None:
         """Test the format_csv_and_created_time function."""
         forecast_values_wind = client.get_predicted_wind_power_production_for_location(
-            location="testID"
+            location="testID",
         )
         assert forecast_values_wind is not None
         assert len(forecast_values_wind) > 0

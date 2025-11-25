@@ -1,16 +1,16 @@
 """A dummy database that conforms to the DatabaseInterface."""
+
 import datetime as dt
 import math
 import random
+from typing import override
 from uuid import uuid4
-from typing import Optional
-
 
 from quartz_api import internal
 from quartz_api.internal.models import ForecastHorizon
 
-from ._models import DummyDBPredictedPowerProduction
 from ..utils import get_window
+from ._models import DummyDBPredictedPowerProduction
 
 # step defines the time interval between each data point
 step: dt.timedelta = dt.timedelta(minutes=15)
@@ -19,19 +19,13 @@ step: dt.timedelta = dt.timedelta(minutes=15)
 class Client(internal.DatabaseInterface):
     """Defines a dummy database that conforms to the DatabaseInterface."""
 
+    @override
     def get_predicted_solar_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: Optional[int] = None,
+        forecast_horizon_minutes: int | None = None,
     ) -> list[internal.PredictedPower]:
-        """Gets the predicted solar power production for a location.
-
-        Args:
-            location: The location to get the predicted solar power production for.
-            forecast_horizon: The time horizon to get the data for. Can be latest or day ahead
-            forecast_horizon_minutes: this is not used
-        """
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
@@ -50,19 +44,13 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def get_predicted_wind_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: Optional[int] = None,
+        forecast_horizon_minutes: int | None = None,
     ) -> list[internal.PredictedPower]:
-        """Gets the predicted wind power production for a location.
-
-        Args:
-            location: The location to get the predicted wind power production for.
-            forecast_horizon: The time horizon to get the data for. Can be latest or day ahead
-            forecast_horizon_minutes: this is not used but needed for function signature
-        """
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
@@ -81,10 +69,11 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def get_actual_solar_power_production_for_location(
-        self, location: str
+        self,
+        location: str,
     ) -> list[internal.ActualPower]:
-        """Gets the actual solar power production for a location."""
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
@@ -102,10 +91,11 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def get_actual_wind_power_production_for_location(
-        self, location: str
+        self,
+        location: str,
     ) -> list[internal.ActualPower]:
-        """Gets the actual wind power production for a location."""
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
@@ -123,21 +113,20 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def get_wind_regions(self) -> list[str]:
-        """Gets the valid wind regions."""
         return ["dummy_wind_region1", "dummy_wind_region2"]
 
+    @override
     def get_solar_regions(self) -> list[str]:
-        """Gets the valid solar regions."""
         return ["dummy_solar_region1", "dummy_solar_region2"]
 
-    def save_api_call_to_db(self, url: str, authdata: dict[str, str]):
-        """Saves an API call to the database. This does nothing"""
+    @override
+    def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
         pass
 
+    @override
     def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
-        """Get a list of sites"""
-
         uuid = str(uuid4())
 
         site = internal.Site(
@@ -150,38 +139,48 @@ class Client(internal.DatabaseInterface):
 
         return [site]
 
+    @override
     def put_site(
-            self, site_uuid: str, site_properties: internal.SiteProperties, authdata: dict[str, str],
+        self,
+        site_uuid: str,
+        site_properties: internal.SiteProperties,
+        authdata: dict[str, str],
     ) -> internal.Site:
         pass
 
+    @override
     def get_site_forecast(
-        self, site_uuid: str, authdata: dict[str, str],
+        self,
+        site_uuid: str,
+        authdata: dict[str, str],
     ) -> list[internal.PredictedPower]:
-        """Get a forecast for a site, this is for a solar site"""
-
         values = self.get_predicted_solar_power_production_for_location(location="dummy")
 
         return values
 
+    @override
     def get_site_generation(
-        self, site_uuid: str, authdata: dict[str, str]
+        self,
+        site_uuid: str,
+        authdata: dict[str, str],
     ) -> list[internal.ActualPower]:
-        """Get the generation for a site, this is for a solar site"""
-
         values = self.get_actual_solar_power_production_for_location(location="dummy")
 
         return values
 
+    @override
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], authdata: dict[str, str],
-    ):
-        """Post generation for a site"""
+        self,
+        site_uuid: str,
+        generation: list[internal.ActualPower],
+        authdata: dict[str, str],
+    ) -> None:
         pass
 
 
 def _basicSolarPowerProductionFunc(
-    timeUnix: int, scaleFactor: int = 10000
+    timeUnix: int,
+    scaleFactor: int = 10000,
 ) -> DummyDBPredictedPowerProduction:
     """Gets a fake solar PowerProduction for the input time.
 
@@ -216,7 +215,7 @@ def _basicSolarPowerProductionFunc(
     # Remove negative values
     basefunc = max(0, basefunc)
     # Steepen the curve. The divisor is based on the max value
-    basefunc = basefunc ** 4 / 1.5 ** 4
+    basefunc = basefunc**4 / 1.5**4
 
     # Instead of completely random noise, apply based on the following process:
     # * A base noise function which is the product of long and short sines
@@ -242,7 +241,8 @@ def _basicSolarPowerProductionFunc(
 
 
 def _basicWindPowerProductionFunc(
-    timeUnix: int, scaleFactor: int = 10000
+    timeUnix: int,
+    scaleFactor: int = 10000,
 ) -> DummyDBPredictedPowerProduction:
     """Gets a fake wind PowerProduction for the input time."""
     output = min(scaleFactor, scaleFactor * 10 * random.random())
