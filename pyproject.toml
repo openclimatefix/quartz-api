@@ -10,7 +10,7 @@ name = "quartz-api"
 dynamic = ["version"] # Set automatically using git: https://setuptools-git-versioning.readthedocs.io/en/stable/
 description = "Quartz API for wind and solar data"
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.11.0,<3.14"
+requires-python = ">=3.11.0"
 license = {text = "MIT License"}
 authors = [
     { name = "Sol Cotton", email = "sol@openclimatefix.org"},
