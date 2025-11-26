@@ -13,7 +13,7 @@ jobs:
     uses: openclimatefix/.github/.github/workflows/branch_ci.yml@main
     secrets: inherit
     with:
-      enable_linting: false
+      enable_linting: true
       enable_typechecking: false
       tests_folder: src/quartz_api
       containerfile: Containerfile
