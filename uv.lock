@@ -474,14 +474,14 @@ wheels = [
 
 [[package]]
 name = "dp-sdk"
-version = "0.13.2"
-source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.13.2/dp_sdk-0.13.2-py3-none-any.whl" }
+version = "0.14.0"
+source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.14.0/dp_sdk-0.14.0-py3-none-any.whl" }
 dependencies = [
     { name = "betterproto" },
     { name = "grpcio" },
 ]
 wheels = [
-    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.13.2/dp_sdk-0.13.2-py3-none-any.whl", hash = "sha256:d9f36b8fdfa64ce5816a659fe5319097694db0e251b16b220e9c62de516af7b2" },
+    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.14.0/dp_sdk-0.14.0-py3-none-any.whl", hash = "sha256:bb5e251681a154159853d0bf91d7fd662e18a8b93ca8487df468e0d0ca7a7142" },
 ]
 
 [package.metadata]
@@ -1568,7 +1568,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.2.4.post11+git.5b4277c2"
+version = "0.2.4"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -1599,7 +1599,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.13.2/dp_sdk-0.13.2-py3-none-any.whl" },
+    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.14.0/dp_sdk-0.14.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "numpy", specifier = ">=1.25.0" },
     { name = "pvsite-datamodel", specifier = "==1.2.3" },

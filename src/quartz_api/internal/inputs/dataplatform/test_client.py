@@ -91,7 +91,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.new(client_mock)
+        client = Client.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
@@ -126,7 +126,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.new(client_mock)
+        client = Client.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(
@@ -174,7 +174,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.new(client_mock)
+        client = Client.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_observations_as_timeseries = AsyncMock(

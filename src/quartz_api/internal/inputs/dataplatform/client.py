@@ -14,13 +14,13 @@ from ..utils import get_window
 class Client(internal.DatabaseInterface):
     """Defines a data platform interface that conforms to the DatabaseInterface."""
 
-    c: dp.DataPlatformDataServiceStub
+    dp_client: dp.DataPlatformDataServiceStub
 
     @classmethod
-    def new(cls, dp_client: dp.DataPlatformDataServiceStub) -> "Client":
+    def from_dp(cls, dp_client: dp.DataPlatformDataServiceStub) -> "Client":
         """Class method to create a new Data Platform client."""
         instance = cls()
-        instance.c = dp_client
+        instance.dp_client = dp_client
         return instance
 
     @override
@@ -81,18 +81,18 @@ class Client(internal.DatabaseInterface):
     async def get_wind_regions(self) -> list[str]:
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.WIND,
-            location_type_filter=dp.LocationType.SITE,
+            location_type_filter=dp.LocationType.STATE,
         )
-        resp = await self.c.list_locations(req)
+        resp = await self.dp_client.list_locations(req)
         return [loc.location_uuid for loc in resp.locations]
 
     @override
     async def get_solar_regions(self) -> list[str]:
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.SITE,
+            location_type_filter=dp.LocationType.STATE,
         )
-        resp = await self.c.list_locations(req)
+        resp = await self.dp_client.list_locations(req)
         return [loc.location_uuid for loc in resp.locations]
 
     @override
@@ -102,7 +102,7 @@ class Client(internal.DatabaseInterface):
             location_type_filter=dp.LocationType.SITE,
             user_oauth_id_filter=authdata["sub"],
         )
-        resp = await self.c.list_locations(req)
+        resp = await self.dp_client.list_locations(req)
         return [
             internal.Site(
                 site_uuid=loc.location_uuid,
@@ -187,14 +187,14 @@ class Client(internal.DatabaseInterface):
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location,
-            observer_name="TODO",
+            observer_name="ruvnl",
             energy_source=energy_source,
             time_window=dp.TimeWindow(
                 start_timestamp_utc=start,
                 end_timestamp_utc=end,
             ),
         )
-        resp = await self.c.get_observations_as_timeseries(req)
+        resp = await self.dp_client.get_observations_as_timeseries(req)
         out: list[internal.ActualPower] = [
             internal.ActualPower(
                 Time=value.timestamp_utc,
@@ -242,7 +242,7 @@ class Client(internal.DatabaseInterface):
                 forecaster_version="TODO",
             ),
         )
-        resp = await self.c.get_forecast_as_timeseries(req)
+        resp = await self.dp_client.get_forecast_as_timeseries(req)
 
         out: list[internal.PredictedPower] = [
             internal.PredictedPower(
@@ -268,7 +268,7 @@ class Client(internal.DatabaseInterface):
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.c.list_locations(req)
+        resp = await self.dp_client.list_locations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
