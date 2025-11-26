@@ -46,8 +46,10 @@ def mock_get_forecast(
                 target_timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 p50_value_fraction=0.5,
                 effective_capacity_watts=1e6,
-                initialization_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(minutes=req.horizon_mins),
-                created_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=1, minutes=req.horizon_mins),
+                initialization_timestamp_utc=\
+                    TEST_TIMESTAMP_UTC - dt.timedelta(minutes=req.horizon_mins),
+                created_timestamp_utc=\
+                    TEST_TIMESTAMP_UTC - dt.timedelta(hours=1, minutes=req.horizon_mins),
                 other_statistics_fractions={"p90": 0.9, "p10": 0.1},
                 metadata=Struct(fields={}),
             )

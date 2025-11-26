@@ -14,7 +14,7 @@ from pvsite_datamodel.sqlmodels import (
     GenerationSQL,
     LocationSQL,
 )
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
-def engine():
+def engine() -> Engine:
     """Database engine fixture."""
     with PostgresContainer("postgres:14.5") as postgres:
         url = postgres.get_connection_url()
@@ -33,14 +33,18 @@ def engine():
 
 
 @pytest.fixture(scope="session")
-def tables(engine):
+def tables(engine: Engine) -> None:
+    """Create tables fixture."""
     Base.metadata.create_all(engine)
     yield
     Base.metadata.drop_all(engine)
 
 
 @pytest.fixture()
-def db_session(engine, tables):
+def db_session(
+    engine: Engine,
+    tables: None,  # noqa: ARG001
+) -> Session:
     """Return a sqlalchemy session, which tears down everything properly post-test."""
     connection = engine.connect()
     # begin the nested transaction
@@ -58,7 +62,7 @@ def db_session(engine, tables):
 
 
 @pytest.fixture()
-def sites(db_session):
+def sites(db_session: Session) -> list[LocationSQL]:
     """Seed some initial data into DB."""
     sites = []
     # PV site
@@ -103,10 +107,21 @@ def sites(db_session):
 
 
 @pytest.fixture()
-def generations(db_session, sites):
-    """Create some fake generations"""
-    start_times = [dt.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(minutes=x) for x in range(10)]
-
+def generations(
+    db_session: Session,
+    sites: list[LocationSQL],
+) -> list[GenerationSQL]:
+    """Create some fake generations."""
+    start_times = [
+        dt.datetime.now(tz=dt.UTC).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        - dt.timedelta(minutes=x)
+        for x in range(10)
+    ]
     all_generations = []
 
     for site in sites:
@@ -126,24 +141,38 @@ def generations(db_session, sites):
 
 
 @pytest.fixture()
-def forecast_values(db_session, sites):
-    """Create some fake forecast values"""
+def forecast_values(
+    db_session: Session,
+    sites: list[LocationSQL],
+) -> None:
+    """Create some fake forecast values."""
     make_fake_forecast_values(db_session, sites, "pvnet_india")
 
 
 @pytest.fixture()
-def forecast_values_wind(db_session, sites):
-    """Create some fake forecast values"""
+def forecast_values_wind(
+    db_session: Session,
+    sites: list[LocationSQL],
+) -> None:
+    """Create some fake forecast values."""
     make_fake_forecast_values(db_session, sites, "windnet_india_adjust")
 
 
 @pytest.fixture()
-def forecast_values_site(db_session, sites):
-    """Create some fake forecast values"""
+def forecast_values_site(
+    db_session: Session,
+    sites: list[LocationSQL],
+) -> None:
+    """Create some fake forecast values."""
     make_fake_forecast_values(db_session, sites, "pvnet_ad_sites")
 
 
-def make_fake_forecast_values(db_session, sites, model_name):
+def make_fake_forecast_values(
+    db_session: Session,
+    sites: list[LocationSQL],
+    model_name: str,
+) -> list[ForecastValueSQL]:
+    """Create some fake forecast values."""
     forecast_values = []
     forecast_version: str = "0.0.0"
 

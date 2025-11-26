@@ -1,6 +1,8 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
+
 # ruff: noqa: B008
 import os
+from typing import override
 
 import jwt
 from fastapi import Depends, HTTPException, Request
@@ -15,6 +17,7 @@ class Auth:
     """Fast api dependency that validates an JWT token."""
 
     def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
+        """Initialize the Auth dependency."""
         self._domain = domain
         self._api_audience = api_audience
         self._algorithm = algorithm
@@ -25,7 +28,8 @@ class Auth:
         self,
         request: Request,
         auth_credentials: HTTPAuthorizationCredentials = Depends(token_auth_scheme),
-    ) -> None:
+    ) -> dict[str, str]:
+        """Validate the JWT token and return the payload."""
         token = auth_credentials.credentials
 
         try:
@@ -53,24 +57,30 @@ class DummyAuth(Auth):
     """Dummy auth dependency for testing purposes."""
 
     def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
+        """Initialize the DummyAuth dependency."""
         self._domain = domain
         self._api_audience = api_audience
         self._algorithm = algorithm
 
-    def __call__(self) -> None:
+    @override
+    def __call__(self) -> dict[str, str]:
         return {
             EMAIL_KEY: "test@test.com",
             "sub": "google-oath2|012345678909876543210",
         }
 
 
-if (os.getenv("AUTH0_DOMAIN") is not None) and (os.getenv("AUTH0_API_AUDIENCE") is not None):
+domain = os.getenv("AUTH0_DOMAIN")
+api_audience = os.getenv("AUTH0_API_AUDIENCE")
+if domain is None or api_audience is None:
+    auth = DummyAuth(domain="dummy", api_audience="dummy", algorithm="dummy")
+else:
     auth = Auth(
-        domain=os.getenv("AUTH0_DOMAIN"),
-        api_audience=os.getenv("AUTH0_API_AUDIENCE"),
+        domain=domain,
+        api_audience=api_audience,
         algorithm="RS256",
     )
-else:
-    auth = DummyAuth(domain="dummy", api_audience="dummy", algorithm="dummy")
+
 # TODO: add scopes for granular access across APIs
-# auth = Auth(domain=os.getenv('AUTH0_DOMAIN'), api_audience=os.getenv('AUTH0_API_AUDIENCE'), scopes={'read:india': ''})
+# auth = Auth(domain=os.getenv('AUTH0_DOMAIN'), api_audience=os.getenv('AUTH0_API_AUDIENCE'),
+#     scopes={'read:india': ''})

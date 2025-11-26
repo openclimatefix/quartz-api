@@ -3,13 +3,16 @@
 import logging
 import os
 import sys
+from collections.abc import Awaitable, Callable
 from importlib.metadata import version
+from typing import Any
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.responses import HTMLResponse
 
 from quartz_api.cmd.redoc_theme import get_redoc_html_with_theme
 from quartz_api.internal.service.database_client import get_db_client
@@ -19,7 +22,7 @@ from quartz_api.internal.service.sites import router as sites_router
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 log = logging.getLogger(__name__)
 folder = os.path.dirname(os.path.abspath(__file__))
-version = version("quartz-api")
+current_version = version("quartz-api")
 
 
 tags_metadata = [
@@ -29,7 +32,8 @@ tags_metadata = [
     },
     {
         "name": "Sites",
-        "description": "A site is a specific point location, for example (52.15, 1.25) in latitude and longitude. "
+        "description": "A site is a specific point location, "
+        "for example (52.15, 1.25) in latitude and longitude. "
         "Each site will have one source of energy "
         "and there is forecast and generation data for each site. ",
     },
@@ -49,24 +53,30 @@ TODO: Update description
 
 ## Regions
 
-The regions routes are used to get solar and wind forecasts. 
+The regions routes are used to get solar and wind forecasts.
 
 ## Sites
 
-The sites routes are used to get site level forecasts. 
+The sites routes are used to get site level forecasts.
 A user can
 - **/sites**: Get information about your sites
 - **/sites/{site_uuid}/forecast**: Get a forecast for a specific site
 - **/sites/{site_uuid}/forecast**: Get and post generation for a specific site
 
 ### Authentication and Example
-If you need an authentication route, please get your access token with the following code. 
-You'll need a username and password. 
+If you need an authentication route, please get your access token with the following code.
+You'll need a username and password.
 ```
-export AUTH=$(curl --request POST 
-   --url https://nowcasting-pro.eu.auth0.com/oauth/token 
-   --header 'content-type: application/json' 
-   --data '{"client_id":"TODO", "audience":"https://api.nowcasting.io/", "grant_type":"password", "username":"username", "password":"password"}'
+export AUTH=$(curl --request POST
+   --url https://nowcasting-pro.eu.auth0.com/oauth/token
+   --header 'content-type: application/json'
+   --data '{
+      "client_id":"TODO",
+      "audience":"https://api.nowcasting.io/",
+      "grant_type":"password",
+      "username":"username",
+      "password":"password"
+    }'
 )
 
 export TOKEN=$(echo "${AUTH}" | jq '.access_token' | tr -d '"')
@@ -79,7 +89,7 @@ curl -X GET 'https://api.quartz.energy/sites' -H "Authorization: Bearer $TOKEN"
 """
 
 server = FastAPI(
-    version=version,
+    version=current_version,
     title=title,
     description=description,
     openapi_tags=tags_metadata,
@@ -97,7 +107,10 @@ server.add_middleware(
 
 
 @server.middleware("http")
-async def save_api_request_to_db(request: Request, call_next):
+async def save_api_request_to_db(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> None:
     """Middleware to save the API request to the database."""
     response = await call_next(request)
 
@@ -146,24 +159,26 @@ def get_health_route() -> GetHealthResponse:
 
 
 @server.get("/QUARTZSOLAR_LOGO_SECONDARY_BLACK_1.png", include_in_schema=False)
-def get_quartz_solar_logo():
+def get_quartz_solar_logo() -> FileResponse:
     """Serve the Quartz Solar logo."""
     return FileResponse(f"{folder}/QUARTZSOLAR_LOGO_SECONDARY_BLACK_1.png")
 
+
 @server.get("/docs", include_in_schema=False)
-def redoc_html():
+def redoc_html() -> HTMLResponse:
     """Render ReDoc with custom theme options included."""
     return get_redoc_html_with_theme(
         title=title,
     )
 
-def custom_openapi():
+
+def custom_openapi() -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
         return server.openapi_schema
     openapi_schema = get_openapi(
         title=title,
-        version=version,
+        version=current_version,
         description=description,
         contact={
             "name": "India API by Open Climate Fix",
@@ -179,5 +194,6 @@ def custom_openapi():
     openapi_schema["info"]["x-logo"] = {"url": "/QUARTZSOLAR_LOGO_SECONDARY_BLACK_1.png"}
     server.openapi_schema = openapi_schema
     return openapi_schema
+
 
 server.openapi = custom_openapi

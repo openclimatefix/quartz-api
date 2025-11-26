@@ -25,11 +25,11 @@ match cfg.SOURCE:
         if cfg.DB_URL == "" or cfg.DB_URL is None:
             raise OSError(f"DB_URL env var is required using db source: {cfg.SOURCE}")
 
-        def get_db_client_override() -> internal.DatabaseInterface:
+        def get_db_client_override() -> internal.DatabaseInterface: # noqa: D103
             return internal.inputs.quartzdb.Client(cfg.DB_URL)
     case "dummydb":
 
-        def get_db_client_override() -> internal.DatabaseInterface:
+        def get_db_client_override() -> internal.DatabaseInterface: # noqa: D103
             return internal.inputs.dummydb.Client()
     case _:
         raise ValueError(f"Unknown SOURCE: {cfg.SOURCE}. Expected 'dummydb'.")
@@ -42,7 +42,7 @@ def run() -> None:
     """Run the API using a uvicorn server."""
     uvicorn.run(
         "quartz_api.internal.service.server:server",
-        host="0.0.0.0",
+        host="0.0.0.0", # noqa: S104
         port=cfg.PORT,
         reload=True,
         log_level="debug",

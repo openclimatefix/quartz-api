@@ -136,7 +136,6 @@ class Client(internal.DatabaseInterface):
         site_uuid: str,
         authdata: dict[str, str],
     ) -> list[internal.PredictedPower]:
-        start, end = get_window()
         forecast = await self._get_predicted_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
@@ -150,7 +149,6 @@ class Client(internal.DatabaseInterface):
         site_uuid: str,
         authdata: dict[str, str],
     ) -> list[internal.ActualPower]:
-        start, end = get_window()
         generation = await self._get_actual_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
@@ -213,7 +211,7 @@ class Client(internal.DatabaseInterface):
         oauth_id: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
+        smooth_flag: bool = True, # noqa: ARG002
     ) -> list[internal.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         _ = await self._check_user_access(

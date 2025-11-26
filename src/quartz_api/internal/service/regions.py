@@ -35,7 +35,9 @@ class GetSourcesResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def get_sources_route(auth: dict = Depends(auth)) -> GetSourcesResponse:
+async def get_sources_route(
+    auth: dict = Depends(auth),  # noqa: ARG001
+) -> GetSourcesResponse:
     """Function for the sources route."""
     return GetSourcesResponse(sources=["wind", "solar"])
 
@@ -67,7 +69,7 @@ ValidSourceDependency = Annotated[str, Depends(validate_source)]
 async def get_regions_route(
     source: ValidSourceDependency,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: dict = Depends(auth),  # noqa: ARG001
     # TODO: add auth scopes
 ) -> GetRegionsResponse:
     """Function for the regions route."""
@@ -91,10 +93,10 @@ class GetHistoricGenerationResponse(BaseModel):
 )
 async def get_historic_timeseries_route(
     source: ValidSourceDependency,
-    request: Request,
+    request: Request,  # noqa: ARG001
     region: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: dict = Depends(auth),  # noqa: ARG001
     # TODO: add auth scopes
     resample_minutes: int | None = None,
 ) -> GetHistoricGenerationResponse:
@@ -131,11 +133,11 @@ class GetForecastGenerationResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def get_forecast_timeseries_route(
+async def get_forecast_timeseries_route(  # noqa: D417
     source: ValidSourceDependency,
     region: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: dict = Depends(auth),  # noqa: ARG001
     # TODO: add auth scopes
     forecast_horizon: ForecastHorizon = ForecastHorizon.day_ahead,
     forecast_horizon_minutes: int | None = None,
@@ -146,9 +148,12 @@ async def get_forecast_timeseries_route(
     Args:
         source: The source of the forecast, this is current wind or solar.
         region: The region to get the forecast for.
-        forecast_horizon: The time horizon to get the data for. Can be 'latest', 'horizon' or 'day ahead'
-        forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
-        smooth_flag: If the forecast should be smoothed or not. Note for DA forecast this is always False.
+        forecast_horizon: The time horizon to get the data for.
+            Can be 'latest', 'horizon' or 'day ahead'
+        forecast_horizon_minutes: The number of minutes to get the forecast for.
+            forecast_horizon must be 'horizon'
+        smooth_flag: If the forecast should be smoothed or not.
+            Note for DA forecast this is always False.
     """
     values: list[PredictedPower] = []
 
@@ -201,7 +206,8 @@ async def get_forecast_csv(
     - day_ahead: The forecast for the next day, from 00:00.
     """
     if forecast_horizon is not None and forecast_horizon not in [
-        ForecastHorizon.latest, ForecastHorizon.day_ahead,
+        ForecastHorizon.latest,
+        ForecastHorizon.day_ahead,
     ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -219,7 +225,8 @@ async def get_forecast_csv(
 
     # format to dataframe
     df, created_time = format_csv_and_created_time(
-        forecasts.values, forecast_horizon=forecast_horizon,
+        forecasts.values,
+        forecast_horizon=forecast_horizon,
     )
 
     # make file format
@@ -233,7 +240,8 @@ async def get_forecast_csv(
         case _:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid forecast_horizon {forecast_horizon}. Must be 'latest' or 'day_ahead'.",
+                detail=f"Invalid forecast_horizon {forecast_horizon}. "
+                "Must be 'latest' or 'day_ahead'.",
             )
     csv_file_path = f"{region}_{source}_{forecast_type}_{tomorrow_ist}.csv"
 
@@ -244,7 +252,7 @@ async def get_forecast_csv(
 
     output = df.to_csv(index=False)
     return StreamingResponse(
-        iter([output] + [description]),
+        iter([output, description]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment;filename={csv_file_path}"},
     )

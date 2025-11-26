@@ -1,9 +1,12 @@
+"""Functions to resample data."""
+
 import pandas as pd
 
 from quartz_api.internal import ActualPower
 
 
 def resample_generation(values: list[ActualPower], internal_minutes: int) -> list[ActualPower]:
+    """Resample generation data to a specified interval."""
     if not values:
         return []
 
@@ -19,7 +22,6 @@ def resample_generation(values: list[ActualPower], internal_minutes: int) -> lis
     df = df.set_index("Time").resample(f"{internal_minutes}min").mean().dropna()
 
     df["PowerKW"].clip(lower=0, inplace=True)  # Set negative values of PowerKW up to 0
-
 
     # convert back to list of ActualPower
     return [

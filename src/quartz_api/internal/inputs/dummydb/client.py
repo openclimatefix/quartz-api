@@ -1,4 +1,5 @@
 """A dummy database that conforms to the DatabaseInterface."""
+# ruff: noqa: S311
 
 import datetime as dt
 import math
@@ -58,7 +59,7 @@ class Client(internal.DatabaseInterface):
 
         for i in range(numSteps):
             time = start + i * step
-            _PowerProduction = _basicWindPowerProductionFunc(int(time.timestamp()))
+            _PowerProduction = _basicWindPowerProductionFunc()
             values.append(
                 internal.PredictedPower(
                     Time=time,
@@ -103,7 +104,7 @@ class Client(internal.DatabaseInterface):
 
         for i in range(numSteps):
             time = start + i * step
-            _PowerProduction = _basicWindPowerProductionFunc(int(time.timestamp()))
+            _PowerProduction = _basicWindPowerProductionFunc()
             values.append(
                 internal.ActualPower(
                     Time=time,
@@ -241,7 +242,6 @@ def _basicSolarPowerProductionFunc(
 
 
 def _basicWindPowerProductionFunc(
-    timeUnix: int,
     scaleFactor: int = 10000,
 ) -> DummyDBPredictedPowerProduction:
     """Gets a fake wind PowerProduction for the input time."""

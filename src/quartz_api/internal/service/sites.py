@@ -1,4 +1,5 @@
 """Routes for site management."""
+
 # ruff: noqa: B008
 from fastapi import APIRouter, Depends
 from starlette import status

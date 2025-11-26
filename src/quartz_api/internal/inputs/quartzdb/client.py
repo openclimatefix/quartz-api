@@ -1,7 +1,9 @@
 """Quartz DB client that conforms to the DatabaseInterface."""
+
 import datetime as dt
 import logging
 import os
+from typing import override
 from uuid import UUID
 
 import pandas as pd
@@ -27,6 +29,7 @@ from quartz_api import internal
 from quartz_api.internal.inputs.quartzdb.smooth import smooth_forecast
 from quartz_api.internal.inputs.utils import get_window
 from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal.service.auth import EMAIL_KEY
 
 log = logging.getLogger(__name__)
 
@@ -40,21 +43,22 @@ class Client(internal.DatabaseInterface):
         """Initialize the client with a SQLAlchemy database connection and session."""
         self.connection = DatabaseConnection(url=database_url, echo=False)
 
-    def _get_session(self):
-        """Allows for overriding the default session (useful for testing)"""
+    def _get_session(self) -> Session:
+        """Allows for overriding the default session (useful for testing)."""
         if self.session is None:
             return self.connection.get_session()
         else:
             return self.session
 
-    def save_api_call_to_db(self, url: str, email=""):
-        """Saves an API call to the database."""
+    @override
+    def save_api_call_to_db(self, url: str, user: str | None = "") -> None:
         with self._get_session() as session:
             # save the API call
             log.info(f"Saving API call ({url=}) to database")
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, user)
             save_api_call_to_db(url=url, session=session, user=user)
 
+    @override
     def get_predicted_power_production_for_location(
         self,
         location: str,
@@ -64,18 +68,8 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        """Gets the predicted power production for a location.
-
-        Args:
-            location: the location to get the predicted power production for
-            asset_type: The type of asset to get the forecast for
-            ml_model_name: The name of the model to get the forecast from
-            forecast_horizon: The time horizon to get the data for. Can be latest or day ahead
-            forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
-            smooth_flag: Flag to smooth the forecast
-        """
         # Get the window
-        start, end = get_window()
+        start, _ = get_window()
 
         # get house ahead forecast
         if forecast_horizon == ForecastHorizon.day_ahead:
@@ -158,7 +152,10 @@ class Client(internal.DatabaseInterface):
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site.location_uuid], start_utc=start, end_utc=end,
+                session=session,
+                site_uuids=[site.location_uuid],
+                start_utc=start,
+                end_utc=end,
             )
 
         # convert from GenerationSQL to ActualPower
@@ -174,6 +171,7 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def get_predicted_solar_power_production_for_location(
         self,
         location: str,
@@ -181,14 +179,6 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> [internal.PredictedPower]:
-        """Gets the predicted solar power production for a location.
-
-        Args:
-            location: The location to get the predicted solar power production for.
-            forecast_horizon: The time horizon to get the data for. Can be latest or day ahead
-            forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
-            smooth_flag: Flag to smooth the forecast
-        """
         # set this to be hard coded for now
         model_name = "pvnet_india"
 
@@ -201,6 +191,7 @@ class Client(internal.DatabaseInterface):
             ml_model_name=model_name,
         )
 
+    @override
     def get_predicted_wind_power_production_for_location(
         self,
         location: str,
@@ -208,14 +199,6 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        """Gets the predicted wind power production for a location.
-
-        Args:
-            location: The location to get the predicted wind power production for.
-            forecast_horizon: The time horizon to get the data for. Can be latest or day ahead
-            forecast_horizon_minutes: The number of minutes to get the forecast for. forecast_horizon must be 'horizon'
-            smooth_flag: Flag to smooth the forecast
-        """
         # set this to be hard coded for now
         model_name = "windnet_india_adjust"
 
@@ -228,31 +211,36 @@ class Client(internal.DatabaseInterface):
             ml_model_name=model_name,
         )
 
+    @override
     def get_actual_solar_power_production_for_location(
-        self, location: str,
+        self,
+        location: str,
     ) -> list[internal.PredictedPower]:
-        """Gets the actual solar power production for a location."""
         return self.get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
+    @override
     def get_actual_wind_power_production_for_location(
-        self, location: str,
+        self,
+        location: str,
     ) -> list[internal.PredictedPower]:
-        """Gets the actual wind power production for a location."""
-        return self.get_generation_for_location(location=location, asset_type=LocationAssetType.wind)
+        return self.get_generation_for_location(
+            location=location,
+            asset_type=LocationAssetType.wind,
+        )
 
+    @override
     def get_wind_regions(self) -> list[str]:
-        """Gets the valid wind regions."""
         return ["ruvnl"]
 
+    @override
     def get_solar_regions(self) -> list[str]:
-        """Gets the valid solar regions."""
         return ["ruvnl"]
 
-    def get_sites(self, email: str) -> list[internal.Site]:
-        """Get a list of sites"""
+    @override
+    def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
         # get sites uuids from user
         with self._get_session() as session:
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             sites_sql = get_sites_from_user(session, user=user)
 
             sites = []
@@ -270,15 +258,18 @@ class Client(internal.DatabaseInterface):
 
             return sites
 
+    @override
     def put_site(
-        self, site_uuid: str, site_properties: internal.SiteProperties, email: str,
+        self,
+        site_uuid: str,
+        site_properties: internal.SiteProperties,
+        authdata: dict[str, str],
     ) -> internal.Site:
-        """Update site information for a single site."""
         # get sites uuids from user
         with self._get_session() as session:
-            user = get_user_by_email(session, email)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             site = get_site_by_uuid(session, site_uuid)
-            check_user_has_access_to_site(session, email, site.location_uuid)
+            check_user_has_access_to_site(session, authdata[EMAIL_KEY], site.location_uuid)
 
             site_dict = site_properties.model_dump(exclude_unset=True, exclude_none=False)
 
@@ -293,8 +284,12 @@ class Client(internal.DatabaseInterface):
 
             return site
 
-    def get_site_forecast(self, site_uuid: str, email: str) -> list[internal.PredictedPower]:
-        """Get a forecast for a site, this is for a solar site"""
+    @override
+    def get_site_forecast(
+        self,
+        site_uuid: str,
+        authdata: dict[str, str],
+    ) -> list[internal.PredictedPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # hard coded model name
@@ -304,7 +299,11 @@ class Client(internal.DatabaseInterface):
         start, _ = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session,
+                email=authdata[EMAIL_KEY],
+                site_uuid=site_uuid,
+            )
 
             # get site and the get the ml model name
             site = get_site_by_uuid(session=session, site_uuid=site_uuid)
@@ -316,7 +315,10 @@ class Client(internal.DatabaseInterface):
                 site_uuid = UUID(site_uuid)
 
             values = get_latest_forecast_values_by_site(
-                session, site_uuids=[site_uuid], start_utc=start, model_name=ml_model_name,
+                session,
+                site_uuids=[site_uuid],
+                start_utc=start,
+                model_name=ml_model_name,
             )
             forecast_values: [ForecastValueSQL] = values[site_uuid]
 
@@ -334,22 +336,33 @@ class Client(internal.DatabaseInterface):
 
         return values
 
-    def get_site_generation(self, site_uuid: str, email: str) -> list[internal.ActualPower]:
-        """Get the generation for a site, this is for a solar site"""
+    @override
+    def get_site_generation(
+        self,
+        site_uuid: str,
+        authdata: dict[str, str],
+    ) -> list[internal.ActualPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # Get the window
         start, end = get_window()
 
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session,
+                email=authdata[EMAIL_KEY],
+                site_uuid=site_uuid,
+            )
 
             if isinstance(site_uuid, str):
                 site_uuid = UUID(site_uuid)
 
             # read actual generations
             values = get_pv_generation_by_sites(
-                session=session, site_uuids=[site_uuid], start_utc=start, end_utc=end,
+                session=session,
+                site_uuids=[site_uuid],
+                start_utc=start,
+                end_utc=end,
             )
 
         # convert from GenerationSQL to PredictedPower
@@ -365,12 +378,19 @@ class Client(internal.DatabaseInterface):
 
         return values
 
+    @override
     def post_site_generation(
-        self, site_uuid: str, generation: list[internal.ActualPower], email: str,
-    ):
-        """Post generation for a site"""
+        self,
+        site_uuid: str,
+        generation: list[internal.ActualPower],
+        authdata: dict[str, str],
+    ) -> None:
         with self._get_session() as session:
-            check_user_has_access_to_site(session=session, email=email, site_uuid=site_uuid)
+            check_user_has_access_to_site(
+                session=session,
+                email=authdata[EMAIL_KEY],
+                site_uuid=site_uuid,
+            )
 
             generations = []
             for pv_actual_value in generation:
@@ -413,17 +433,20 @@ class Client(internal.DatabaseInterface):
             session.commit()
 
 
-def check_user_has_access_to_site(session: Session, email: str, site_uuid: str):
-    """Checks if a user has access to a site.
-    """
-    user = get_user_by_email(session=session, email=email)
+def check_user_has_access_to_site(
+    session: Session,
+    authdata: dict[str, str],
+    site_uuid: str,
+) -> None:
+    """Checks if a user has access to a site."""
+    user = get_user_by_email(session=session, email=authdata[EMAIL_KEY])
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)
 
     if site_uuid not in site_uuids:
         raise HTTPException(
             status_code=403,
-            detail=f"Forbidden. User ({email}) "
+            detail=f"Forbidden. User ({authdata[EMAIL_KEY]}) "
             f"does not have access to this site {site_uuid}. "
             f"User has access to {site_uuids}",
         )

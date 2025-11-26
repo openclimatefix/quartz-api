@@ -1,3 +1,4 @@
+"""Dependency injection for the database client."""
 from typing import Annotated
 
 from fastapi import Depends

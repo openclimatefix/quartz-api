@@ -1,9 +1,15 @@
+"""Tests for QuartzDBClient methods."""
+
+# ruff: noqa: ARG002
 import logging
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from quartz_api.internal import ActualPower, PredictedPower, SiteProperties
+from quartz_api.internal.service.auth import EMAIL_KEY
 
 from .client import Client
 
@@ -13,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def client(engine, db_session):
+def client(engine: Engine, db_session: Session) -> Client:
     """Hooks Client into pytest db_session fixture"""
     client = Client(database_url=str(engine.url))
     client.session = db_session
@@ -23,7 +29,9 @@ def client(engine, db_session):
 
 class TestIndiaDBClient:
     def test_get_predicted_wind_power_production_for_location(
-        self, client, forecast_values_wind,
+        self,
+        client: Client,
+        forecast_values_wind: None,
     ) -> None:
         locID = "testID"
         result = client.get_predicted_wind_power_production_for_location(locID)
@@ -33,14 +41,17 @@ class TestIndiaDBClient:
             assert isinstance(record, PredictedPower)
 
     def test_get_predicted_wind_power_production_for_location_raise_error(
-        self, client, forecast_values_wind,
+        self,
+        client,
+        forecast_values_wind,
     ) -> None:
-
-        with pytest.raises(Exception):
-            result = client.get_predicted_wind_power_production_for_location("testID2")
+        with pytest.raises(HTTPException):
+            _ = client.get_predicted_wind_power_production_for_location("testID2")
 
     def test_get_predicted_solar_power_production_for_location(
-        self, client, forecast_values,
+        self,
+        client,
+        forecast_values,
     ) -> None:
         locID = "testID"
         result = client.get_predicted_solar_power_production_for_location(locID)
@@ -76,7 +87,7 @@ class TestIndiaDBClient:
         assert result[0] == "ruvnl"
 
     def test_get_sites(self, client, sites) -> None:
-        sites_from_api = client.get_sites(email="test@test.com")
+        sites_from_api = client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
         assert len(sites_from_api) == 2
 
     def test_get_sites_no_sites(self, client, sites) -> None:
@@ -84,37 +95,46 @@ class TestIndiaDBClient:
         assert len(sites_from_api) == 0
 
     def test_get_put_site(self, client, sites) -> None:
-        sites_from_api = client.get_sites(email="test@test.com")
+        sites_from_api = client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
         assert sites_from_api[0].client_site_name == "ruvnl_pv_testID1"
         site = client.put_site(
             site_uuid=sites[0].location_uuid,
             site_properties=SiteProperties(client_site_name="test_zzz"),
-            email="test@test.com",
+            authdata={EMAIL_KEY: "test@test.com"},
         )
         assert site.client_location_name == "test_zzz"
         assert site.latitude is not None
 
     def test_get_site_forecast(self, client, sites, forecast_values_site) -> None:
-        out = client.get_site_forecast(site_uuid=str(sites[0].location_uuid), email="test@test.com")
+        out = client.get_site_forecast(
+            site_uuid=str(sites[0].location_uuid), authdata={EMAIL_KEY: "test@test.com"},
+        )
         assert len(out) > 0
 
     def test_get_site_forecast_no_forecast_values(self, client, sites) -> None:
-        out = client.get_site_forecast(site_uuid=sites[0].location_uuid, email="test@test.com")
+        out = client.get_site_forecast(
+            site_uuid=sites[0].location_uuid, authdata={EMAIL_KEY: "test@test.com"},
+        )
         assert len(out) == 0
 
     def test_get_site_forecast_no_access(self, client, sites) -> None:
-        with pytest.raises(Exception):
-            _ = client.get_site_forecast(site_uuid=sites[0].location_uuid, email="test2@test.com")
+        with pytest.raises(HTTPException):
+            _ = client.get_site_forecast(
+                site_uuid=sites[0].location_uuid, authdata={EMAIL_KEY: "test2@test.com"},
+            )
 
     def test_get_site_generation(self, client, sites, generations) -> None:
-        out = client.get_site_generation(site_uuid=str(sites[0].location_uuid), email="test@test.com")
+        out = client.get_site_generation(
+            site_uuid=str(sites[0].location_uuid),
+            authdata={EMAIL_KEY: "test@test.com"},
+        )
         assert len(out) > 0
 
     def test_post_site_generation(self, client, sites) -> None:
         client.post_site_generation(
             site_uuid=sites[0].location_uuid,
             generation=[ActualPower(Time=1, PowerKW=1)],
-            email="test@test.com",
+            authdata={EMAIL_KEY: "test@test.com"},
         )
 
     def test_post_site_generation_exceding_max_capacity(self, client, sites):
@@ -122,9 +142,8 @@ class TestIndiaDBClient:
             client.post_site_generation(
                 site_uuid=sites[0].location_uuid,
                 generation=[ActualPower(Time=1, PowerKW=1000)],
-                email="test@test.com",
+                authdata={EMAIL_KEY: "test@test.com"},
             )
         except HTTPException as e:
             assert e.status_code == 422
             assert "generation values" in str(e.detail)
-

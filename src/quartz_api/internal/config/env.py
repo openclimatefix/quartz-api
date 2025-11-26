@@ -47,7 +47,7 @@ class EnvParser:
                     # Field is in env
                     env_value: str | bool = os.environ[field]
                     # Handle bools seperately as bool("False") == True
-                    if t == bool:
+                    if t is bool:
                         env_value = bool(strtobool(os.environ[field]))
                     # Cast to desired type
                     self.__setattr__(field, t(env_value))
