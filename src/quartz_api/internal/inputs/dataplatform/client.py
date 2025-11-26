@@ -1,5 +1,6 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
+import datetime as dt
 from typing import override
 
 from dp_sdk.ocf import dp
@@ -167,7 +168,7 @@ class Client(internal.DatabaseInterface):
         raise NotImplementedError("Data Platform client doesn't yet support site writing.")
 
     @override
-    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]):
+    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
         raise NotImplementedError("Data Platform client doesn't yet support API call logging.")
 
     async def _get_actual_power_production_for_location(
@@ -224,10 +225,29 @@ class Client(internal.DatabaseInterface):
 
         start, end = get_window()
 
-        if forecast_horizon == ForecastHorizon.latest:
+        if forecast_horizon == ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
-        if forecast_horizon_minutes is None:
-            forecast_horizon_minutes = 0
+        elif forecast_horizon == ForecastHorizon.day_ahead:
+            # The intra-day forecast caps out at 8 hours horizon, so anything greater than that is
+            # assumed to be day-ahead. It doesn't seem like it's as simple as just using 24 hours,
+            # from my asking around at least
+            forecast_horizon_minutes = 9 * 60
+
+        # Use the forecaster that produced the most recent forecast for the location by default,
+        # taking into account the desired horizon.
+        # * At some point, we may want to allow the user to specify a particular forecaster.
+        req = dp.GetLatestForecastsRequest(
+            location_uuid=location,
+            energy_source=energy_source,
+            pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
+        )
+        resp = await self.dp_client.get_latest_forecasts(req)
+        if len(resp.forecasts) == 0:
+            return []
+        forecaster: dp.Forecaster = resp.forecasts.sort(
+            key=lambda f: f.created_timestamp_utc,
+            reverse=True,
+        )[0].forecaster
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=location,
@@ -237,10 +257,7 @@ class Client(internal.DatabaseInterface):
                 start_timestamp_utc=start,
                 end_timestamp_utc=end,
             ),
-            forecaster=dp.Forecaster(
-                forecaster_name="TODO",
-                forecaster_version="TODO",
-            ),
+            forecaster=forecaster,
         )
         resp = await self.dp_client.get_forecast_as_timeseries(req)
 
