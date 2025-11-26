@@ -3,7 +3,6 @@
 import datetime as dt
 import logging
 import os
-from typing import override
 from uuid import UUID
 
 import pandas as pd
@@ -24,6 +23,7 @@ from pvsite_datamodel.write.database import save_api_call_to_db
 from pvsite_datamodel.write.generation import insert_generation_values
 from pvsite_datamodel.write.user_and_site import edit_site
 from sqlalchemy.orm import Session
+from typing_extensions import override
 
 from quartz_api import internal
 from quartz_api.internal.inputs.quartzdb.smooth import smooth_forecast
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 class Client(internal.DatabaseInterface):
     """Defines Quartz DB client that conforms to the DatabaseInterface."""
 
-    session: Session = None
+    session: Session | None = None
 
     def __init__(self, database_url: str) -> None:
         """Initialize the client with a SQLAlchemy database connection and session."""
@@ -51,15 +51,14 @@ class Client(internal.DatabaseInterface):
             return self.session
 
     @override
-    def save_api_call_to_db(self, url: str, user: str | None = "") -> None:
+    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
         with self._get_session() as session:
             # save the API call
             log.info(f"Saving API call ({url=}) to database")
-            user = get_user_by_email(session, user)
+            user = get_user_by_email(session, authdata[EMAIL_KEY])
             save_api_call_to_db(url=url, session=session, user=user)
 
-    @override
-    def get_predicted_power_production_for_location(
+    def _get_predicted_power_production_for_location(
         self,
         location: str,
         asset_type: LocationAssetType,
@@ -68,6 +67,7 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
+        """Gets the predicted power production for a location, regardless of type."""
         # Get the window
         start, _ = get_window()
 
@@ -113,10 +113,10 @@ class Client(internal.DatabaseInterface):
                 forecast_horizon_minutes=forecast_horizon_minutes,
                 model_name=ml_model_name,
             )
-            forecast_values: [ForecastValueSQL] = values[site.location_uuid]
+            forecast_values: list[ForecastValueSQL] = values[site.location_uuid]
 
         # convert ForecastValueSQL to PredictedPower
-        values = [
+        out = [
             internal.PredictedPower(
                 PowerKW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
@@ -129,16 +129,16 @@ class Client(internal.DatabaseInterface):
 
         # smooth the forecasts
         if smooth_flag:
-            values = smooth_forecast(values)
+            out = smooth_forecast(out)
 
-        return values
+        return out
 
-    def get_generation_for_location(
+    def _get_generation_for_location(
         self,
         location: str,
         asset_type: LocationAssetType,
-    ) -> [internal.PredictedPower]:
-        """Gets the predicted power production for a location."""
+    ) -> list[internal.ActualPower]:
+        """Gets the measured power production for a location."""
         # Get the window
         start, end = get_window()
 
@@ -159,7 +159,7 @@ class Client(internal.DatabaseInterface):
             )
 
         # convert from GenerationSQL to ActualPower
-        values = [
+        out = [
             internal.ActualPower(
                 PowerKW=int(value.generation_power_kw)
                 if value.generation_power_kw >= 0
@@ -169,20 +169,20 @@ class Client(internal.DatabaseInterface):
             for value in values
         ]
 
-        return values
+        return out
 
     @override
-    def get_predicted_solar_power_production_for_location(
+    async def get_predicted_solar_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> [internal.PredictedPower]:
+    ) -> list[internal.PredictedPower]:
         # set this to be hard coded for now
         model_name = "pvnet_india"
 
-        return self.get_predicted_power_production_for_location(
+        return self._get_predicted_power_production_for_location(
             location=location,
             asset_type=LocationAssetType.pv,
             forecast_horizon=forecast_horizon,
@@ -192,7 +192,7 @@ class Client(internal.DatabaseInterface):
         )
 
     @override
-    def get_predicted_wind_power_production_for_location(
+    async def get_predicted_wind_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
@@ -202,7 +202,7 @@ class Client(internal.DatabaseInterface):
         # set this to be hard coded for now
         model_name = "windnet_india_adjust"
 
-        return self.get_predicted_power_production_for_location(
+        return self._get_predicted_power_production_for_location(
             location=location,
             asset_type=LocationAssetType.wind,
             forecast_horizon=forecast_horizon,
@@ -212,32 +212,32 @@ class Client(internal.DatabaseInterface):
         )
 
     @override
-    def get_actual_solar_power_production_for_location(
+    async def get_actual_solar_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.PredictedPower]:
-        return self.get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
+    ) -> list[internal.ActualPower]:
+        return self._get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
     @override
-    def get_actual_wind_power_production_for_location(
+    async def get_actual_wind_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.PredictedPower]:
-        return self.get_generation_for_location(
+    ) -> list[internal.ActualPower]:
+        return self._get_generation_for_location(
             location=location,
             asset_type=LocationAssetType.wind,
         )
 
     @override
-    def get_wind_regions(self) -> list[str]:
+    async def get_wind_regions(self) -> list[str]:
         return ["ruvnl"]
 
     @override
-    def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self) -> list[str]:
         return ["ruvnl"]
 
     @override
-    def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
+    async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, authdata[EMAIL_KEY])
@@ -259,7 +259,7 @@ class Client(internal.DatabaseInterface):
             return sites
 
     @override
-    def put_site(
+    async def put_site(
         self,
         site_uuid: str,
         site_properties: internal.SiteProperties,
@@ -285,7 +285,7 @@ class Client(internal.DatabaseInterface):
             return site
 
     @override
-    def get_site_forecast(
+    async def get_site_forecast(
         self,
         site_uuid: str,
         authdata: dict[str, str],
@@ -311,19 +311,18 @@ class Client(internal.DatabaseInterface):
                 ml_model_name = site.ml_model.name
             log.info(f"Using ml model {ml_model_name}")
 
-            if isinstance(site_uuid, str):
-                site_uuid = UUID(site_uuid)
-
             values = get_latest_forecast_values_by_site(
                 session,
-                site_uuids=[site_uuid],
+                site_uuids=[UUID(site_uuid) if isinstance(site_uuid, str) else site_uuid],
                 start_utc=start,
                 model_name=ml_model_name,
             )
-            forecast_values: [ForecastValueSQL] = values[site_uuid]
+            forecast_values: list[ForecastValueSQL] = values[
+                UUID(site_uuid) if isinstance(site_uuid, str) else site_uuid
+            ]
 
             # convert ForecastValueSQL to PredictedPower
-        values = [
+        out = [
             internal.PredictedPower(
                 PowerKW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
@@ -334,10 +333,10 @@ class Client(internal.DatabaseInterface):
             for value in forecast_values
         ]
 
-        return values
+        return out
 
     @override
-    def get_site_generation(
+    async def get_site_generation(
         self,
         site_uuid: str,
         authdata: dict[str, str],
@@ -366,7 +365,7 @@ class Client(internal.DatabaseInterface):
             )
 
         # convert from GenerationSQL to PredictedPower
-        values = [
+        out = [
             internal.ActualPower(
                 PowerKW=int(value.generation_power_kw)
                 if value.generation_power_kw >= 0
@@ -376,10 +375,10 @@ class Client(internal.DatabaseInterface):
             for value in values
         ]
 
-        return values
+        return out
 
     @override
-    def post_site_generation(
+    async def post_site_generation(
         self,
         site_uuid: str,
         generation: list[internal.ActualPower],
@@ -435,18 +434,18 @@ class Client(internal.DatabaseInterface):
 
 def check_user_has_access_to_site(
     session: Session,
-    authdata: dict[str, str],
+    email: str,
     site_uuid: str,
 ) -> None:
     """Checks if a user has access to a site."""
-    user = get_user_by_email(session=session, email=authdata[EMAIL_KEY])
+    user = get_user_by_email(session=session, email=email)
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
     site_uuid = str(site_uuid)
 
     if site_uuid not in site_uuids:
         raise HTTPException(
             status_code=403,
-            detail=f"Forbidden. User ({authdata[EMAIL_KEY]}) "
+            detail=f"Forbidden. User ({email}) "
             f"does not have access to this site {site_uuid}. "
             f"User has access to {site_uuids}",
         )

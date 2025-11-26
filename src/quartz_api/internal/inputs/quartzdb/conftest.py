@@ -2,7 +2,6 @@
 
 import datetime as dt
 import logging
-import os
 
 import pytest
 from pvsite_datamodel.read.model import get_or_create_model
@@ -26,7 +25,6 @@ def engine() -> Engine:
     """Database engine fixture."""
     with PostgresContainer("postgres:14.5") as postgres:
         url = postgres.get_connection_url()
-        os.environ["DB_URL"] = url
         engine = create_engine(url)
 
         yield engine

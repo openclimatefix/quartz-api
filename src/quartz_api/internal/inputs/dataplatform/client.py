@@ -1,10 +1,10 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
 import datetime as dt
-from typing import override
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from typing_extensions import override
 
 from quartz_api import internal
 from quartz_api.internal.models import ForecastHorizon
@@ -33,11 +33,12 @@ class Client(internal.DatabaseInterface):
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
-            location,
-            dp.EnergySource.SOLAR,
-            forecast_horizon,
-            forecast_horizon_minutes,
-            smooth_flag,
+            location=location,
+            energy_source=dp.EnergySource.SOLAR,
+            forecast_horizon=forecast_horizon,
+            forecast_horizon_minutes=forecast_horizon_minutes,
+            smooth_flag=smooth_flag,
+            oauth_id=None,
         )
         return values
 
@@ -49,12 +50,13 @@ class Client(internal.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
     ) -> list[internal.PredictedPower]:
-        values = self._get_predicted_power_production_for_location(
-            location,
-            dp.EnergySource.WIND,
-            forecast_horizon,
-            forecast_horizon_minutes,
-            smooth_flag,
+        values = await self._get_predicted_power_production_for_location(
+            location=location,
+            energy_source=dp.EnergySource.WIND,
+            forecast_horizon=forecast_horizon,
+            forecast_horizon_minutes=forecast_horizon_minutes,
+            smooth_flag=smooth_flag,
+            oauth_id=None,
         )
         return values
 
@@ -63,20 +65,24 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
     ) -> list[internal.ActualPower]:
-        return self._get_actual_power_production_for_location(
+        values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
+            oauth_id=None,
         )
+        return values
 
     @override
     async def get_actual_wind_power_production_for_location(
         self,
         location: str,
     ) -> list[internal.ActualPower]:
-        return self._get_actual_power_production_for_location(
+        values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.WIND,
+            oauth_id=None,
         )
+        return values
 
     @override
     async def get_wind_regions(self) -> list[str]:
@@ -173,15 +179,16 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
         energy_source: dp.EnergySource,
-        oauth_id: str,
+        oauth_id: str | None,
     ) -> list[internal.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
-        await self._check_user_access(
-            location,
-            energy_source,
-            dp.LocationType.SITE,
-            oauth_id,
-        )
+        if oauth_id is not None:
+            await self._check_user_access(
+                location,
+                energy_source,
+                dp.LocationType.SITE,
+                oauth_id,
+            )
 
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
@@ -208,18 +215,19 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
         energy_source: dp.EnergySource,
-        oauth_id: str,
+        oauth_id: str | None,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True, # noqa: ARG002
     ) -> list[internal.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
-        _ = await self._check_user_access(
-            location,
-            energy_source,
-            dp.LocationType.SITE,
-            oauth_id,
-        )
+        if oauth_id is not None:
+            _ = await self._check_user_access(
+                location,
+                energy_source,
+                dp.LocationType.SITE,
+                oauth_id,
+            )
 
         start, end = get_window()
 

@@ -2,11 +2,11 @@
 
 # ruff: noqa: B008
 import os
-from typing import override
 
 import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from typing_extensions import override
 
 token_auth_scheme = HTTPBearer()
 

@@ -187,7 +187,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def save_api_call_to_db(self, url: str, user: str | None = None) -> None:
+    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
         """Saves an API call to the database."""
         pass
 

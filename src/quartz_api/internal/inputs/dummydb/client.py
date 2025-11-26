@@ -4,8 +4,9 @@
 import datetime as dt
 import math
 import random
-from typing import override
 from uuid import uuid4
+
+from typing_extensions import override
 
 from quartz_api import internal
 from quartz_api.internal.models import ForecastHorizon

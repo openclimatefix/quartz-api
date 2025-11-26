@@ -27,77 +27,91 @@ def client(engine: Engine, db_session: Session) -> Client:
     return client
 
 
-class TestIndiaDBClient:
-    def test_get_predicted_wind_power_production_for_location(
+class TestQuartzDBClient:
+    @pytest.mark.asyncio
+    async def test_get_predicted_wind_power_production_for_location(
         self,
         client: Client,
         forecast_values_wind: None,
     ) -> None:
         locID = "testID"
-        result = client.get_predicted_wind_power_production_for_location(locID)
+        result = await client.get_predicted_wind_power_production_for_location(locID)
 
         assert len(result) == 110
         for record in result:
             assert isinstance(record, PredictedPower)
 
-    def test_get_predicted_wind_power_production_for_location_raise_error(
+    @pytest.mark.asyncio
+    async def test_get_predicted_wind_power_production_for_location_raise_error(
         self,
         client,
         forecast_values_wind,
     ) -> None:
         with pytest.raises(HTTPException):
-            _ = client.get_predicted_wind_power_production_for_location("testID2")
+            _ = await client.get_predicted_wind_power_production_for_location("testID2")
 
-    def test_get_predicted_solar_power_production_for_location(
+    @pytest.mark.asyncio
+    async def test_get_predicted_solar_power_production_for_location(
         self,
         client,
         forecast_values,
     ) -> None:
         locID = "testID"
-        result = client.get_predicted_solar_power_production_for_location(locID)
+        result = await client.get_predicted_solar_power_production_for_location(locID)
 
         assert len(result) == 110
         for record in result:
             assert isinstance(record, PredictedPower)
 
-    def test_get_actual_wind_power_production_for_location(self, client, generations) -> None:
+    @pytest.mark.asyncio
+    async def test_get_actual_wind_power_production_for_location(self, client, generations) -> None:
         locID = "testID"
-        result = client.get_actual_wind_power_production_for_location(locID)
+        result = await client.get_actual_wind_power_production_for_location(locID)
 
         assert len(result) == 10
         for record in result:
             assert isinstance(record, ActualPower)
 
-    def test_get_actual_solar_power_production_for_location(self, client, generations) -> None:
+    @pytest.mark.asyncio
+    async def test_get_actual_solar_power_production_for_location(
+        self,
+        client,
+        generations,
+    ) -> None:
         locID = "testID"
-        result = client.get_actual_solar_power_production_for_location(locID)
+        result = await client.get_actual_solar_power_production_for_location(locID)
 
         assert len(result) == 10
         for record in result:
             assert isinstance(record, ActualPower)
 
-    def test_get_wind_regions(self, client) -> None:
-        result = client.get_wind_regions()
+    @pytest.mark.asyncio
+    async def test_get_wind_regions(self, client) -> None:
+        result = await client.get_wind_regions()
         assert len(result) == 1
         assert result[0] == "ruvnl"
 
-    def test_get_solar_regions(self, client) -> None:
-        result = client.get_solar_regions()
+    @pytest.mark.asyncio
+    async def test_get_solar_regions(self, client) -> None:
+        result = await client.get_solar_regions()
         assert len(result) == 1
         assert result[0] == "ruvnl"
 
-    def test_get_sites(self, client, sites) -> None:
-        sites_from_api = client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
+    @pytest.mark.asyncio
+    async def test_get_sites(self, client, sites) -> None:
+        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
         assert len(sites_from_api) == 2
 
-    def test_get_sites_no_sites(self, client, sites) -> None:
-        sites_from_api = client.get_sites(email="test2@test.com")
+    @pytest.mark.asyncio
+    async def test_get_sites_no_sites(self, client, sites) -> None:
+        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test2@test.com"})
         assert len(sites_from_api) == 0
 
-    def test_get_put_site(self, client, sites) -> None:
-        sites_from_api = client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
+    @pytest.mark.asyncio
+    async def test_get_put_site(self, client, sites) -> None:
+        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
         assert sites_from_api[0].client_site_name == "ruvnl_pv_testID1"
-        site = client.put_site(
+        site = await client.put_site(
             site_uuid=sites[0].location_uuid,
             site_properties=SiteProperties(client_site_name="test_zzz"),
             authdata={EMAIL_KEY: "test@test.com"},
@@ -105,41 +119,50 @@ class TestIndiaDBClient:
         assert site.client_location_name == "test_zzz"
         assert site.latitude is not None
 
-    def test_get_site_forecast(self, client, sites, forecast_values_site) -> None:
-        out = client.get_site_forecast(
-            site_uuid=str(sites[0].location_uuid), authdata={EMAIL_KEY: "test@test.com"},
-        )
-        assert len(out) > 0
-
-    def test_get_site_forecast_no_forecast_values(self, client, sites) -> None:
-        out = client.get_site_forecast(
-            site_uuid=sites[0].location_uuid, authdata={EMAIL_KEY: "test@test.com"},
-        )
-        assert len(out) == 0
-
-    def test_get_site_forecast_no_access(self, client, sites) -> None:
-        with pytest.raises(HTTPException):
-            _ = client.get_site_forecast(
-                site_uuid=sites[0].location_uuid, authdata={EMAIL_KEY: "test2@test.com"},
-            )
-
-    def test_get_site_generation(self, client, sites, generations) -> None:
-        out = client.get_site_generation(
+    @pytest.mark.asyncio
+    async def test_get_site_forecast(self, client, sites, forecast_values_site) -> None:
+        out = await client.get_site_forecast(
             site_uuid=str(sites[0].location_uuid),
             authdata={EMAIL_KEY: "test@test.com"},
         )
         assert len(out) > 0
 
-    def test_post_site_generation(self, client, sites) -> None:
-        client.post_site_generation(
+    @pytest.mark.asyncio
+    async def test_get_site_forecast_no_forecast_values(self, client, sites) -> None:
+        out = await client.get_site_forecast(
+            site_uuid=sites[0].location_uuid,
+            authdata={EMAIL_KEY: "test@test.com"},
+        )
+        assert len(out) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_site_forecast_no_access(self, client, sites) -> None:
+        with pytest.raises(HTTPException):
+            _ = await client.get_site_forecast(
+                site_uuid=sites[0].location_uuid,
+                authdata={EMAIL_KEY: "test2@test.com"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_site_generation(self, client, sites, generations) -> None:
+        out = await client.get_site_generation(
+            site_uuid=str(sites[0].location_uuid),
+            authdata={EMAIL_KEY: "test@test.com"},
+        )
+        assert len(out) > 0
+
+    @pytest.mark.asyncio
+    async def test_post_site_generation(self, client, sites) -> None:
+        await client.post_site_generation(
             site_uuid=sites[0].location_uuid,
             generation=[ActualPower(Time=1, PowerKW=1)],
             authdata={EMAIL_KEY: "test@test.com"},
         )
 
-    def test_post_site_generation_exceding_max_capacity(self, client, sites):
+    @pytest.mark.asyncio
+    async def test_post_site_generation_exceding_max_capacity(self, client, sites):
         try:
-            client.post_site_generation(
+            await client.post_site_generation(
                 site_uuid=sites[0].location_uuid,
                 generation=[ActualPower(Time=1, PowerKW=1000)],
                 authdata={EMAIL_KEY: "test@test.com"},
