@@ -10,6 +10,8 @@ from fastapi import HTTPException
 
 from .client import Client
 
+TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
+
 
 def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsResponse:
     if req.user_oauth_id_filter == "access_user":
@@ -36,16 +38,16 @@ def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsRespons
 
 
 def mock_get_forecast(
-    _: dp.GetForecastAsTimeseriesRequest,
+    req: dp.GetForecastAsTimeseriesRequest,
 ) -> dp.GetForecastAsTimeseriesResponse:
     return dp.GetForecastAsTimeseriesResponse(
         values=[
             dp.GetForecastAsTimeseriesResponseValue(
-                target_timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0, tzinfo=dt.UTC),
+                target_timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 p50_value_fraction=0.5,
                 effective_capacity_watts=1e6,
-                initialization_timestamp_utc=dt.datetime(2023, 12, 31, 23, 0, 0, tzinfo=dt.UTC),
-                created_timestamp_utc=dt.datetime(2023, 12, 31, 22, 49, 0, tzinfo=dt.UTC),
+                initialization_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(minutes=req.horizon_mins),
+                created_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=1, minutes=req.horizon_mins),
                 other_statistics_fractions={"p90": 0.9, "p10": 0.1},
                 metadata=Struct(fields={}),
             )
@@ -60,7 +62,7 @@ def mock_get_observations(
     return dp.GetObservationsAsTimeseriesResponse(
         values=[
             dp.GetObservationsAsTimeseriesResponseValue(
-                timestamp_utc=dt.datetime(2024, 1, 1, i, 0, 0, tzinfo=dt.UTC),
+                timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 value_fraction=0.5,
                 effective_capacity_watts=1e6,
             )
@@ -68,6 +70,20 @@ def mock_get_observations(
         ],
     )
 
+
+def mock_get_latest_forecasts(
+    req: dp.GetLatestForecastsRequest,
+) -> dp.GetLatestForecastsResponse:
+    t = req.pivot_timestamp_utc - dt.timedelta(hours=1)
+    forecaster_name = f"mock_forecaster_{t.day}{t.hour}"
+    return dp.GetLatestForecastsResponse(forecasts=[
+        dp.GetLatestForecastsResponseForecast(
+            initialization_timestamp_utc=t,
+            created_timestamp_utc=t - dt.timedelta(hours=1),
+            forecaster=dp.Forecaster(forecaster_name, forecaster_version="1.0"),
+            location_uuid=req.location_uuid,
+        ),
+    ])
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
@@ -100,10 +116,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(resp), tc.expected_num_sites)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_site_forecast(
-        self,
-        client_mock,
-    ) -> None:
+    async def test_get_site_forecast(self, client_mock) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
@@ -129,14 +142,13 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         client = Client.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
-            client_mock.get_forecast_as_timeseries = AsyncMock(
-                side_effect=mock_get_forecast,
-            )
+            client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
+            client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
 
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        await client.get_site_forecast(
+                        resp = await client.get_site_forecast(
                             site_uuid=tc.site_uuid,
                             authdata=tc.authdata,
                         )

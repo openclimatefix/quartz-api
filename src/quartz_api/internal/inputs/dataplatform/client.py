@@ -244,10 +244,11 @@ class Client(internal.DatabaseInterface):
         resp = await self.dp_client.get_latest_forecasts(req)
         if len(resp.forecasts) == 0:
             return []
-        forecaster: dp.Forecaster = resp.forecasts.sort(
+        resp.forecasts.sort(
             key=lambda f: f.created_timestamp_utc,
             reverse=True,
-        )[0].forecaster
+        )
+        forecaster = resp.forecasts[0].forecaster
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=location,
