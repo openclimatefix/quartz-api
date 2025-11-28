@@ -1,7 +1,7 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
 
 # ruff: noqa: B008
-import os
+from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, Request
@@ -13,7 +13,7 @@ token_auth_scheme = HTTPBearer()
 EMAIL_KEY = "https://openclimatefix.org/email"
 
 
-class Auth:
+class Auth0:
     """Fast api dependency that validates an JWT token."""
 
     def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
@@ -53,14 +53,8 @@ class Auth:
         return payload
 
 
-class DummyAuth(Auth):
+class DummyAuth:
     """Dummy auth dependency for testing purposes."""
-
-    def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
-        """Initialize the DummyAuth dependency."""
-        self._domain = domain
-        self._api_audience = api_audience
-        self._algorithm = algorithm
 
     @override
     def __call__(self) -> dict[str, str]:
@@ -69,18 +63,13 @@ class DummyAuth(Auth):
             "sub": "google-oath2|012345678909876543210",
         }
 
+def get_auth() -> dict[str, str]:
+    """Get the authentication payload.
 
-domain = os.getenv("AUTH0_DOMAIN")
-api_audience = os.getenv("AUTH0_API_AUDIENCE")
-if domain is None or api_audience is None:
-    auth = DummyAuth(domain="dummy", api_audience="dummy", algorithm="dummy")
-else:
-    auth = Auth(
-        domain=domain,
-        api_audience=api_audience,
-        algorithm="RS256",
-    )
+    Note: This should be overridden via FastAPI's dependency injection system with an actual
+    authentication method (e.g., Auth0 or DummyAuth).
+    """
+    raise HTTPException(status_code=401, detail="No authentication method configured.")
 
-# TODO: add scopes for granular access across APIs
-# auth = Auth(domain=os.getenv('AUTH0_DOMAIN'), api_audience=os.getenv('AUTH0_API_AUDIENCE'),
-#     scopes={'read:india': ''})
+AuthDependency = Annotated[dict[str, str], Depends(get_auth)]
+

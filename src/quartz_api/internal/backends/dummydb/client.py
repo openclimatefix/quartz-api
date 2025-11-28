@@ -22,7 +22,7 @@ class Client(internal.DatabaseInterface):
     """Defines a dummy database that conforms to the DatabaseInterface."""
 
     @override
-    def get_predicted_solar_power_production_for_location(
+    async def get_predicted_solar_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
@@ -47,7 +47,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_predicted_wind_power_production_for_location(
+    async def get_predicted_wind_power_production_for_location(
         self,
         location: str,
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
@@ -72,7 +72,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_actual_solar_power_production_for_location(
+    async def get_actual_solar_power_production_for_location(
         self,
         location: str,
     ) -> list[internal.ActualPower]:
@@ -94,7 +94,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_actual_wind_power_production_for_location(
+    async def get_actual_wind_power_production_for_location(
         self,
         location: str,
     ) -> list[internal.ActualPower]:
@@ -116,19 +116,19 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_wind_regions(self) -> list[str]:
+    async def get_wind_regions(self) -> list[str]:
         return ["dummy_wind_region1", "dummy_wind_region2"]
 
     @override
-    def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self) -> list[str]:
         return ["dummy_solar_region1", "dummy_solar_region2"]
 
     @override
-    def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
+    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
         pass
 
     @override
-    def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
+    async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
         uuid = str(uuid4())
 
         site = internal.Site(
@@ -142,7 +142,7 @@ class Client(internal.DatabaseInterface):
         return [site]
 
     @override
-    def put_site(
+    async def put_site(
         self,
         site_uuid: str,
         site_properties: internal.SiteProperties,
@@ -151,7 +151,7 @@ class Client(internal.DatabaseInterface):
         pass
 
     @override
-    def get_site_forecast(
+    async def get_site_forecast(
         self,
         site_uuid: str,
         authdata: dict[str, str],
@@ -161,7 +161,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def get_site_generation(
+    async def get_site_generation(
         self,
         site_uuid: str,
         authdata: dict[str, str],
@@ -171,7 +171,7 @@ class Client(internal.DatabaseInterface):
         return values
 
     @override
-    def post_site_generation(
+    async def post_site_generation(
         self,
         site_uuid: str,
         generation: list[internal.ActualPower],

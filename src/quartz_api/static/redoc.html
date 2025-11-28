@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<title>Quartz API Docs</title>
+
+	<link rel="icon" href="/static/favicon.ico">
+	<link href="https://fonts.googleapis.com/css?family=Inter:300,400,700" rel="stylesheet">
+
+	<noscript>
+	ReDoc requires Javascript to function. Please enable it to browse the documentation.
+	</noscript>
+	<script src="/static/redoc2.1.3.standalone.js"> </script>
+
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+		}
+	</style>
+
+</head>
+
+<body>
+	<div id="redoc-container"></div>
+	<script>
+		Redoc.init('/openapi.json', {
+			theme: {
+				colors: {
+					primary: {
+						main: '#f7ba17',
+						light: '#ffefc6'
+					},
+					success: {
+						main: 'rgba(28, 184, 65, 1)',
+						light: '#81ec9a',
+						dark: '#083312',
+						contrastText: '#000'
+					},
+					text: {
+						primary: '#14120e',
+						secondary: '#4d4d4d'
+					},
+					http: {
+						get: '#f7ba17',
+						post: 'rgba(28, 184, 65, 1)',
+						put: 'rgba(255, 187, 0, 1)',
+						delete: 'rgba(254, 39, 35, 1)'
+					}
+			},
+			typography: {
+				fontSize: '15px',
+				fontFamily: 'Inter, sans-serif',
+				lineHeight: '1.5em',
+				headings: {
+					fontFamily: 'Inter, sans-serif',
+					fontWeight: 'bold',
+					lineHeight: '1.5em'
+				},
+				code: {
+					fontWeight: '600',
+					color: 'rgba(92, 62, 189, 1)',
+					wrap: true
+				},
+				links: {
+					color: '#086788',
+					visited: '#086788',
+					hover: '#32343a'
+				}
+			},
+			sidebar: {
+				width: '300px',
+				textColor: '#000000'
+			},
+			logo: {
+				gutter: '10px'
+			},
+			rightPanel: {
+				backgroundColor: 'rgba(55, 53, 71, 1)',
+				textColor: '#ffffff'
+			}
+		}
+	}, document.getElementById('redoc-container'))
+	</script>
+</body>
+
+</html>

@@ -26,10 +26,10 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from quartz_api import internal
-from quartz_api.internal.inputs.quartzdb.smooth import smooth_forecast
-from quartz_api.internal.inputs.utils import get_window
+from quartz_api.internal.backends.quartzdb.smooth import smooth_forecast
+from quartz_api.internal.backends.utils import get_window
+from quartz_api.internal.middleware.auth import EMAIL_KEY
 from quartz_api.internal.models import ForecastHorizon
-from quartz_api.internal.service.auth import EMAIL_KEY
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ log = logging.getLogger(__name__)
 class Client(internal.DatabaseInterface):
     """Defines Quartz DB client that conforms to the DatabaseInterface."""
 
+    connection: DatabaseConnection
     session: Session | None = None
 
     def __init__(self, database_url: str) -> None:

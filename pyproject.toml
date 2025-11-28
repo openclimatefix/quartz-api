@@ -20,7 +20,7 @@ classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
     "dp-sdk",
-    "fastapi >= 0.105.0",
+    "fastapi>=0.105.0",
     "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
     "pyproj >= 3.3.0",
@@ -29,6 +29,7 @@ dependencies = [
     "uvicorn >= 0.24.0",
     "numpy >= 1.25.0",
     "sentry-sdk >= 2.1.1",
+    "pyhocon>=0.3.61",
 ]
 
 [dependency-groups]

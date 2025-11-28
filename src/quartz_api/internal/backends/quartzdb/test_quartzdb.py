@@ -9,7 +9,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from quartz_api.internal import ActualPower, PredictedPower, SiteProperties
-from quartz_api.internal.service.auth import EMAIL_KEY
+from quartz_api.internal.middleware.auth import EMAIL_KEY
 
 from .client import Client
 

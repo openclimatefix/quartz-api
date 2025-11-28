@@ -1,6 +1,7 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
 import datetime as dt
+import logging
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
@@ -173,7 +174,8 @@ class Client(internal.DatabaseInterface):
 
     @override
     async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
-        raise NotImplementedError("Data Platform client doesn't yet support API call logging.")
+        logging.warning("Data Platform client does not support logging API calls to DB.")
+        pass
 
     async def _get_actual_power_production_for_location(
         self,

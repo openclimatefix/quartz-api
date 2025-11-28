@@ -3,7 +3,8 @@ import unittest
 import pandas as pd
 
 from quartz_api.internal.models import ActualPower
-from quartz_api.internal.service.resample import resample_generation
+
+from ._resample import resample_generation
 
 
 class TestResampleGeneration(unittest.TestCase):

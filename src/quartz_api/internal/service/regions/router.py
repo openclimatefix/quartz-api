@@ -1,28 +1,30 @@
-"""Routes for regions related endpoints."""
+"""The 'regions' router object and associated routes logic."""
 
-# ruff: noqa: B008
+# ruff: noqa: ARG001
 import datetime as dt
+import pathlib
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette import status
 from starlette.requests import Request
 
-from quartz_api.internal import ActualPower, PredictedPower
-from quartz_api.internal.models import ForecastHorizon
-from quartz_api.internal.service.auth import auth
-from quartz_api.internal.service.constants import local_tz
-from quartz_api.internal.service.csv import format_csv_and_created_time
-from quartz_api.internal.service.database_client import DBClientDependency
-from quartz_api.internal.service.resample import resample_generation
-
-router = APIRouter(
-    tags=["Regions"],
+from quartz_api.internal import (
+    ActualPower,
+    DBClientDependency,
+    ForecastHorizon,
+    PredictedPower,
 )
+from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.service.constants import local_tz
 
+from ._csv import format_csv_and_created_time
+from ._resample import resample_generation
+
+router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
 class GetSourcesResponse(BaseModel):
     """Model for the sources endpoint response."""
@@ -33,12 +35,11 @@ class GetSourcesResponse(BaseModel):
 @router.get(
     "/sources",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,
 )
 async def get_sources_route(
-    auth: dict = Depends(auth),  # noqa: ARG001
+    auth: AuthDependency,
 ) -> GetSourcesResponse:
-    """Function for the sources route."""
+    """Get available generation sources."""
     return GetSourcesResponse(sources=["wind", "solar"])
 
 
@@ -47,32 +48,22 @@ class GetRegionsResponse(BaseModel):
 
     regions: list[str]
 
-
-def validate_source(source: str) -> str:
-    """Validate the source parameter."""
-    if source not in ["wind", "solar"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown source {source}; valid sources are 'wind' and 'solar'.",
-        )
-    return source
-
-
-ValidSourceDependency = Annotated[str, Depends(validate_source)]
-
+ValidSource = Annotated[str, Path(
+    description="The source of the generation or forecast data.",
+    regex="^(wind|solar)$",
+)]
 
 @router.get(
     "/{source}/regions",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,
 )
 async def get_regions_route(
-    source: ValidSourceDependency,
+    source: ValidSource,
     db: DBClientDependency,
-    auth: dict = Depends(auth),  # noqa: ARG001
+    auth: AuthDependency,
     # TODO: add auth scopes
 ) -> GetRegionsResponse:
-    """Function for the regions route."""
+    """Get available regions for a given source."""
     if source == "wind":
         regions = await db.get_wind_regions()
     elif source == "solar":
@@ -89,18 +80,17 @@ class GetHistoricGenerationResponse(BaseModel):
 @router.get(
     "/{source}/{region}/generation",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,
 )
 async def get_historic_timeseries_route(
-    source: ValidSourceDependency,
-    request: Request,  # noqa: ARG001
+    source: ValidSource,
+    request: Request,
     region: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),  # noqa: ARG001
+    auth: AuthDependency,
     # TODO: add auth scopes
     resample_minutes: int | None = None,
 ) -> GetHistoricGenerationResponse:
-    """Function for the historic generation route."""
+    """Get observed generation as a timeseries for a given source and region."""
     values: list[ActualPower] = []
 
     try:
@@ -131,29 +121,21 @@ class GetForecastGenerationResponse(BaseModel):
 @router.get(
     "/{source}/{region}/forecast",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,
 )
-async def get_forecast_timeseries_route(  # noqa: D417
-    source: ValidSourceDependency,
+async def get_forecast_timeseries_route(
+    source: ValidSource,
     region: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),  # noqa: ARG001
+    auth: AuthDependency,
     # TODO: add auth scopes
     forecast_horizon: ForecastHorizon = ForecastHorizon.day_ahead,
     forecast_horizon_minutes: int | None = None,
     smooth_flag: bool = True,
 ) -> GetForecastGenerationResponse:
-    """Function for the forecast generation route.
+    """Get forecasted generation as a timeseries for a given source and region.
 
-    Args:
-        source: The source of the forecast, this is current wind or solar.
-        region: The region to get the forecast for.
-        forecast_horizon: The time horizon to get the data for.
-            Can be 'latest', 'horizon' or 'day ahead'
-        forecast_horizon_minutes: The number of minutes to get the forecast for.
-            forecast_horizon must be 'horizon'
-        smooth_flag: If the forecast should be smoothed or not.
-            Note for DA forecast this is always False.
+    The smooth_flag indicates whether to return smoothed forecasts or not.
+    Note that for Day Ahead forecasts, smoothing is never applied.
     """
     values: list[PredictedPower] = []
 
@@ -189,13 +171,12 @@ async def get_forecast_timeseries_route(  # noqa: D417
 @router.get(
     "/{source}/{region}/forecast/csv",
     response_class=FileResponse,
-    include_in_schema=False,
 )
 async def get_forecast_csv(
-    source: ValidSourceDependency,
+    source: ValidSource,
     region: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
     forecast_horizon: ForecastHorizon | None = ForecastHorizon.latest,
 ) -> StreamingResponse:
     """Route to get the day ahead forecast as a CSV file.
@@ -256,3 +237,4 @@ async def get_forecast_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment;filename={csv_file_path}"},
     )
+

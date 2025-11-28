@@ -1,7 +1,7 @@
 import unittest
 
 from quartz_api.internal import ActualPower
-from quartz_api.internal.service.auth import EMAIL_KEY
+from quartz_api.internal.middleware.auth import EMAIL_KEY
 
 from .client import Client
 

@@ -1,17 +1,20 @@
-"""Routes for site management."""
+"""The 'sites' FastAPI router object and associated routes logic."""
 
-# ruff: noqa: B008
-from fastapi import APIRouter, Depends
+import pathlib
+
+from fastapi import APIRouter
 from starlette import status
 
-from quartz_api.internal import ActualPower, PredictedPower, Site, SiteProperties
-from quartz_api.internal.service.auth import auth
-from quartz_api.internal.service.database_client import DBClientDependency
-
-router = APIRouter(
-    tags=["Sites"],
+from quartz_api.internal import (
+    ActualPower,
+    DBClientDependency,
+    PredictedPower,
+    Site,
+    SiteProperties,
 )
+from quartz_api.internal.middleware.auth import AuthDependency
 
+router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
 @router.get(
     "/sites",
@@ -19,7 +22,7 @@ router = APIRouter(
 )
 async def get_sites(
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
 ) -> list[Site]:
     """Get sites."""
     sites = await db.get_sites(authdata=auth)
@@ -31,7 +34,7 @@ async def put_site_info(
     site_uuid: str,
     site_info: SiteProperties,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
 ) -> SiteProperties:
     """### This route allows a user to update site information for a single site.
 
@@ -52,7 +55,7 @@ async def put_site_info(
 async def get_forecast(
     site_uuid: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
 ) -> list[PredictedPower]:
     """Get forecast of a site."""
     forecast = db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
@@ -66,7 +69,7 @@ async def get_forecast(
 async def get_generation(
     site_uuid: str,
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
 ) -> list[ActualPower]:
     """Get get generation fo a site."""
     generation = await db.get_site_generation(site_uuid=site_uuid, authdata=auth)
@@ -81,7 +84,7 @@ async def post_generation(
     site_uuid: str,
     generation: list[ActualPower],
     db: DBClientDependency,
-    auth: dict = Depends(auth),
+    auth: AuthDependency,
 ) -> None:
     """Post observed generation data.
 
@@ -113,4 +116,9 @@ async def post_generation(
     **Note**: Users should wait up to 1 day(s) to start experiencing the full
     effects from using live PV data.
     """
-    await db.post_site_generation(site_uuid=site_uuid, generation=generation, authdata=auth)
+    await db.post_site_generation(
+        site_uuid=site_uuid,
+        generation=generation,
+        authdata=auth,
+    )
+

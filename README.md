@@ -3,85 +3,59 @@
 [![All Contributors](https://img.shields.io/badge/all_contributors-7-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
-Defines an API to help with building frontends pertaining to displaying wind and solar data.
+API providing external access to Quartz forecast data.
 
 ## Running the service
 
 ### Configuration
 
 The application is configured via the use of environment variables.
-For the environment variable please set: DB_URL in bash
-Currently there is only one source adaptor
-so there is nothing to configure.
+See `src/quartz_api/cmd/server.conf` for the full specification of available environmental
+configuration.
 
-### Using docker
+### Using Docker
 
-You can either download the latest image from GitHub container registry:
-
-```sh
-$ docker run ghcr.io/openclimatefix/quartz-api:latest
-```
-
-Or build and run locally using the Containerfile:
+Run the latest image from GitHub container registry:
 
 ```sh
-$ docker build -t quartz-api .
-$ docker run quartz-api
+$ docker run 
+    -p 8000:8000 \
+    -e <ENV_KEY>=<ENV_VALUE> \
+    ghcr.io/openclimatefix/quartz-api:latest
 ```
-
-### Using python(v3.11.x)
-
-Clone the repository,
-and create a new virtual environment with your favorite environment manager.
-Install the dependencies with
-
-```
-$ pip install -e .
-```
-
-The service is then runnable via the command `quartz-api`.
-You should see the following output:
-
-```shell
-INFO:     Started server process [87312]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-```
-
-The API should then be accessible at `http://localhost:8000`,
-and the docs at `http://localhost:8000/docs`.
-
 
 ## Development
 
-Clone the repository,
-and create a new environment with your favorite environment manager.
-Install all the dependencies with
+Clone the repository. Install all the dependencies with
 
 ```
-pip install -e ".[all]"
+$ uv sync
 ```
 
-You can run the service with the command `quartz-api`.
-Changes will be hot-reloaded by the server.
+### Running the service
+
+To run the API locally, use the command
+
+```
+$ uv run quartz-api
+```
+
+The API should then be accessible at `http://localhost:8000`, and the docs at
+`http://localhost:8000/docs` (or whatever port you have configured).
 
 
-## Running Tests
+### Running Tests
 
-Make sure that you have ```pytest```
-and ```testcontainers``` installed.
-
+Make sure that you have install the development dependencies (`uv sync` will do this for you).
 Then run the tests using
-```
-pytest
-```
 
+```
+uv run pytest
+```
 
 ## Known Bugs
 
-There may be some issues when
-installing this with windows.
+There may be some issues when installing this with windows.
 
 ## Contributors ✨
 

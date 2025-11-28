@@ -3,7 +3,9 @@
 import abc
 import datetime as dt
 from enum import Enum
+from typing import Annotated
 
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
 
@@ -228,3 +230,16 @@ class DatabaseInterface(abc.ABC):
     ) -> None:
         """Post the generation for a site."""
         pass
+
+def get_db_client() -> DatabaseInterface:
+    """Get the client implementation.
+
+    Note: This should be overridden via FastAPI's dependency injection system with an actual
+    database client implementation.
+    """
+    raise HTTPException(
+        status_code=401,
+        detail="No database client implementation has been provided.",
+    )
+
+DBClientDependency = Annotated[DatabaseInterface, Depends(get_db_client)]

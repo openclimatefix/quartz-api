@@ -2,11 +2,13 @@ import logging
 
 import pandas as pd
 import pytest
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 from quartz_api.internal import PredictedPower
+from quartz_api.internal.service.regions._csv import format_csv_and_created_time
 
 from ...models import ForecastHorizon
-from ...service.csv import format_csv_and_created_time
 from .client import Client
 
 log = logging.getLogger(__name__)
@@ -15,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def client(engine, db_session):
+def client(engine: Engine, db_session: Session) -> Client:
     """Hooks Client into pytest db_session fixture"""
     client = Client(database_url=str(engine.url))
     client.session = db_session

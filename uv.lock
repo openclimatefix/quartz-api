@@ -434,18 +434,6 @@ wheels = [
 ]
 
 [[package]]
-name = "deprecation"
-version = "2.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/d3/8ae2869247df154b64c1884d7346d412fed0c49df84db635aab2d1c40e62/deprecation-2.1.0.tar.gz", hash = "sha256:72b3bde64e5d778694b0cf68178aed03d15e15477116add3fb773e581f9518ff", size = 173788 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/c3/253a89ee03fc9b9682f1541728eb66db7db22148cd94f89ab22528cd1e1b/deprecation-2.1.0-py2.py3-none-any.whl", hash = "sha256:a10811591210e1fb0e768a8c25517cabeabcba6f0bf96564f8ff45189f90b14a", size = 11178 },
-]
-
-[[package]]
 name = "docker"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1251,7 +1239,7 @@ wheels = [
 
 [[package]]
 name = "pydantic"
-version = "2.12.4"
+version = "2.12.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -1259,9 +1247,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/ad/a17bc283d7d81837c061c49e3eaa27a45991759a1b7eae1031921c6bd924/pydantic-2.12.4.tar.gz", hash = "sha256:0f8cb9555000a4b5b617f66bfd2566264c4984b27589d3b845685983e8ea85ac", size = 821038 }
+sdist = { url = "https://files.pythonhosted.org/packages/69/44/36f1a6e523abc58ae5f928898e4aca2e0ea509b5aa6f6f392a5d882be928/pydantic-2.12.5.tar.gz", hash = "sha256:4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49", size = 821591 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/2f/e68750da9b04856e2a7ec56fc6f034a5a79775e9b9a81882252789873798/pydantic-2.12.4-py3-none-any.whl", hash = "sha256:92d3d202a745d46f9be6df459ac5a064fdaa3c1c4cd8adcfa332ccf3c05f871e", size = 463400 },
+    { url = "https://files.pythonhosted.org/packages/5a/87/b70ad306ebb6f9b585f114d0ac2137d792b48be34d732d60e597c2f8465a/pydantic-2.12.5-py3-none-any.whl", hash = "sha256:e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d", size = 463580 },
 ]
 
 [[package]]
@@ -1385,6 +1373,17 @@ wheels = [
 ]
 
 [[package]]
+name = "pyhocon"
+version = "0.3.61"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/2d/cd65dc4fa8c901e6d02b4074771ced04828d71af18b97da24ed1e55507d7/pyhocon-0.3.61-py3-none-any.whl", hash = "sha256:73d0f064af9a7d454949c5557284ce1d716cfd8e1383ecc90095fc575d278df0", size = 25049 },
+]
+
+[[package]]
 name = "pyjwt"
 version = "2.10.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1404,6 +1403,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/4d/9683a57f2e8b9263910ef497a99d88622f4fb1c158decb867fd40a41bfdd/pylsp_mypy-0.7.0.tar.gz", hash = "sha256:e94f531d4ce523222c2af7471abe396cfeb4cc3c4b181d54462fb6d553e1e0b3", size = 18529 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/7d/324859fa4af565db32ff8d924fd10dd49922756736be12d783be3813ffc8/pylsp_mypy-0.7.0-py3-none-any.whl", hash = "sha256:756377d05d251d2e31d1963397654149b9c1ea5b0ba1aedd74adef76decd32e9", size = 12232 },
+]
+
+[[package]]
+name = "pyparsing"
+version = "3.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/a5/181488fc2b9d093e3972d2a472855aae8a03f000592dbfce716a512b3359/pyparsing-3.2.5.tar.gz", hash = "sha256:2df8d5b7b2802ef88e8d016a2eb9c7aeaa923529cd251ed0fe4608275d4105b6", size = 1099274 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/5e/1aa9a93198c6b64513c9d7752de7422c06402de6600a8767da1524f9570b/pyparsing-3.2.5-py3-none-any.whl", hash = "sha256:e38a4f02064cf41fe6593d328d0512495ad1f3d8a91c4f73fc401b3079a59a5e", size = 113890 },
 ]
 
 [[package]]
@@ -1527,6 +1535,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dotenv"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230 },
+]
+
+[[package]]
 name = "python-lsp-jsonrpc"
 version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1594,7 +1611,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -1602,6 +1619,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "numpy" },
     { name = "pvsite-datamodel" },
+    { name = "pyhocon" },
     { name = "pyjwt" },
     { name = "pyproj" },
     { name = "pytz" },
@@ -1632,6 +1650,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "numpy", specifier = ">=1.25.0" },
     { name = "pvsite-datamodel", specifier = "==1.2.3" },
+    { name = "pyhocon", specifier = ">=0.3.61" },
     { name = "pyjwt", specifier = ">=2.8.0" },
     { name = "pyproj", specifier = ">=3.3.0" },
     { name = "pytz", specifier = ">=2023.3" },
@@ -1804,15 +1823,18 @@ wheels = [
 
 [[package]]
 name = "testcontainers"
-version = "3.7.1"
+version = "4.13.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "deprecation" },
     { name = "docker" },
+    { name = "python-dotenv" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
     { name = "wrapt" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/b3/c272537f3ea2f312555efeb86398cc382cd07b740d5f3c730918c36e64e1/testcontainers-4.13.3.tar.gz", hash = "sha256:9d82a7052c9a53c58b69e1dc31da8e7a715e8b3ec1c4df5027561b47e2efe646", size = 79064 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/37/38c595414d764cb1d9f3a0c907878c4146a21505ab974c63bcf3d8145807/testcontainers-3.7.1-py2.py3-none-any.whl", hash = "sha256:7f48cef4bf0ccd78f1a4534d4b701a003a3bace851f24eae58a32f9e3f0aeba0", size = 45321 },
+    { url = "https://files.pythonhosted.org/packages/73/27/c2f24b19dafa197c514abe70eda69bc031c5152c6b1f1e5b20099e2ceedd/testcontainers-4.13.3-py3-none-any.whl", hash = "sha256:063278c4805ffa6dd85e56648a9da3036939e6c0ac1001e851c9276b19b05970", size = 124784 },
 ]
 
 [[package]]
