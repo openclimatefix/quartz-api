@@ -50,7 +50,7 @@ class GetRegionsResponse(BaseModel):
 
 ValidSource = Annotated[str, Path(
     description="The source of the generation or forecast data.",
-    regex="^(wind|solar)$",
+    pattern="^(wind|solar)$",
 )]
 
 @router.get(
