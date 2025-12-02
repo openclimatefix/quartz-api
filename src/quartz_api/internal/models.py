@@ -90,6 +90,14 @@ class SiteProperties(BaseModel):
         ge=0,
     )
 
+class Region(BaseModel):
+    """Region metadata."""
+
+    region_name: str = Field(..., json_schema_extra={"description": "The name of the region."})
+    region_metadata: dict | None = Field(
+        None,
+        json_schema_extra={"description": "Additional metadata about the region."},
+    )
 
 class Site(BaseModel):
     """Site metadata with site_uuid."""
@@ -179,12 +187,12 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_wind_regions(self) -> list[str]:
+    async def get_wind_regions(self) -> list[Region]:
         """Returns a list of wind regions."""
         pass
 
     @abc.abstractmethod
-    async def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self) -> list[Region]:
         """Returns a list of solar regions."""
         pass
 

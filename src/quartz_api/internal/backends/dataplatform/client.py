@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from typing_extensions import override
 
 from quartz_api import internal
-from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal.models import ForecastHorizon, Region
 
 from ..utils import get_window
 
@@ -95,13 +95,32 @@ class Client(internal.DatabaseInterface):
         return [loc.location_uuid for loc in resp.locations]
 
     @override
-    async def get_solar_regions(self) -> list[str]:
-        req = dp.ListLocationsRequest(
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.STATE,
-        )
-        resp = await self.dp_client.list_locations(req)
-        return [loc.location_uuid for loc in resp.locations]
+    async def get_solar_regions(self) -> list[Region]:
+        all_locations: list[Region] = []
+        for location_type_filter in [
+            dp.LocationType.NATION,
+            dp.LocationType.GSP,
+            dp.LocationType.STATE,
+        ]:
+            req = dp.ListLocationsRequest(
+                energy_source_filter=dp.EnergySource.SOLAR,
+                location_type_filter=location_type_filter,
+            )
+            resp = await self.dp_client.list_locations(req)
+            for loc in resp.locations:
+                region = Region(
+                    region_name=loc.location_name,
+                    region_metadata={
+                        "location_uuid": loc.location_uuid,
+                        "effective_capacity_watts": loc.effective_capacity_watts,
+                        **{
+                            k: v
+                            for k, v in loc.metadata.fields.items()
+                        },
+                    },
+                )
+                all_locations.append(region)
+        return all_locations
 
     @override
     async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
