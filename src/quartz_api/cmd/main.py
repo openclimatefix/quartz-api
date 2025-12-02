@@ -45,7 +45,7 @@ from starlette.staticfiles import StaticFiles
 from quartz_api.internal.backends import DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
 from quartz_api.internal.models import DatabaseInterface, get_db_client
-from quartz_api.internal.service import regions, sites
+from quartz_api.internal.service import regions, sites, uk_national_and_gsp
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -178,7 +178,7 @@ def run() -> None:
     )
 
     # Add routers to the server according to configuration
-    for router_module in [sites, regions]:
+    for router_module in [sites, regions, uk_national_and_gsp]:
         if conf.get_string("api.router") == router_module.__name__.split(".")[-1]:
             server.include_router(router_module.router)
             server.openapi_tags = [{
