@@ -113,10 +113,7 @@ class Client(internal.DatabaseInterface):
                     region_metadata={
                         "location_uuid": loc.location_uuid,
                         "effective_capacity_watts": loc.effective_capacity_watts,
-                        **{
-                            k: v
-                            for k, v in loc.metadata.fields.items()
-                        },
+                        **dict(loc.metadata.fields.items()),
                     },
                 )
                 all_locations.append(region)
