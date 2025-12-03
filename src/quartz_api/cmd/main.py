@@ -34,15 +34,17 @@ from importlib.metadata import version
 from typing import Any
 
 import uvicorn
+from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from quartz_api.internal.backends import DummyClient, QuartzClient
+from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
 from quartz_api.internal.models import DatabaseInterface, get_db_client
 from quartz_api.internal.service import regions, sites
@@ -156,6 +158,14 @@ def run() -> None:
         case "dummydb":
             db_instance = DummyClient()
             log.warning("disabled backend. NOT recommended for production")
+        case "dataplatform":
+
+            channel = Channel(
+                host=conf.get_string("backend.dataplatform.host"),
+                port=conf.get_int("backend.dataplatform.port"),
+            )
+            client = dp.DataPlatformDataServiceStub(channel=channel)
+            db_instance = DataPlatformClient.from_dp(dp_client=client)
         case _:
             raise ValueError(
                 "Unknown backend. "
