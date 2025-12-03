@@ -177,6 +177,86 @@ class Client(internal.DatabaseInterface):
         logging.warning("Data Platform client does not support logging API calls to DB.")
         pass
 
+    @override
+    async def get_substations(
+        self,
+        authdata: dict[str, str],
+    ) -> list[internal.Site]:
+        req = dp.ListLocationsRequest(
+            energy_source_filter=dp.EnergySource.SOLAR,
+            location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
+            user_oauth_id_filter=authdata["sub"],
+        )
+        resp = await self.dp_client.list_locations(req)
+        return [
+            internal.Site(
+                site_uuid=loc.location_uuid,
+                client_site_name=loc.location_name,
+                orientation=loc.metadata.fields["orientation"].number_value
+                if "orientation" in loc.metadata.fields
+                else None,
+                tilt=loc.metadata.fields["tilt"].number_value
+                if "tilt" in loc.metadata.fields
+                else None,
+                capacity_kw=loc.effective_capacity_watts // 1000.0,
+                latitude=loc.latlng.latitude,
+                longitude=loc.latlng.longitude,
+            )
+            for loc in resp.locations
+        ]
+
+    @override
+    async def get_substation_forecast(
+        self,
+        substation_uuid: str,
+        authdata: dict[str, str],
+    ) -> list[internal.PredictedPower]:
+        forecast = await self._get_predicted_power_production_for_location(
+            substation_uuid,
+            dp.EnergySource.SOLAR,
+            authdata["sub"],
+        )
+        return forecast
+
+    @override
+    async def get_location(
+        self,
+        location_uuid: str,
+        authdata: dict[str, str],
+    ) -> internal.SiteProperties:
+        req = dp.ListLocationsRequest(
+            location_uuids_filter=[location_uuid],
+            energy_source_filter=dp.EnergySource.SOLAR,
+            user_oauth_id_filter=authdata["sub"],
+        )
+        resp = await self.dp_client.list_locations(req)
+        if len(resp.locations) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No substation found for UUID '{location_uuid}'",
+            )
+        if len(resp.locations) > 1:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Multiple locations found for UUID '{location_uuid}'",
+            )
+        loc = resp.locations[0]
+
+        return internal.Site(
+            site_uuid=loc.location_uuid,
+            client_site_name=loc.location_name,
+            orientation=loc.metadata.fields["orientation"].number_value
+            if "orientation" in loc.metadata.fields
+            else None,
+            tilt=loc.metadata.fields["tilt"].number_value
+            if "tilt" in loc.metadata.fields
+            else None,
+            capacity_kw=loc.effective_capacity_watts // 1000.0,
+            latitude=loc.latlng.latitude,
+            longitude=loc.latlng.longitude,
+        )
+
+
     async def _get_actual_power_production_for_location(
         self,
         location: str,

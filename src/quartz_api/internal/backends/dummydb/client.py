@@ -179,6 +179,36 @@ class Client(internal.DatabaseInterface):
     ) -> None:
         pass
 
+    @override
+    async def get_substations(
+        self,
+        authdata: dict[str, str],
+    ) -> list[internal.Site]:
+        uuid = str(uuid4())
+
+        site = internal.Site(
+            site_uuid=uuid,
+            client_site_id=1,
+            latitude=26,
+            longitude=76,
+            capacity_kw=76,
+        )
+
+        return [site]
+
+    @override
+    async def get_location(
+        self,
+        location_uuid: str,
+        authdata: dict[str, str],
+    ) -> internal.Site:
+        return internal.Site(
+            site_uuid=str(uuid4()),
+            client_site_id=1,
+            latitude=26,
+            longitude=76,
+            capacity_kw=76,
+        )
 
 def _basicSolarPowerProductionFunc(
     timeUnix: int,

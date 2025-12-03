@@ -4,6 +4,7 @@ import abc
 import datetime as dt
 from enum import Enum
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -229,6 +230,20 @@ class DatabaseInterface(abc.ABC):
         self, site_uuid: str, generation: list[ActualPower], authdata: dict[str, str],
     ) -> None:
         """Post the generation for a site."""
+        pass
+
+    @abc.abstractmethod
+    async def get_substations(self, authdata: dict[str, str]) -> list[Site]:
+        """Get a list of substations."""
+        pass
+
+    @abc.abstractmethod
+    async def get_location(
+        self,
+        location_uuid: UUID,
+        authdata: dict[str, str],
+    ) -> SiteProperties:
+        """Get location metadata."""
         pass
 
 def get_db_client() -> DatabaseInterface:

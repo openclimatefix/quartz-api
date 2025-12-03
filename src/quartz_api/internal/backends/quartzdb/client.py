@@ -28,7 +28,7 @@ from typing_extensions import override
 from quartz_api import internal
 from quartz_api.internal.backends.quartzdb.smooth import smooth_forecast
 from quartz_api.internal.backends.utils import get_window
-from quartz_api.internal.middleware.auth import EMAIL_KEY
+from quartz_api.internal.middleware.auth import EMAIL_KEY, AuthDependency
 from quartz_api.internal.models import ForecastHorizon
 
 log = logging.getLogger(__name__)
@@ -432,6 +432,20 @@ class Client(internal.DatabaseInterface):
             insert_generation_values(session, generation_values_df)
             session.commit()
 
+    @override
+    async def get_substations(
+        self,
+        auth: AuthDependency,
+    ) -> list[internal.Site]:
+        raise NotImplementedError("QuartzDB backend does not support substations")
+
+    @override
+    async def get_location(
+        self,
+        location_uuid: str,
+        auth: AuthDependency,
+    ) -> internal.Site:
+        raise NotImplementedError("QuartzDB backend does not support locations")
 
 def check_user_has_access_to_site(
     session: Session,

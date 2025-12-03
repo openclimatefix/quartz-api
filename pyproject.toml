@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.14.0/dp_sdk-0.14.0-py3-none-any.whl" }
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.15.0/dp_sdk-0.15.0-py3-none-any.whl" }
 
 [project.urls]
 repository = "https://github.com/openclimatefix/quartz-api"
