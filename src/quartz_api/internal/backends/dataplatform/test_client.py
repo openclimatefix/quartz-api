@@ -22,7 +22,7 @@ def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsRespons
                     location_uuid=str(uuid.uuid4()),
                     energy_source=dp.EnergySource.SOLAR,
                     effective_capacity_watts=1e6,
-                    location_type=dp.LocationType.SITE,
+                    location_type=req.location_type_filter,
                     latlng=dp.LatLng(51.5, -0.1),
                     metadata=Struct(
                         fields={
@@ -31,8 +31,8 @@ def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsRespons
                         },
                     ),
                 ),
-            ],
-        )
+        ],
+    )
     else:
         return dp.ListLocationsResponse(locations=[])
 
@@ -89,7 +89,7 @@ def mock_get_latest_forecasts(
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_sites(self, client_mock) -> None:
+    async def test_get_sites(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
@@ -118,7 +118,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(resp), tc.expected_num_sites)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_site_forecast(self, client_mock) -> None:
+    async def test_get_site_forecast(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
@@ -164,7 +164,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
     async def test_get_site_generation(
         self,
-        client_mock,
+        client_mock: dp.DataPlatformDataServiceStub,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -208,3 +208,81 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         authdata=tc.authdata,
                     )
                     self.assertEqual(len(resp), 5)
+
+    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    async def test_get_substations(
+        self,
+        client_mock: dp.DataPlatformDataServiceStub,
+    ) -> None:
+        @dataclasses.dataclass
+        class TestCase:
+            name: str
+            authdata: dict[str, str]
+            expected_num_substations: int
+
+        testcases: list[TestCase] = [
+            TestCase(
+                name="Should return substations when user has access",
+                authdata={"sub": "access_user"},
+                expected_num_substations=1,
+            ),
+            TestCase(
+                name="Should return no substations when user has no access",
+                authdata={"sub": "no_access_user"},
+                expected_num_substations=0,
+            ),
+        ]
+
+        client = Client.from_dp(client_mock)
+        for tc in testcases:
+            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+
+            with self.subTest(tc.name):
+                resp = await client.get_substations(authdata=tc.authdata)
+                self.assertEqual(len(resp), tc.expected_num_substations)
+
+    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    async def test_get_location(
+        self,
+        client_mock: dp.DataPlatformDataServiceStub,
+    ) -> None:
+        @dataclasses.dataclass
+        class TestCase:
+            name: str
+            location_uuid: str
+            authdata: dict[str, str]
+            should_error: bool
+
+        testcases: list[TestCase] = [
+            TestCase(
+                name="Should return location when user has access",
+                location_uuid=str(uuid.uuid4()),
+                authdata={"sub": "access_user"},
+                should_error=False,
+            ),
+            TestCase(
+                name="Should raise HTTPException when user has no access",
+                location_uuid=str(uuid.uuid4()),
+                authdata={"sub": "no_access_user"},
+                should_error=True,
+            ),
+        ]
+
+        client = Client.from_dp(client_mock)
+        for tc in testcases:
+            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+
+            with self.subTest(tc.name):
+                if tc.should_error:
+                    with self.assertRaises(HTTPException):
+                        await client.get_location(
+                            location_uuid=tc.location_uuid,
+                            authdata=tc.authdata,
+                        )
+                else:
+                    resp = await client.get_location(
+                        location_uuid=tc.location_uuid,
+                        authdata=tc.authdata,
+                    )
+                    self.assertIsNotNone(resp)
+

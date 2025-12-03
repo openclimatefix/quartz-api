@@ -25,16 +25,15 @@ from pvsite_datamodel.write.user_and_site import edit_site
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from quartz_api import internal
+from quartz_api.internal import models
 from quartz_api.internal.backends.quartzdb.smooth import smooth_forecast
 from quartz_api.internal.backends.utils import get_window
 from quartz_api.internal.middleware.auth import EMAIL_KEY, AuthDependency
-from quartz_api.internal.models import ForecastHorizon
 
 log = logging.getLogger(__name__)
 
 
-class Client(internal.DatabaseInterface):
+class Client(models.DatabaseInterface):
     """Defines Quartz DB client that conforms to the DatabaseInterface."""
 
     connection: DatabaseConnection
@@ -64,20 +63,20 @@ class Client(internal.DatabaseInterface):
         location: str,
         asset_type: LocationAssetType,
         ml_model_name: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         """Gets the predicted power production for a location, regardless of type."""
         # Get the window
         start, _ = get_window()
 
         # get house ahead forecast
-        if forecast_horizon == ForecastHorizon.day_ahead:
+        if forecast_horizon == models.ForecastHorizon.day_ahead:
             day_ahead_hours = 9
             day_ahead_timezone_delta_hours = 5.5
             forecast_horizon_minutes = None
-        elif forecast_horizon == ForecastHorizon.horizon:
+        elif forecast_horizon == models.ForecastHorizon.horizon:
             day_ahead_hours = None
             day_ahead_timezone_delta_hours = None
         else:
@@ -118,7 +117,7 @@ class Client(internal.DatabaseInterface):
 
         # convert ForecastValueSQL to PredictedPower
         out = [
-            internal.PredictedPower(
+            models.PredictedPower(
                 PowerKW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
@@ -138,7 +137,7 @@ class Client(internal.DatabaseInterface):
         self,
         location: str,
         asset_type: LocationAssetType,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         """Gets the measured power production for a location."""
         # Get the window
         start, end = get_window()
@@ -161,7 +160,7 @@ class Client(internal.DatabaseInterface):
 
         # convert from GenerationSQL to ActualPower
         out = [
-            internal.ActualPower(
+            models.ActualPower(
                 PowerKW=int(value.generation_power_kw)
                 if value.generation_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
@@ -176,10 +175,10 @@ class Client(internal.DatabaseInterface):
     async def get_predicted_solar_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         # set this to be hard coded for now
         model_name = "pvnet_india"
 
@@ -196,10 +195,10 @@ class Client(internal.DatabaseInterface):
     async def get_predicted_wind_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         # set this to be hard coded for now
         model_name = "windnet_india_adjust"
 
@@ -216,14 +215,14 @@ class Client(internal.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         return self._get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
 
     @override
     async def get_actual_wind_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         return self._get_generation_for_location(
             location=location,
             asset_type=LocationAssetType.wind,
@@ -238,7 +237,7 @@ class Client(internal.DatabaseInterface):
         return ["ruvnl"]
 
     @override
-    async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
+    async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, authdata[EMAIL_KEY])
@@ -246,7 +245,7 @@ class Client(internal.DatabaseInterface):
 
             sites = []
             for site_sql in sites_sql:
-                site = internal.Site(
+                site = models.Site(
                     site_uuid=str(site_sql.location_uuid),
                     client_site_name=site_sql.client_location_name,
                     orientation=site_sql.orientation,
@@ -263,9 +262,9 @@ class Client(internal.DatabaseInterface):
     async def put_site(
         self,
         site_uuid: str,
-        site_properties: internal.SiteProperties,
+        site_properties: models.SiteProperties,
         authdata: dict[str, str],
-    ) -> internal.Site:
+    ) -> models.Site:
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, authdata[EMAIL_KEY])
@@ -290,7 +289,7 @@ class Client(internal.DatabaseInterface):
         self,
         site_uuid: str,
         authdata: dict[str, str],
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # hard coded model name
@@ -324,7 +323,7 @@ class Client(internal.DatabaseInterface):
 
             # convert ForecastValueSQL to PredictedPower
         out = [
-            internal.PredictedPower(
+            models.PredictedPower(
                 PowerKW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
@@ -341,7 +340,7 @@ class Client(internal.DatabaseInterface):
         self,
         site_uuid: str,
         authdata: dict[str, str],
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         # TODO feels like there is some duplicated code here which could be refactored
 
         # Get the window
@@ -367,7 +366,7 @@ class Client(internal.DatabaseInterface):
 
         # convert from GenerationSQL to PredictedPower
         out = [
-            internal.ActualPower(
+            models.ActualPower(
                 PowerKW=int(value.generation_power_kw)
                 if value.generation_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
@@ -382,7 +381,7 @@ class Client(internal.DatabaseInterface):
     async def post_site_generation(
         self,
         site_uuid: str,
-        generation: list[internal.ActualPower],
+        generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
         with self._get_session() as session:
@@ -436,7 +435,7 @@ class Client(internal.DatabaseInterface):
     async def get_substations(
         self,
         auth: AuthDependency,
-    ) -> list[internal.Site]:
+    ) -> list[models.Site]:
         raise NotImplementedError("QuartzDB backend does not support substations")
 
     @override
@@ -444,7 +443,7 @@ class Client(internal.DatabaseInterface):
         self,
         location_uuid: str,
         auth: AuthDependency,
-    ) -> internal.Site:
+    ) -> models.Site:
         raise NotImplementedError("QuartzDB backend does not support locations")
 
 def check_user_has_access_to_site(

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from quartz_api.internal import ActualPower
+from quartz_api.internal.models import ActualPower
 
 
 def resample_generation(values: list[ActualPower], internal_minutes: int) -> list[ActualPower]:

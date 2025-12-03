@@ -1,134 +1,20 @@
-"""Defines the application models and interfaces."""
+"""Defines the domain interface for interacting with a backend."""
 
 import abc
-import datetime as dt
-from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
 
-
-class ForecastHorizon(str, Enum):
-    """Defines the forecast horizon options.
-
-    Can either be
-    - latest: Gets the latest forecast values.
-    - horizon: Gets the forecast values for a specific horizon.
-    - day_ahead: Gets the day ahead forecast values.
-    """
-
-    latest = "latest"
-    horizon = "horizon"
-    day_ahead = "day_ahead"
-
-
-class PredictedPower(BaseModel):
-    """Defines the data structure for a predicted power value returned by the API."""
-
-    PowerKW: float
-    Time: dt.datetime
-    CreatedTime: dt.datetime = Field(exclude=True)
-
-    def to_timezone(self, tz: dt.timezone) -> "PredictedPower":
-        """Converts the time of this predicted power value to the given timezone."""
-        return PredictedPower(
-            PowerKW=self.PowerKW,
-            Time=self.Time.astimezone(tz=tz),
-            CreatedTime=self.CreatedTime.astimezone(tz=tz),
-        )
-
-
-class ActualPower(BaseModel):
-    """Defines the data structure for an actual power value returned by the API."""
-
-    PowerKW: float
-    Time: dt.datetime
-
-    def to_timezone(self, tz: dt.timezone) -> "ActualPower":
-        """Converts the time of this predicted power value to the given timezone."""
-        return ActualPower(
-            PowerKW=self.PowerKW,
-            Time=self.Time.astimezone(tz=tz),
-        )
-
-
-class SiteProperties(BaseModel):
-    """Site metadata."""
-
-    client_site_name: str | None = Field(
-        None,
-        json_schema_extra={"description": "The name of the site as given by the providing user."},
-    )
-    orientation: float | None = Field(
-        None,
-        json_schema_extra={
-            "description": "The rotation of the panel in degrees. 180° points south",
-        },
-    )
-    tilt: float | None = Field(
-        None,
-        json_schema_extra={
-            "description": "The tile of the panel in degrees. 90° indicates the panel is vertical.",
-        },
-    )
-    latitude: float | None = Field(
-        None,
-        json_schema_extra={"description": "The site's latitude"},
-        ge=-90,
-        le=90,
-    )
-    longitude: float | None = Field(
-        None,
-        json_schema_extra={"description": "The site's longitude"},
-        ge=-180,
-        le=180,
-    )
-    capacity_kw: float | None = Field(
-        None,
-        json_schema_extra={"description": "The site's total capacity in kw"},
-        ge=0,
-    )
-
-
-class Site(BaseModel):
-    """Site metadata with site_uuid."""
-
-    site_uuid: str = Field(..., json_schema_extra={"description": "The site uuid assigned by ocf."})
-    client_site_name: str | None = Field(
-        None,
-        json_schema_extra={"description": "The name of the site as given by the providing user."},
-    )
-    orientation: float | None = Field(
-        180,
-        json_schema_extra={
-            "description": "The rotation of the panel in degrees. 180° points south",
-        },
-    )
-    tilt: float | None = Field(
-        35,
-        json_schema_extra={
-            "description": "The tile of the panel in degrees. 90° indicates the panel is vertical.",
-        },
-    )
-    latitude: float = Field(
-        ...,
-        json_schema_extra={"description": "The site's latitude"},
-        ge=-90,
-        le=90,
-    )
-    longitude: float = Field(
-        ...,
-        json_schema_extra={"description": "The site's longitude"},
-        ge=-180,
-        le=180,
-    )
-    capacity_kw: float = Field(
-        ...,
-        json_schema_extra={"description": "The site's total capacity in kw"},
-        ge=0,
-    )
+from .endpoint_types import (
+    ActualPower,
+    ForecastHorizon,
+    LocationPropertiesBase,
+    PredictedPower,
+    Site,
+    SiteProperties,
+    Substation,
+)
 
 
 class DatabaseInterface(abc.ABC):
@@ -233,7 +119,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_substations(self, authdata: dict[str, str]) -> list[Site]:
+    async def get_substations(self, authdata: dict[str, str]) -> list[Substation]:
         """Get a list of substations."""
         pass
 
@@ -242,7 +128,7 @@ class DatabaseInterface(abc.ABC):
         self,
         location_uuid: UUID,
         authdata: dict[str, str],
-    ) -> SiteProperties:
+    ) -> LocationPropertiesBase:
         """Get location metadata."""
         pass
 

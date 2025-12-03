@@ -7,13 +7,12 @@ from dp_sdk.ocf import dp
 from fastapi import HTTPException
 from typing_extensions import override
 
-from quartz_api import internal
-from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal import models
 
 from ..utils import get_window
 
 
-class Client(internal.DatabaseInterface):
+class Client(models.DatabaseInterface):
     """Defines a data platform interface that conforms to the DatabaseInterface."""
 
     dp_client: dp.DataPlatformDataServiceStub
@@ -29,10 +28,10 @@ class Client(internal.DatabaseInterface):
     async def get_predicted_solar_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location=location,
             energy_source=dp.EnergySource.SOLAR,
@@ -47,10 +46,10 @@ class Client(internal.DatabaseInterface):
     async def get_predicted_wind_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location=location,
             energy_source=dp.EnergySource.WIND,
@@ -65,7 +64,7 @@ class Client(internal.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
@@ -77,7 +76,7 @@ class Client(internal.DatabaseInterface):
     async def get_actual_wind_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.WIND,
@@ -104,7 +103,7 @@ class Client(internal.DatabaseInterface):
         return [loc.location_uuid for loc in resp.locations]
 
     @override
-    async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
+    async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.SITE,
@@ -112,7 +111,7 @@ class Client(internal.DatabaseInterface):
         )
         resp = await self.dp_client.list_locations(req)
         return [
-            internal.Site(
+            models.Site(
                 site_uuid=loc.location_uuid,
                 client_site_name=loc.location_name,
                 orientation=loc.metadata.fields["orientation"].number_value
@@ -132,9 +131,9 @@ class Client(internal.DatabaseInterface):
     async def put_site(
         self,
         site_uuid: str,
-        site_properties: internal.SiteProperties,
+        site_properties: models.SiteProperties,
         authdata: dict[str, str],
-    ) -> internal.Site:
+    ) -> models.Site:
         raise NotImplementedError("Data Platform client doesn't yet support site writing.")
 
     @override
@@ -142,7 +141,7 @@ class Client(internal.DatabaseInterface):
         self,
         site_uuid: str,
         authdata: dict[str, str],
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         forecast = await self._get_predicted_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
@@ -155,7 +154,7 @@ class Client(internal.DatabaseInterface):
         self,
         site_uuid: str,
         authdata: dict[str, str],
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         generation = await self._get_actual_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
@@ -167,7 +166,7 @@ class Client(internal.DatabaseInterface):
     async def post_site_generation(
         self,
         site_uuid: str,
-        generation: list[internal.ActualPower],
+        generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
         raise NotImplementedError("Data Platform client doesn't yet support site writing.")
@@ -181,7 +180,7 @@ class Client(internal.DatabaseInterface):
     async def get_substations(
         self,
         authdata: dict[str, str],
-    ) -> list[internal.Site]:
+    ) -> list[models.Site]:
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
@@ -189,7 +188,7 @@ class Client(internal.DatabaseInterface):
         )
         resp = await self.dp_client.list_locations(req)
         return [
-            internal.Site(
+            models.Site(
                 site_uuid=loc.location_uuid,
                 client_site_name=loc.location_name,
                 orientation=loc.metadata.fields["orientation"].number_value
@@ -210,7 +209,7 @@ class Client(internal.DatabaseInterface):
         self,
         substation_uuid: str,
         authdata: dict[str, str],
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         forecast = await self._get_predicted_power_production_for_location(
             substation_uuid,
             dp.EnergySource.SOLAR,
@@ -223,7 +222,7 @@ class Client(internal.DatabaseInterface):
         self,
         location_uuid: str,
         authdata: dict[str, str],
-    ) -> internal.SiteProperties:
+    ) -> models.SiteProperties:
         req = dp.ListLocationsRequest(
             location_uuids_filter=[location_uuid],
             energy_source_filter=dp.EnergySource.SOLAR,
@@ -242,7 +241,7 @@ class Client(internal.DatabaseInterface):
             )
         loc = resp.locations[0]
 
-        return internal.Site(
+        return models.Site(
             site_uuid=loc.location_uuid,
             client_site_name=loc.location_name,
             orientation=loc.metadata.fields["orientation"].number_value
@@ -262,7 +261,7 @@ class Client(internal.DatabaseInterface):
         location: str,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
             await self._check_user_access(
@@ -283,8 +282,8 @@ class Client(internal.DatabaseInterface):
             ),
         )
         resp = await self.dp_client.get_observations_as_timeseries(req)
-        out: list[internal.ActualPower] = [
-            internal.ActualPower(
+        out: list[models.ActualPower] = [
+            models.ActualPower(
                 Time=value.timestamp_utc,
                 PowerKW=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
             )
@@ -298,10 +297,10 @@ class Client(internal.DatabaseInterface):
         location: str,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True, # noqa: ARG002
-    ) -> list[internal.PredictedPower]:
+    ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
             _ = await self._check_user_access(
@@ -313,9 +312,9 @@ class Client(internal.DatabaseInterface):
 
         start, end = get_window()
 
-        if forecast_horizon == ForecastHorizon.latest or forecast_horizon_minutes is None:
+        if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
-        elif forecast_horizon == ForecastHorizon.day_ahead:
+        elif forecast_horizon == models.ForecastHorizon.day_ahead:
             # The intra-day forecast caps out at 8 hours horizon, so anything greater than that is
             # assumed to be day-ahead. It doesn't seem like it's as simple as just using 24 hours,
             # from my asking around at least
@@ -350,8 +349,8 @@ class Client(internal.DatabaseInterface):
         )
         resp = await self.dp_client.get_forecast_as_timeseries(req)
 
-        out: list[internal.PredictedPower] = [
-            internal.PredictedPower(
+        out: list[models.PredictedPower] = [
+            models.PredictedPower(
                 Time=value.target_timestamp_utc,
                 PowerKW=int(value.effective_capacity_watts * value.p50_value_fraction / 1000.0),
                 CreatedTime=value.created_timestamp_utc,

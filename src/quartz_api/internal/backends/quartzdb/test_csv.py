@@ -5,16 +5,13 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from quartz_api.internal import PredictedPower
+from quartz_api.internal.models import PredictedPower
 from quartz_api.internal.service.regions._csv import format_csv_and_created_time
 
 from ...models import ForecastHorizon
 from .client import Client
 
 log = logging.getLogger(__name__)
-
-# TODO add list of test that are here
-
 
 @pytest.fixture()
 def client(engine: Engine, db_session: Session) -> Client:

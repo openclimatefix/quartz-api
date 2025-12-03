@@ -4,8 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from quartz_api.internal import PredictedPower
-from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal.models import ForecastHorizon, PredictedPower
 
 
 def format_csv_and_created_time(

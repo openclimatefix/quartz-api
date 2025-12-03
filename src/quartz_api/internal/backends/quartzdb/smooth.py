@@ -2,10 +2,10 @@
 
 import pandas as pd
 
-from quartz_api.internal import PredictedPower
+from quartz_api.internal import models
 
 
-def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
+def smooth_forecast(values: list[models.PredictedPower]) -> list[models.PredictedPower]:
     """Smooths the forecast values."""
     # convert to dataframe
     df = pd.DataFrame(
@@ -26,7 +26,7 @@ def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
 
     # convert back to list of PredictedPower
     return [
-        PredictedPower(
+        models.PredictedPower(
             Time=index,
             PowerKW=row.PowerKW,
             CreatedTime=row.CreatedTime,

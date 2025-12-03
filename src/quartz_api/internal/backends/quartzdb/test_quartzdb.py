@@ -8,8 +8,8 @@ from fastapi import HTTPException
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from quartz_api.internal import ActualPower, PredictedPower, SiteProperties
 from quartz_api.internal.middleware.auth import EMAIL_KEY
+from quartz_api.internal.models import ActualPower, PredictedPower, SiteProperties
 
 from .client import Client
 

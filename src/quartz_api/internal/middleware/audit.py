@@ -6,13 +6,13 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from quartz_api.internal import DatabaseInterface
+from quartz_api.internal import models
 
 
 class RequestLoggerMiddleware(BaseHTTPMiddleware):
     """Middleware to log API requests to the database."""
 
-    def __init__(self, server: FastAPI, db_client: DatabaseInterface) -> None:
+    def __init__(self, server: FastAPI, db_client: models.DatabaseInterface) -> None:
         """Initialize the middleware with the FastAPI server and database client."""
         super().__init__(server)
         self.db_client = db_client
