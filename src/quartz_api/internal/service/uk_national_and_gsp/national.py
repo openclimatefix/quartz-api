@@ -1,4 +1,4 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'national' FastAPI router object."""
 
 from enum import Enum
 
@@ -10,7 +10,7 @@ from quartz_api.internal import (
 )
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .pydanitc_models import NationalForecast, NationalForecastValue, NationalYield
+from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
 
 router = APIRouter(tags=["National"])
 

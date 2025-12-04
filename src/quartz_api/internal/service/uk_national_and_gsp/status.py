@@ -1,10 +1,10 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'status' FastAPI router object."""
 
 
 from fastapi import APIRouter
 from starlette import status
 
-from .pydanitc_models import Status
+from .pydantic_models import Status
 
 router = APIRouter()
 

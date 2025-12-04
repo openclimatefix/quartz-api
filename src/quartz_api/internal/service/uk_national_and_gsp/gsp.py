@@ -1,4 +1,4 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'gsp' FastAPI router object."""
 
 
 from fastapi import APIRouter
@@ -9,7 +9,7 @@ from quartz_api.internal import (
 )
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .pydanitc_models import Forecast, ForecastValue, GSPYield
+from .pydantic_models import Forecast, ForecastValue, GSPYield
 
 router = APIRouter(tags=["GSP"])
 
@@ -77,4 +77,10 @@ async def get_truths_for_a_specific_gsp(
     raise NotImplementedError()
 
 
-# TODO legacy routes
+# TODO add forecast/all and pvlive/all route. 
+# These are hidden but used by the UI
+
+# TODO legacy routes that are stil used by some clients
+# forecast/{gsp_id}
+# pvlive/{gsp_id}
+

@@ -1,4 +1,4 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'system' FastAPI router object."""
 
 
 from fastapi import APIRouter
@@ -9,7 +9,7 @@ from quartz_api.internal import (
 )
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .pydanitc_models import Location
+from .pydantic_models import Location
 
 router = APIRouter(tags=["System"])
 
