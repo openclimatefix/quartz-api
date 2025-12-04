@@ -9,6 +9,7 @@ from quartz_api.internal import (
     DBClientDependency,
 )
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.models import ForecastHorizon
 
 from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
 
@@ -80,7 +81,34 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    raise NotImplementedError()
+
+    sites = await db.get_sites(authdata=auth)
+
+    national_location = sites[0]
+
+    forecast_horizon = ForecastHorizon.latest
+    if forecast_horizon_minutes is None:
+        forecast_horizon = ForecastHorizon.horizon
+
+    predicted_powers = await db.get_predicted_solar_power_production_for_location(
+        location=national_location.site_uuid,
+        forecast_horizon=forecast_horizon,
+        forecast_horizon_minutes=forecast_horizon_minutes,
+        smooth_flag=False,
+    )
+
+    if include_metadata:
+        raise NotImplementedError()
+    else:
+
+        national_forecasts = [NationalForecastValue(
+                    target_time=pp.Time,
+                    expected_power_generation_megawatts=pp.PowerKW/1000,
+                ) for pp in predicted_powers]
+
+        return national_forecasts
+
+
 
 
 @router.get(
