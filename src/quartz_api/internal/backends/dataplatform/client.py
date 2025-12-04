@@ -32,6 +32,7 @@ class Client(internal.DatabaseInterface):
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
+        model_name: str | None = None,
     ) -> list[internal.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location=location,
@@ -65,11 +66,13 @@ class Client(internal.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
+        observer_name: str | None = None,
     ) -> list[internal.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
             oauth_id=None,
+            observer_name=observer_name,
         )
         return values
 
@@ -155,11 +158,13 @@ class Client(internal.DatabaseInterface):
         self,
         site_uuid: str,
         authdata: dict[str, str],
+        observer_name: str | None = None,
     ) -> list[internal.ActualPower]:
         generation = await self._get_actual_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
             authdata["sub"],
+            observer_name=observer_name,
         )
         return generation
 
@@ -182,6 +187,7 @@ class Client(internal.DatabaseInterface):
         location: str,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
+        observer_name: str | None = "ruvnl",
     ) -> list[internal.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
@@ -195,7 +201,7 @@ class Client(internal.DatabaseInterface):
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location,
-            observer_name="ruvnl",
+            observer_name=observer_name,
             energy_source=energy_source,
             time_window=dp.TimeWindow(
                 start_timestamp_utc=start,
@@ -221,6 +227,7 @@ class Client(internal.DatabaseInterface):
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True, # noqa: ARG002
+        model_name: str | None = None, # noqa: ARG002
     ) -> list[internal.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
