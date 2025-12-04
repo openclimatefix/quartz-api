@@ -447,12 +447,12 @@ class Client(models.DatabaseInterface):
         raise NotImplementedError("QuartzDB backend does not support substations")
 
     @override
-    async def get_location(
+    async def get_substation(
         self,
         location_uuid: str,
         auth: AuthDependency,
-    ) -> models.Site:
-        raise NotImplementedError("QuartzDB backend does not support locations")
+    ) -> models.SubstationProperties:
+        raise NotImplementedError("QuartzDB backend does not support substations")
 
 def check_user_has_access_to_site(
     session: Session,

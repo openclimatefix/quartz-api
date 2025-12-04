@@ -183,7 +183,7 @@ class Client(models.DatabaseInterface):
     async def get_substations(
         self,
         authdata: dict[str, str],
-    ) -> list[models.Site]:
+    ) -> list[models.Substation]:
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
@@ -191,15 +191,12 @@ class Client(models.DatabaseInterface):
         )
         resp = await self.dp_client.list_locations(req)
         return [
-            models.Site(
-                site_uuid=loc.location_uuid,
-                client_site_name=loc.location_name,
-                orientation=loc.metadata.fields["orientation"].number_value
-                if "orientation" in loc.metadata.fields
-                else None,
-                tilt=loc.metadata.fields["tilt"].number_value
-                if "tilt" in loc.metadata.fields
-                else None,
+            models.Substation(
+                substation_uuid=loc.location_uuid,
+                substation_name=loc.location_name,
+                substation_type="primary"
+                if loc.location_type == dp.LocationType.PRIMARY_SUBSTATION
+                else "unknown",
                 capacity_kw=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
@@ -213,7 +210,6 @@ class Client(models.DatabaseInterface):
         substation_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
-
         # Get the substation
         req = dp.ListLocationsRequest(
             location_uuids_filter=[substation_uuid],
@@ -249,25 +245,25 @@ class Client(models.DatabaseInterface):
         )
 
         # Scale the forecast to the substation capacity
-        scale_factor: float = (
-            substation.effective_capacity_watts / gsp.effective_capacity_watts
-        )
+        scale_factor: float = substation.effective_capacity_watts / gsp.effective_capacity_watts
         for value in forecast:
             value.PowerKW = value.PowerKW * scale_factor
 
         log.debug(
             "gsp=%s, substation=%s, scalefactor=%s, scaling GSP to substation",
-            gsp.location_uuid, substation.location_uuid, scale_factor,
+            gsp.location_uuid,
+            substation.location_uuid,
+            scale_factor,
         )
 
         return forecast
 
     @override
-    async def get_location(
+    async def get_substation(
         self,
         location_uuid: UUID,
         authdata: dict[str, str],
-    ) -> models.SiteProperties:
+    ) -> models.SubstationProperties:
         req = dp.ListLocationsRequest(
             location_uuids_filter=[location_uuid],
             energy_source_filter=dp.EnergySource.SOLAR,
@@ -281,15 +277,9 @@ class Client(models.DatabaseInterface):
             )
         loc = resp.locations[0]
 
-        return models.Site(
-            site_uuid=loc.location_uuid,
-            client_site_name=loc.location_name,
-            orientation=loc.metadata.fields["orientation"].number_value
-            if "orientation" in loc.metadata.fields
-            else None,
-            tilt=loc.metadata.fields["tilt"].number_value
-            if "tilt" in loc.metadata.fields
-            else None,
+        return models.SubstationProperties(
+            substation_name=loc.location_name,
+            substation_type="primary",
             capacity_kw=loc.effective_capacity_watts // 1000.0,
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
@@ -339,7 +329,7 @@ class Client(models.DatabaseInterface):
         oauth_id: str | None,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True, # noqa: ARG002
+        smooth_flag: bool = True,  # noqa: ARG002
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:

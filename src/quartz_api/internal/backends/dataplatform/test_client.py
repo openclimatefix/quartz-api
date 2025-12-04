@@ -12,18 +12,18 @@ from .client import Client
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
+
 def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsResponse:
     if req.user_oauth_id_filter != "access_user":
         return dp.ListLocationsResponse(locations=[])
 
     match req.location_type_filter:
         case dp.LocationType.SITE:
-            capacity = 1e3            
+            capacity = 1e3
         case dp.LocationType.PRIMARY_SUBSTATION:
             capacity = 1e5
         case _:
             capacity = 1e6
-
 
     return dp.ListLocationsResponse(
         locations=[
@@ -253,7 +253,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(resp), tc.expected_num_substations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_location(
+    async def test_get_substation(
         self,
         client_mock: dp.DataPlatformDataServiceStub,
     ) -> None:
@@ -266,7 +266,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         testcases: list[TestCase] = [
             TestCase(
-                name="Should return location when user has access",
+                name="Should return substation when user has access",
                 location_uuid=str(uuid.uuid4()),
                 authdata={"sub": "access_user"},
                 should_error=False,
@@ -286,12 +286,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        await client.get_location(
+                        await client.get_substation(
                             location_uuid=tc.location_uuid,
                             authdata=tc.authdata,
                         )
                 else:
-                    resp = await client.get_location(
+                    resp = await client.get_substation(
                         location_uuid=tc.location_uuid,
                         authdata=tc.authdata,
                     )
@@ -350,4 +350,3 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     actual_values = [v.PowerKW for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)
-

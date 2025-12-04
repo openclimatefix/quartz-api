@@ -45,10 +45,10 @@ from pyhocon import ConfigFactory
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
+from quartz_api.internal import service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
 from quartz_api.internal.models import DatabaseInterface, get_db_client
-from quartz_api.internal import service
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)

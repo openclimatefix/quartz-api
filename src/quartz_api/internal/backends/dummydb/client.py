@@ -182,28 +182,29 @@ class Client(models.DatabaseInterface):
     async def get_substations(
         self,
         authdata: dict[str, str],
-    ) -> list[models.Site]:
+    ) -> list[models.Substation]:
         uuid = str(uuid4())
 
-        site = models.Site(
-            site_uuid=uuid,
-            client_site_id=1,
+        sub = models.Substation(
+            substation_uuid=uuid,
+            substation_name="Dummy Substation",
+            substation_type="primary",
             latitude=26,
             longitude=76,
             capacity_kw=76,
         )
 
-        return [site]
+        return [sub]
 
     @override
-    async def get_location(
+    async def get_substation(
         self,
         location_uuid: str,
         authdata: dict[str, str],
-    ) -> models.Site:
-        return models.Site(
-            site_uuid=uuid4(),
-            client_site_id=1,
+    ) -> models.SubstationProperties:
+        return models.SubstationProperties(
+            substation_name="Dummy Substation",
+            substation_type="primary",
             latitude=26,
             longitude=76,
             capacity_kw=76,
@@ -215,7 +216,7 @@ class Client(models.DatabaseInterface):
         location: str,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
-        values = self.get_predicted_solar_power_production_for_location(location="dummy")
+        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
 
         return values
 

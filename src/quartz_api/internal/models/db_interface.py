@@ -9,11 +9,11 @@ from fastapi import Depends, HTTPException
 from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
-    LocationPropertiesBase,
     PredictedPower,
     Site,
     SiteProperties,
     Substation,
+    SubstationProperties,
 )
 
 
@@ -133,12 +133,12 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_location(
+    async def get_substation(
         self,
         location_uuid: UUID,
         authdata: dict[str, str],
-    ) -> LocationPropertiesBase:
-        """Get location metadata."""
+    ) -> SubstationProperties:
+        """Get substation metadata."""
         pass
 
 def get_db_client() -> DatabaseInterface:

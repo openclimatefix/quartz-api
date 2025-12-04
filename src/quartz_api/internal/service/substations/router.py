@@ -38,7 +38,7 @@ async def get_substation(
     auth: AuthDependency,
 ) -> models.SubstationProperties:
     """Get a substation by UUID."""
-    substation = await db.get_location(
+    substation = await db.get_substation(
         location_uuid=substation_uuid,
         authdata=auth,
     )
@@ -59,3 +59,4 @@ async def get_substation_forecast(
         authdata=auth,
     )
     return forecast
+
