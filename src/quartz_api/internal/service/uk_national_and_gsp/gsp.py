@@ -77,10 +77,6 @@ async def get_truths_for_a_specific_gsp(
     raise NotImplementedError()
 
 
-# TODO add forecast/all and pvlive/all route. 
+# TODO add forecast/all and pvlive/all route.
 # These are hidden but used by the UI
-
-# TODO legacy routes that are stil used by some clients
-# forecast/{gsp_id}
-# pvlive/{gsp_id}
 
