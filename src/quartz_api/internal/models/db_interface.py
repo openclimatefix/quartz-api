@@ -124,6 +124,15 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def get_substation_forecast(
+        self,
+        location: UUID,
+        authdata: dict[str, str],
+    ) -> list[PredictedPower]:
+        """Get forecasted generation values of a substation."""
+        pass
+
+    @abc.abstractmethod
     async def get_location(
         self,
         location_uuid: UUID,

@@ -439,6 +439,14 @@ class Client(models.DatabaseInterface):
         raise NotImplementedError("QuartzDB backend does not support substations")
 
     @override
+    async def get_substation_forecast(
+        self,
+        substation_uuid: str,
+        auth: AuthDependency,
+    ) -> list[models.PredictedPower]:
+        raise NotImplementedError("QuartzDB backend does not support substations")
+
+    @override
     async def get_location(
         self,
         location_uuid: str,

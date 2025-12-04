@@ -2,6 +2,7 @@
 
 import datetime as dt
 import logging
+from uuid import UUID
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
@@ -207,20 +208,56 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation_forecast(
         self,
-        substation_uuid: str,
+        substation_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
+
+        # Get the substation
+        req = dp.ListLocationsRequest(
+            location_uuids_filter=[substation_uuid],
+            energy_source_filter=dp.EnergySource.SOLAR,
+            location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
+            user_oauth_id_filter=authdata["sub"],
+        )
+        resp = await self.dp_client.list_locations(req)
+        if len(resp.locations) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No substation found for UUID '{substation_uuid}'",
+            )
+        substation = resp.locations[0]
+
+        # Get the GSP that the substation belongs to
+        req = dp.ListLocationsRequest(
+            enclosed_location_uuid_filter=[substation_uuid],
+            location_type_filter=dp.LocationType.GSP,
+            user_oauth_id_filter=authdata["sub"],
+        )
+        gsps = await self.dp_client.list_locations(req)
+        if len(gsps.locations) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No GSP found for substation UUID '{substation_uuid}'",
+            )
+        gsp = gsps.locations[0]
         forecast = await self._get_predicted_power_production_for_location(
-            substation_uuid,
+            gsp.location_uuid,
             dp.EnergySource.SOLAR,
             authdata["sub"],
         )
+
+        # Scale the forecast to the substation capacity
+        for value in forecast:
+            value.PowerKW = value.PowerKW * (
+                substation.effective_capacity_watts / gsp.effective_capacity_watts
+            )
+
         return forecast
 
     @override
     async def get_location(
         self,
-        location_uuid: str,
+        location_uuid: UUID,
         authdata: dict[str, str],
     ) -> models.SiteProperties:
         req = dp.ListLocationsRequest(
@@ -233,11 +270,6 @@ class Client(models.DatabaseInterface):
             raise HTTPException(
                 status_code=404,
                 detail=f"No substation found for UUID '{location_uuid}'",
-            )
-        if len(resp.locations) > 1:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Multiple locations found for UUID '{location_uuid}'",
             )
         loc = resp.locations[0]
 

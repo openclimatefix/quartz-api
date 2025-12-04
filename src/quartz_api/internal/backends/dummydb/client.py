@@ -202,12 +202,23 @@ class Client(models.DatabaseInterface):
         authdata: dict[str, str],
     ) -> models.Site:
         return models.Site(
-            site_uuid=str(uuid4()),
+            site_uuid=uuid4(),
             client_site_id=1,
             latitude=26,
             longitude=76,
             capacity_kw=76,
         )
+
+    @override
+    async def get_substation_forecast(
+        self,
+        location: str,
+        authdata: dict[str, str],
+    ) -> list[models.PredictedPower]:
+        values = self.get_predicted_solar_power_production_for_location(location="dummy")
+
+        return values
+
 
 def _basicSolarPowerProductionFunc(
     timeUnix: int,

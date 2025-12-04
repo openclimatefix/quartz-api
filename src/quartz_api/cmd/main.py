@@ -27,10 +27,11 @@ curl -X GET 'https://api.quartz.energy/<route>' -H "Authorization: Bearer $TOKEN
 ```
 """
 
+import importlib
+import importlib.metadata
 import logging
 import pathlib
 import sys
-from importlib.metadata import version
 from typing import Any
 
 import uvicorn
@@ -47,7 +48,7 @@ from starlette.staticfiles import StaticFiles
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
 from quartz_api.internal.models import DatabaseInterface, get_db_client
-from quartz_api.internal.service import regions, sites, substations
+from quartz_api.internal import service
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -94,7 +95,7 @@ def run() -> None:
 
     # Create the FastAPI server
     server = FastAPI(
-        version=version("quartz_api"),
+        version=importlib.metadata.version("quartz_api"),
         title="Quartz API",
         description=__doc__,
         openapi_tags=[{
@@ -133,7 +134,7 @@ def run() -> None:
         )
 
         sentry_sdk.set_tag("app_name", "quartz_api")
-        sentry_sdk.set_tag("version", version("quartz_api"))
+        sentry_sdk.set_tag("version", importlib.metadata.version("quartz_api"))
 
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
@@ -188,14 +189,16 @@ def run() -> None:
     )
 
     # Add routers to the server according to configuration
-    for router_module in [sites, regions, substations]:
-        if conf.get_string("api.router") == router_module.__name__.split(".")[-1]:
-            server.include_router(router_module.router)
-            server.openapi_tags = [{
-                "name": router_module.__name__.split(".")[-1].capitalize(),
-                "description": router_module.__doc__,
-            }, *server.openapi_tags]
-            break
+    for r in conf.get_string("api.routers").split(","):
+        try:
+            mod = importlib.import_module(service.__name__ + f".{r}")
+            server.include_router(mod.router)
+        except ModuleNotFoundError as e:
+            raise OSError(f"No such router router '{r}'") from e
+        server.openapi_tags = [{
+            "name": mod.__name__.split(".")[-1].capitalize(),
+            "description": mod.__doc__,
+        }, *server.openapi_tags]
 
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)

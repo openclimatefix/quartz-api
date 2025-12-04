@@ -12,29 +12,37 @@ from .client import Client
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
-
 def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsResponse:
-    if req.user_oauth_id_filter == "access_user":
-        return dp.ListLocationsResponse(
-            locations=[
-                dp.ListLocationsResponseLocationSummary(
-                    location_name="mock_location",
-                    location_uuid=str(uuid.uuid4()),
-                    energy_source=dp.EnergySource.SOLAR,
-                    effective_capacity_watts=1e6,
-                    location_type=req.location_type_filter,
-                    latlng=dp.LatLng(51.5, -0.1),
-                    metadata=Struct(
-                        fields={
-                            "orientation": Value(number_value=180.0),
-                            "tilt": Value(number_value=30.0),
-                        },
-                    ),
+    if req.user_oauth_id_filter != "access_user":
+        return dp.ListLocationsResponse(locations=[])
+
+    match req.location_type_filter:
+        case dp.LocationType.SITE:
+            capacity = 1e3            
+        case dp.LocationType.PRIMARY_SUBSTATION:
+            capacity = 1e5
+        case _:
+            capacity = 1e6
+
+
+    return dp.ListLocationsResponse(
+        locations=[
+            dp.ListLocationsResponseLocationSummary(
+                location_name="mock_location",
+                location_uuid=str(uuid.uuid4()),
+                energy_source=dp.EnergySource.SOLAR,
+                effective_capacity_watts=capacity,
+                location_type=req.location_type_filter,
+                latlng=dp.LatLng(51.5, -0.1),
+                metadata=Struct(
+                    fields={
+                        "orientation": Value(number_value=180.0),
+                        "tilt": Value(number_value=30.0),
+                    },
                 ),
+            ),
         ],
     )
-    else:
-        return dp.ListLocationsResponse(locations=[])
 
 
 def mock_get_forecast(
@@ -46,10 +54,10 @@ def mock_get_forecast(
                 target_timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 p50_value_fraction=0.5,
                 effective_capacity_watts=1e6,
-                initialization_timestamp_utc=\
-                    TEST_TIMESTAMP_UTC - dt.timedelta(minutes=req.horizon_mins),
-                created_timestamp_utc=\
-                    TEST_TIMESTAMP_UTC - dt.timedelta(hours=1, minutes=req.horizon_mins),
+                initialization_timestamp_utc=TEST_TIMESTAMP_UTC
+                - dt.timedelta(minutes=req.horizon_mins),
+                created_timestamp_utc=TEST_TIMESTAMP_UTC
+                - dt.timedelta(hours=1, minutes=req.horizon_mins),
                 other_statistics_fractions={"p90": 0.9, "p10": 0.1},
                 metadata=Struct(fields={}),
             )
@@ -78,14 +86,17 @@ def mock_get_latest_forecasts(
 ) -> dp.GetLatestForecastsResponse:
     t = req.pivot_timestamp_utc - dt.timedelta(hours=1)
     forecaster_name = f"mock_forecaster_{t.day}{t.hour}"
-    return dp.GetLatestForecastsResponse(forecasts=[
-        dp.GetLatestForecastsResponseForecast(
-            initialization_timestamp_utc=t,
-            created_timestamp_utc=t - dt.timedelta(hours=1),
-            forecaster=dp.Forecaster(forecaster_name, forecaster_version="1.0"),
-            location_uuid=req.location_uuid,
-        ),
-    ])
+    return dp.GetLatestForecastsResponse(
+        forecasts=[
+            dp.GetLatestForecastsResponseForecast(
+                initialization_timestamp_utc=t,
+                created_timestamp_utc=t - dt.timedelta(hours=1),
+                forecaster=dp.Forecaster(forecaster_name, forecaster_version="1.0"),
+                location_uuid=req.location_uuid,
+            ),
+        ],
+    )
+
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
@@ -285,4 +296,58 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         authdata=tc.authdata,
                     )
                     self.assertIsNotNone(resp)
+
+    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    async def test_get_substation_forecast(
+        self,
+        client_mock: dp.DataPlatformDataServiceStub,
+    ) -> None:
+        @dataclasses.dataclass
+        class TestCase:
+            name: str
+            substation_uuid: str
+            authdata: dict[str, str]
+            expected_values: list[float]
+            should_error: bool
+
+        testcases: list[TestCase] = [
+            TestCase(
+                name="Should return GSP-scaled forecast when user has access",
+                substation_uuid=str(uuid.uuid4()),
+                authdata={"sub": "access_user"},
+                # The forecast returns 5e5 watts for every value, and the substation's
+                # effective capacity is 1e5 watts (10% of the GSP's 1e6 watts), so
+                # the scaled values should be 0.1*5e5W = 50kW for each entry.
+                expected_values=[50] * 5,
+                should_error=False,
+            ),
+            TestCase(
+                name="Should raise HTTPException when user has no access",
+                substation_uuid=str(uuid.uuid4()),
+                authdata={"sub": "no_access_user"},
+                expected_values=[],
+                should_error=True,
+            ),
+        ]
+
+        client = Client.from_dp(client_mock)
+        for tc in testcases:
+            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
+            client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
+
+            with self.subTest(tc.name):
+                if tc.should_error:
+                    with self.assertRaises(HTTPException):
+                        resp = await client.get_substation_forecast(
+                            substation_uuid=tc.substation_uuid,
+                            authdata=tc.authdata,
+                        )
+                else:
+                    resp = await client.get_substation_forecast(
+                        substation_uuid=tc.substation_uuid,
+                        authdata=tc.authdata,
+                    )
+                    actual_values = [v.PowerKW for v in resp]
+                    self.assertListEqual(actual_values, tc.expected_values)
 
