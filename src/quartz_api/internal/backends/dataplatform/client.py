@@ -12,6 +12,8 @@ from quartz_api.internal import models
 
 from ..utils import get_window
 
+log = logging.getLogger("dataplatform.client")
+
 
 class Client(models.DatabaseInterface):
     """Defines a data platform interface that conforms to the DatabaseInterface."""
@@ -174,7 +176,7 @@ class Client(models.DatabaseInterface):
 
     @override
     async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
-        logging.warning("Data Platform client does not support logging API calls to DB.")
+        log.warning("Data Platform client does not support logging API calls to DB.")
         pass
 
     @override
@@ -247,10 +249,16 @@ class Client(models.DatabaseInterface):
         )
 
         # Scale the forecast to the substation capacity
+        scale_factor: float = (
+            substation.effective_capacity_watts / gsp.effective_capacity_watts
+        )
         for value in forecast:
-            value.PowerKW = value.PowerKW * (
-                substation.effective_capacity_watts / gsp.effective_capacity_watts
-            )
+            value.PowerKW = value.PowerKW * scale_factor
+
+        log.debug(
+            "gsp=%s, substation=%s, scalefactor=%s, scaling GSP to substation",
+            gsp.location_uuid, substation.location_uuid, scale_factor,
+        )
 
         return forecast
 
