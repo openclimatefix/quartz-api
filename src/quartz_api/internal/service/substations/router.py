@@ -52,11 +52,16 @@ async def get_substation_forecast(
     substation_uuid: UUID,
     db: models.DBClientDependency,
     auth: AuthDependency,
+    tz: models.TZDependency,
 ) -> list[models.PredictedPower]:
     """Get forecasted generation values of a substation."""
     forecast = await db.get_substation_forecast(
         location_uuid=substation_uuid,
         authdata=auth,
     )
+    forecast = [
+        value.to_timezone(tz=tz)
+        for value in forecast
+    ]
     return forecast
 
