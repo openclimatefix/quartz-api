@@ -59,6 +59,9 @@ quartz-api = "quartz_api.cmd.main:run"
 [tool.setuptools]
 include-package-data = false
 
+[tool.setuptools.package-data]
+"*" = ["*.conf", "*.ico", "*.png", "*.html", "*.js"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
