@@ -11,7 +11,6 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
-
 @router.get(
     "/substations",
     status_code=status.HTTP_200_OK,
