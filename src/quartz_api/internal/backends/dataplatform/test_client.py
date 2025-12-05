@@ -133,20 +133,20 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         @dataclasses.dataclass
         class TestCase:
             name: str
-            site_uuid: str
+            site_uuid: uuid.UUID
             authdata: dict[str, str]
             should_error: bool
 
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return forecast when user has access",
-                site_uuid=str(uuid.uuid4()),
+                site_uuid=uuid.uuid4(),
                 authdata={"sub": "access_user"},
                 should_error=False,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
-                site_uuid=str(uuid.uuid4()),
+                site_uuid=uuid.uuid4(),
                 authdata={"sub": "no_access_user"},
                 should_error=True,
             ),
@@ -180,20 +180,20 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         @dataclasses.dataclass
         class TestCase:
             name: str
-            site_uuid: str
+            site_uuid: uuid.UUID
             authdata: dict[str, str]
             should_error: bool
 
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return generation when user has access",
-                site_uuid=str(uuid.uuid4()),
+                site_uuid=uuid.uuid4(),
                 authdata={"sub": "access_user"},
                 should_error=False,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
-                site_uuid=str(uuid.uuid4()),
+                site_uuid=uuid.uuid4(),
                 authdata={"sub": "no_access_user"},
                 should_error=True,
             ),
@@ -260,20 +260,20 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         @dataclasses.dataclass
         class TestCase:
             name: str
-            location_uuid: str
+            location_uuid: uuid.UUID
             authdata: dict[str, str]
             should_error: bool
 
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return substation when user has access",
-                location_uuid=str(uuid.uuid4()),
+                location_uuid=uuid.uuid4(),
                 authdata={"sub": "access_user"},
                 should_error=False,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
-                location_uuid=str(uuid.uuid4()),
+                location_uuid=uuid.uuid4(),
                 authdata={"sub": "no_access_user"},
                 should_error=True,
             ),
@@ -305,7 +305,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         @dataclasses.dataclass
         class TestCase:
             name: str
-            substation_uuid: str
+            substation_uuid: uuid.UUID
             authdata: dict[str, str]
             expected_values: list[float]
             should_error: bool
@@ -313,7 +313,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return GSP-scaled forecast when user has access",
-                substation_uuid=str(uuid.uuid4()),
+                substation_uuid=uuid.uuid4(),
                 authdata={"sub": "access_user"},
                 # The forecast returns 5e5 watts for every value, and the substation's
                 # effective capacity is 1e5 watts (10% of the GSP's 1e6 watts), so
@@ -323,7 +323,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
-                substation_uuid=str(uuid.uuid4()),
+                substation_uuid=uuid.uuid4(),
                 authdata={"sub": "no_access_user"},
                 expected_values=[],
                 should_error=True,

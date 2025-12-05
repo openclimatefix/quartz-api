@@ -2,9 +2,11 @@
 
 import datetime as dt
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
+from fastapi import Depends
 from pydantic import BaseModel, Field
 
 
@@ -29,12 +31,12 @@ class PredictedPower(BaseModel):
     Time: dt.datetime
     CreatedTime: dt.datetime = Field(exclude=True)
 
-    def to_timezone(self, tz: dt.timezone) -> "PredictedPower":
+    def to_timezone(self, tz: str) -> "PredictedPower":
         """Converts the time of this predicted power value to the given timezone."""
         return PredictedPower(
             PowerKW=self.PowerKW,
-            Time=self.Time.astimezone(tz=tz),
-            CreatedTime=self.CreatedTime.astimezone(tz=tz),
+            Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
+            CreatedTime=self.CreatedTime.astimezone(tz=ZoneInfo(key=tz)),
         )
 
 
@@ -44,11 +46,11 @@ class ActualPower(BaseModel):
     PowerKW: float
     Time: dt.datetime
 
-    def to_timezone(self, tz: dt.timezone) -> "ActualPower":
+    def to_timezone(self, tz: str) -> "ActualPower":
         """Converts the time of this predicted power value to the given timezone."""
         return ActualPower(
             PowerKW=self.PowerKW,
-            Time=self.Time.astimezone(tz=tz),
+            Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
 class LocationPropertiesBase(BaseModel):
@@ -121,3 +123,11 @@ class Substation(SubstationProperties):
     )
 
 
+def get_timezone() -> str:
+    """Stub function for timezone dependency.
+
+    Note: This should be overidden in the router to provide the actual timezone.
+    """
+    return "UTC"
+
+TZDependency = Annotated[str, Depends(get_timezone)]

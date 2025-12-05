@@ -10,11 +10,9 @@ from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette import status
-from starlette.requests import Request
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.service.constants import local_tz
 
 from ._csv import format_csv_and_created_time
 from ._resample import resample_generation
@@ -78,10 +76,10 @@ class GetHistoricGenerationResponse(BaseModel):
 )
 async def get_historic_timeseries_route(
     source: ValidSource,
-    request: Request,
     region: str,
     db: models.DBClientDependency,
     auth: AuthDependency,
+    tz: models.TZDependency,
     # TODO: add auth scopes
     resample_minutes: int | None = None,
 ) -> GetHistoricGenerationResponse:
@@ -100,10 +98,14 @@ async def get_historic_timeseries_route(
         ) from e
 
     if resample_minutes is not None:
-        values = resample_generation(values=values, internal_minutes=resample_minutes)
+        values = resample_generation(values=values, interval_minutes=resample_minutes)
 
     return GetHistoricGenerationResponse(
-        values=[y.to_timezone(tz=local_tz) for y in values if y.Time < dt.datetime.now(tz=dt.UTC)],
+        values=[
+            y.to_timezone(tz=tz)
+            for y in values
+            if y.Time < dt.datetime.now(tz=dt.UTC)
+        ],
     )
 
 
@@ -122,6 +124,7 @@ async def get_forecast_timeseries_route(
     region: str,
     db: models.DBClientDependency,
     auth: AuthDependency,
+    tz: models.TZDependency,
     # TODO: add auth scopes
     forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.day_ahead,
     forecast_horizon_minutes: int | None = None,
@@ -159,7 +162,7 @@ async def get_forecast_timeseries_route(
         ) from e
 
     return GetForecastGenerationResponse(
-        values=[y.to_timezone(tz=local_tz) for y in values],
+        values=[y.to_timezone(tz=tz) for y in values],
     )
 
 
@@ -172,7 +175,8 @@ async def get_forecast_csv(
     region: str,
     db: models.DBClientDependency,
     auth: AuthDependency,
-    forecast_horizon: models.ForecastHorizon | None = models.ForecastHorizon.latest,
+    tz: models.TZDependency,
+    forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
 ) -> StreamingResponse:
     """Route to get the day ahead forecast as a CSV file.
 
@@ -197,6 +201,7 @@ async def get_forecast_csv(
         auth=auth,
         forecast_horizon=forecast_horizon,
         smooth_flag=False,
+        tz=tz,
     )
 
     # format to dataframe
@@ -206,6 +211,7 @@ async def get_forecast_csv(
     )
 
     # make file format
+    # NOTE: See note above format_csv_and_created_time about timezones
     now_ist = pd.Timestamp.now(tz="Asia/Kolkata")
     tomorrow_ist = df["Date [IST]"].iloc[0]
     match forecast_horizon:

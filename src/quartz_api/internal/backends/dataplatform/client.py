@@ -36,7 +36,7 @@ class Client(models.DatabaseInterface):
         smooth_flag: bool = True,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
-            location=location,
+            location_uuid=UUID(location),
             energy_source=dp.EnergySource.SOLAR,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
@@ -54,7 +54,7 @@ class Client(models.DatabaseInterface):
         smooth_flag: bool = True,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
-            location=location,
+            location_uuid=UUID(location),
             energy_source=dp.EnergySource.WIND,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
@@ -69,7 +69,7 @@ class Client(models.DatabaseInterface):
         location: str,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
-            location,
+            UUID(location),
             dp.EnergySource.SOLAR,
             oauth_id=None,
         )
@@ -81,7 +81,7 @@ class Client(models.DatabaseInterface):
         location: str,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
-            location,
+            UUID(location),
             dp.EnergySource.WIND,
             oauth_id=None,
         )
@@ -133,7 +133,7 @@ class Client(models.DatabaseInterface):
     @override
     async def put_site(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         site_properties: models.SiteProperties,
         authdata: dict[str, str],
     ) -> models.Site:
@@ -142,7 +142,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_site_forecast(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
         forecast = await self._get_predicted_power_production_for_location(
@@ -155,7 +155,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.ActualPower]:
         generation = await self._get_actual_power_production_for_location(
@@ -168,7 +168,7 @@ class Client(models.DatabaseInterface):
     @override
     async def post_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
@@ -196,7 +196,7 @@ class Client(models.DatabaseInterface):
                 substation_name=loc.location_name,
                 substation_type="primary"
                 if loc.location_type == dp.LocationType.PRIMARY_SUBSTATION
-                else "unknown",
+                else "secondary",
                 capacity_kw=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
@@ -288,14 +288,14 @@ class Client(models.DatabaseInterface):
 
     async def _get_actual_power_production_for_location(
         self,
-        location: str,
+        location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
     ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
             await self._check_user_access(
-                location,
+                location_uuid,
                 energy_source,
                 dp.LocationType.SITE,
                 oauth_id,
@@ -303,7 +303,7 @@ class Client(models.DatabaseInterface):
 
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
-            location_uuid=location,
+            location_uuid=location_uuid,
             observer_name="ruvnl",
             energy_source=energy_source,
             time_window=dp.TimeWindow(
@@ -324,7 +324,7 @@ class Client(models.DatabaseInterface):
 
     async def _get_predicted_power_production_for_location(
         self,
-        location: str,
+        location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
@@ -334,7 +334,7 @@ class Client(models.DatabaseInterface):
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
             _ = await self._check_user_access(
-                location,
+                location_uuid,
                 energy_source,
                 dp.LocationType.SITE,
                 oauth_id,
@@ -354,7 +354,7 @@ class Client(models.DatabaseInterface):
         # taking into account the desired horizon.
         # * At some point, we may want to allow the user to specify a particular forecaster.
         req = dp.GetLatestForecastsRequest(
-            location_uuid=location,
+            location_uuid=location_uuid,
             energy_source=energy_source,
             pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
         )
@@ -368,7 +368,7 @@ class Client(models.DatabaseInterface):
         forecaster = resp.forecasts[0].forecaster
 
         req = dp.GetForecastAsTimeseriesRequest(
-            location_uuid=location,
+            location_uuid=location_uuid,
             energy_source=energy_source,
             horizon_mins=forecast_horizon_minutes,
             time_window=dp.TimeWindow(
@@ -391,14 +391,14 @@ class Client(models.DatabaseInterface):
 
     async def _check_user_access(
         self,
-        location: str,
+        location_uuid: UUID,
         energy_source: dp.EnergySource,
         location_type: dp.LocationType,
         oauth_id: str,
     ) -> bool:
         """Check if a user has access to a given location."""
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[location],
+            location_uuids_filter=[location_uuid],
             energy_source_filter=energy_source,
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
@@ -407,6 +407,6 @@ class Client(models.DatabaseInterface):
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No location found for UUID {location} and OAuth ID {oauth_id}",
+                detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
             )
         return True

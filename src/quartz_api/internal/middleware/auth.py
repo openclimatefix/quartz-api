@@ -6,7 +6,6 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from typing_extensions import override
 
 token_auth_scheme = HTTPBearer()
 
@@ -38,7 +37,7 @@ class Auth0:
             raise HTTPException(status_code=401, detail=str(e)) from e
 
         try:
-            payload = jwt.decode(
+            payload: dict[str, str] = jwt.decode(
                 token,
                 signing_key,
                 algorithms=self._algorithm,
@@ -56,8 +55,8 @@ class Auth0:
 class DummyAuth:
     """Dummy auth dependency for testing purposes."""
 
-    @override
     def __call__(self) -> dict[str, str]:
+        """Return a dummy authentication payload."""
         return {
             EMAIL_KEY: "test@test.com",
             "sub": "google-oath2|012345678909876543210",

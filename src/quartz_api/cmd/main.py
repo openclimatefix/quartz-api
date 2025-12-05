@@ -45,10 +45,9 @@ from pyhocon import ConfigFactory
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from quartz_api.internal import service
+from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
-from quartz_api.internal.models import DatabaseInterface, get_db_client
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -150,7 +149,7 @@ def run() -> None:
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
-    db_instance: DatabaseInterface
+    db_instance: models.DatabaseInterface
     match conf.get_string("backend.source"):
         case "quartzdb":
             db_instance = QuartzClient(
@@ -173,7 +172,11 @@ def run() -> None:
                 f"Expected one of {list(conf.get('backend').keys())}",
             )
 
-    server.dependency_overrides[get_db_client] = lambda: db_instance
+    server.dependency_overrides[models.get_db_client] = lambda: db_instance
+
+    # Add IANA timezone dependency
+    timezone: str = conf.get_string("api.timezone")
+    server.dependency_overrides[models.get_timezone] = lambda: timezone
 
     # Add middlewares
     server.add_middleware(

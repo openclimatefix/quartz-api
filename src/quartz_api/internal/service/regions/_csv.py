@@ -7,10 +7,13 @@ import pandas as pd
 from quartz_api.internal.models import ForecastHorizon, PredictedPower
 
 
+# NOTE: We should probably make this take a timezone argument.
+# This would mean changing the column names, so I'm leaving it for now,
+# as I don't know whether this would affect clients.
 def format_csv_and_created_time(
     values: list[PredictedPower],
     forecast_horizon: ForecastHorizon,
-) -> (pd.DataFrame, datetime):
+) -> tuple[pd.DataFrame, datetime]:
     """Format the predicted power values into a pandas dataframe ready for CSV export.
 
     We also get the maximum created time of these forecasts

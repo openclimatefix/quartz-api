@@ -246,7 +246,7 @@ class Client(models.DatabaseInterface):
             sites = []
             for site_sql in sites_sql:
                 site = models.Site(
-                    site_uuid=str(site_sql.location_uuid),
+                    site_uuid=site_sql.location_uuid,
                     client_site_name=site_sql.client_location_name,
                     orientation=site_sql.orientation,
                     tilt=site_sql.tilt,
@@ -261,14 +261,14 @@ class Client(models.DatabaseInterface):
     @override
     async def put_site(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         site_properties: models.SiteProperties,
         authdata: dict[str, str],
     ) -> models.Site:
         # get sites uuids from user
         with self._get_session() as session:
             user = get_user_by_email(session, authdata[EMAIL_KEY])
-            site = get_site_by_uuid(session, site_uuid)
+            site = get_site_by_uuid(session, str(site_uuid))
             check_user_has_access_to_site(session, authdata[EMAIL_KEY], site.location_uuid)
 
             site_dict = site_properties.model_dump(exclude_unset=True, exclude_none=False)
@@ -277,7 +277,7 @@ class Client(models.DatabaseInterface):
 
             site, _ = edit_site(
                 session=session,
-                site_uuid=site_uuid,
+                site_uuid=str(site_uuid),
                 site_info=site_info,
                 user_uuid=user.user_uuid,
             )
@@ -287,7 +287,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_site_forecast(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
         # TODO feels like there is some duplicated code here which could be refactored
@@ -306,20 +306,18 @@ class Client(models.DatabaseInterface):
             )
 
             # get site and the get the ml model name
-            site = get_site_by_uuid(session=session, site_uuid=site_uuid)
+            site = get_site_by_uuid(session=session, site_uuid=str(site_uuid))
             if site.ml_model is not None:
                 ml_model_name = site.ml_model.name
             log.info(f"Using ml model {ml_model_name}")
 
             values = get_latest_forecast_values_by_site(
                 session,
-                site_uuids=[UUID(site_uuid) if isinstance(site_uuid, str) else site_uuid],
+                site_uuids=[site_uuid],
                 start_utc=start,
                 model_name=ml_model_name,
             )
-            forecast_values: list[ForecastValueSQL] = values[
-                UUID(site_uuid) if isinstance(site_uuid, str) else site_uuid
-            ]
+            forecast_values: list[ForecastValueSQL] = values[site_uuid]
 
             # convert ForecastValueSQL to PredictedPower
         out = [
@@ -338,7 +336,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.ActualPower]:
         # TODO feels like there is some duplicated code here which could be refactored
@@ -352,9 +350,6 @@ class Client(models.DatabaseInterface):
                 email=authdata[EMAIL_KEY],
                 site_uuid=site_uuid,
             )
-
-            if isinstance(site_uuid, str):
-                site_uuid = UUID(site_uuid)
 
             # read actual generations
             values = get_pv_generation_by_sites(
@@ -380,7 +375,7 @@ class Client(models.DatabaseInterface):
     @override
     async def post_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
@@ -403,7 +398,7 @@ class Client(models.DatabaseInterface):
 
             generation_values_df = pd.DataFrame(generations)
             capacity_factor = float(os.getenv("ERROR_GENERATION_CAPACITY_FACTOR", 1.1))
-            site = get_site_by_uuid(session=session, site_uuid=site_uuid)
+            site = get_site_by_uuid(session=session, site_uuid=str(site_uuid))
             site_capacity_kw = site.capacity_kw
             exceeded_capacity = generation_values_df[
                 generation_values_df["power_kw"] > site_capacity_kw * capacity_factor
@@ -435,13 +430,13 @@ class Client(models.DatabaseInterface):
     async def get_substations(
         self,
         auth: AuthDependency,
-    ) -> list[models.Site]:
+    ) -> list[models.Substation]:
         raise NotImplementedError("QuartzDB backend does not support substations")
 
     @override
     async def get_substation_forecast(
         self,
-        substation_uuid: str,
+        substation_uuid: UUID,
         auth: AuthDependency,
     ) -> list[models.PredictedPower]:
         raise NotImplementedError("QuartzDB backend does not support substations")
@@ -449,7 +444,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation(
         self,
-        location_uuid: str,
+        location_uuid: UUID,
         auth: AuthDependency,
     ) -> models.SubstationProperties:
         raise NotImplementedError("QuartzDB backend does not support substations")
@@ -457,17 +452,16 @@ class Client(models.DatabaseInterface):
 def check_user_has_access_to_site(
     session: Session,
     email: str,
-    site_uuid: str,
+    site_uuid: UUID,
 ) -> None:
     """Checks if a user has access to a site."""
     user = get_user_by_email(session=session, email=email)
     site_uuids = [str(site.location_uuid) for site in user.location_group.locations]
-    site_uuid = str(site_uuid)
 
-    if site_uuid not in site_uuids:
+    if str(site_uuid) not in site_uuids:
         raise HTTPException(
             status_code=403,
             detail=f"Forbidden. User ({email}) "
-            f"does not have access to this site {site_uuid}. "
-            f"User has access to {site_uuids}",
+            f"does not have access to this site {site_uuid!s}. "
+            f"User has access to {[str(s) for s in site_uuids]}",
         )

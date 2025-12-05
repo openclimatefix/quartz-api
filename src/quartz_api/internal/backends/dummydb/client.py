@@ -4,7 +4,7 @@
 import datetime as dt
 import math
 import random
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from typing_extensions import override
 
@@ -26,6 +26,7 @@ class Client(models.DatabaseInterface):
         location: str,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
+        smooth_flag: bool = True,
     ) -> list[models.PredictedPower]:
         # Get the window
         start, end = get_window()
@@ -51,6 +52,7 @@ class Client(models.DatabaseInterface):
         location: str,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
+        smooth_flag: bool = True,
     ) -> list[models.PredictedPower]:
         # Get the window
         start, end = get_window()
@@ -128,14 +130,14 @@ class Client(models.DatabaseInterface):
 
     @override
     async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
-        uuid = str(uuid4())
-
         site = models.Site(
-            site_uuid=uuid,
-            client_site_id=1,
+            site_uuid=uuid4(),
+            client_site_name="Dummy Site",
             latitude=26,
             longitude=76,
             capacity_kw=76,
+            orientation=180,
+            tilt=30,
         )
 
         return [site]
@@ -143,36 +145,35 @@ class Client(models.DatabaseInterface):
     @override
     async def put_site(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         site_properties: models.SiteProperties,
         authdata: dict[str, str],
     ) -> models.Site:
-        pass
+        sites = await self.get_sites(authdata=authdata)
+        return sites[0]
 
     @override
     async def get_site_forecast(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
-        values = self.get_predicted_solar_power_production_for_location(location="dummy")
-
+        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
         return values
 
     @override
     async def get_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.ActualPower]:
-        values = self.get_actual_solar_power_production_for_location(location="dummy")
-
+        values = await self.get_actual_solar_power_production_for_location(location="dummy")
         return values
 
     @override
     async def post_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
@@ -183,10 +184,8 @@ class Client(models.DatabaseInterface):
         self,
         authdata: dict[str, str],
     ) -> list[models.Substation]:
-        uuid = str(uuid4())
-
         sub = models.Substation(
-            substation_uuid=uuid,
+            substation_uuid=uuid4(),
             substation_name="Dummy Substation",
             substation_type="primary",
             latitude=26,
@@ -199,7 +198,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation(
         self,
-        location_uuid: str,
+        location_uuid: UUID,
         authdata: dict[str, str],
     ) -> models.SubstationProperties:
         return models.SubstationProperties(
@@ -213,7 +212,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation_forecast(
         self,
-        location: str,
+        location_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
         values = await self.get_predicted_solar_power_production_for_location(location="dummy")

@@ -24,7 +24,7 @@ def client(engine: Engine, db_session: Session) -> Client:
 # Skip for now
 @pytest.mark.skip(reason="Not finished yet")
 class TestCsvExport:
-    def test_format_csv_and_created_time(self, client, forecast_values_wind) -> None:
+    def test_format_csv_and_created_time(self, client: Client, forecast_values_wind: None) -> None:
         """Test the format_csv_and_created_time function."""
         forecast_values_wind = client.get_predicted_wind_power_production_for_location(
             location="testID",

@@ -88,7 +88,7 @@ class DatabaseInterface(abc.ABC):
     @abc.abstractmethod
     async def put_site(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         site_properties: SiteProperties,
         authdata: dict[str, str],
     ) -> Site:
@@ -98,7 +98,7 @@ class DatabaseInterface(abc.ABC):
     @abc.abstractmethod
     async def get_site_forecast(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[PredictedPower]:
         """Get a forecast for a site."""
@@ -106,14 +106,14 @@ class DatabaseInterface(abc.ABC):
 
     @abc.abstractmethod
     async def get_site_generation(
-        self, site_uuid: str, authdata: dict[str, str],
+        self, site_uuid: UUID, authdata: dict[str, str],
     ) -> list[ActualPower]:
         """Get the generation for a site."""
         pass
 
     @abc.abstractmethod
     async def post_site_generation(
-        self, site_uuid: str, generation: list[ActualPower], authdata: dict[str, str],
+        self, site_uuid: UUID, generation: list[ActualPower], authdata: dict[str, str],
     ) -> None:
         """Post the generation for a site."""
         pass
@@ -126,7 +126,7 @@ class DatabaseInterface(abc.ABC):
     @abc.abstractmethod
     async def get_substation_forecast(
         self,
-        location: UUID,
+        location_uuid: UUID,
         authdata: dict[str, str],
     ) -> list[PredictedPower]:
         """Get forecasted generation values of a substation."""

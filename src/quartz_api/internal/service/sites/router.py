@@ -1,6 +1,7 @@
 """The 'sites' FastAPI router object and associated routes logic."""
 
 import pathlib
+from uuid import UUID
 
 from fastapi import APIRouter
 from starlette import status
@@ -28,7 +29,7 @@ async def get_sites(
     response_model=models.SiteProperties,
     status_code=status.HTTP_200_OK)
 async def put_site_info(
-    site_uuid: str,
+    site_uuid: UUID,
     site_info: models.SiteProperties,
     db: models.DBClientDependency,
     auth: AuthDependency,
@@ -50,12 +51,12 @@ async def put_site_info(
     status_code=status.HTTP_200_OK,
 )
 async def get_forecast(
-    site_uuid: str,
+    site_uuid: UUID,
     db: models.DBClientDependency,
     auth: AuthDependency,
 ) -> list[models.PredictedPower]:
     """Get forecast of a site."""
-    forecast = db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
+    forecast = await db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
     return forecast
 
 
@@ -64,7 +65,7 @@ async def get_forecast(
     status_code=status.HTTP_200_OK,
 )
 async def get_generation(
-    site_uuid: str,
+    site_uuid: UUID,
     db: models.DBClientDependency,
     auth: AuthDependency,
 ) -> list[models.ActualPower]:
@@ -78,7 +79,7 @@ async def get_generation(
     status_code=status.HTTP_200_OK,
 )
 async def post_generation(
-    site_uuid: str,
+    site_uuid: UUID,
     generation: list[models.ActualPower],
     db: models.DBClientDependency,
     auth: AuthDependency,
