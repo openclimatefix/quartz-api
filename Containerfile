@@ -42,6 +42,9 @@ WORKDIR /opt/app
 # Copy just the virtual environment into a runtime image
 COPY --from=build-app --chown=app:app /opt/app/.venv /opt/app/.venv
 
+# path for quartz-api
+ENV PATH="/opt/app/.venv/bin:${PATH}"
+
 # Health check and entrypoint
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:${PORT}/health || exit 1
