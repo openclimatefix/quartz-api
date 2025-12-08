@@ -27,6 +27,7 @@ class DatabaseInterface(abc.ABC):
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
+        model_name: str | None = None,
     ) -> list[PredictedPower]:
         """Returns a list of predicted solar power production for a given location.
 
@@ -35,6 +36,7 @@ class DatabaseInterface(abc.ABC):
             forecast_horizon: The forecast horizon to use.
             forecast_horizon_minutes: The forecast horizon in minutes to use.
             smooth_flag: Whether to smooth the forecast data.
+            model_name: The name of the model to use for predictions.
         """
         pass
 
@@ -42,6 +44,7 @@ class DatabaseInterface(abc.ABC):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
+        observer_name: str | None = None,
     ) -> list[ActualPower]:
         """Returns a list of actual solar power production for a given location."""
         pass
@@ -53,6 +56,7 @@ class DatabaseInterface(abc.ABC):
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
+        model_name: str | None = None,
     ) -> list[PredictedPower]:
         """Returns a list of predicted wind power production for a given location."""
         pass
@@ -61,6 +65,7 @@ class DatabaseInterface(abc.ABC):
     async def get_actual_wind_power_production_for_location(
         self,
         location: str,
+        observer_name: str | None = None,
     ) -> list[ActualPower]:
         """Returns a list of actual wind power production for a given location."""
         pass
@@ -100,13 +105,14 @@ class DatabaseInterface(abc.ABC):
         self,
         site_uuid: UUID,
         authdata: dict[str, str],
+        model_name: str | None = None,
     ) -> list[PredictedPower]:
         """Get a forecast for a site."""
         pass
 
     @abc.abstractmethod
     async def get_site_generation(
-        self, site_uuid: UUID, authdata: dict[str, str],
+        self, site_uuid: UUID, authdata: dict[str, str], observer_name: str | None = None,
     ) -> list[ActualPower]:
         """Get the generation for a site."""
         pass
