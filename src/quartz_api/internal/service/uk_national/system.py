@@ -1,15 +1,16 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'system' FastAPI router object."""
 
 
 from fastapi import APIRouter
 from starlette import status
 
+from quartz_api.internal.middleware.auth import AuthDependency
+
 from quartz_api.internal.models import (
     DBClientDependency,
 )
-from quartz_api.internal.middleware.auth import AuthDependency
 
-from .pydanitc_models import Location
+from .pydantic_models import Location
 
 router = APIRouter(tags=["System"])
 
@@ -53,8 +54,8 @@ async def get_system_details(
             # TODO make friendly name, but need to add this to the database
             region_name = region.region_name
 
-        location = Location(label=f"GSP_{gsp_id}",
-                            gsp_id=gsp_id,
+        location = Location(label=f"GSP_{region_gsp_id}",
+                            gsp_id=region_gsp_id,
                             gsp_name=gsp_name,
                             gsp_group=gsp_group,
                             region_name=region_name)

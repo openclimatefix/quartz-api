@@ -51,9 +51,6 @@ from starlette.staticfiles import StaticFiles
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
-from quartz_api.internal.models import DatabaseInterface, get_db_client
-from quartz_api.internal.service import regions, sites, uk_national_and_gsp
-
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -219,16 +216,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
 
-    # Add routers to the server according to configuration
-    for router_module in [sites, regions, uk_national_and_gsp]:
-        print(conf)
-        if conf.get_string("api.routers") == router_module.__name__.split(".")[-1]:
-            server.include_router(router_module.router)
-            server.openapi_tags = [{
-                "name": router_module.__name__.split(".")[-1].capitalize(),
-                "description": router_module.__doc__,
-            }, *server.openapi_tags]
-            break
+    return server
 
 
 

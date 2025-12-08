@@ -1,16 +1,17 @@
-"""The 'uk national and gsp' FastAPI router object and associated routes logic."""
+"""The 'national' FastAPI router object."""
 
 from enum import Enum
 
 from fastapi import APIRouter, Request
 from starlette import status
 
+from quartz_api.internal.middleware.auth import AuthDependency
+
 from quartz_api.internal.models import (
     DBClientDependency,
 )
-from quartz_api.internal.middleware.auth import AuthDependency
 
-from .pydanitc_models import NationalForecast, NationalForecastValue, NationalYield
+from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
 
 router = APIRouter(tags=["National"])
 
@@ -112,4 +113,4 @@ async def get_national_pvlive(
     raise NotImplementedError()
 
 
-# TODO add elexon back in (or not?)
+# Note have removed elexon API call, as not used
