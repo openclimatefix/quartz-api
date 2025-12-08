@@ -10,16 +10,9 @@ from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette import status
-from starlette.requests import Request
 
-from quartz_api.internal import (
-    ActualPower,
-    DBClientDependency,
-    ForecastHorizon,
-    PredictedPower,
-)
+from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.service.constants import local_tz
 
 from ._csv import format_csv_and_created_time
 from ._resample import resample_generation
@@ -59,7 +52,7 @@ ValidSource = Annotated[str, Path(
 )
 async def get_regions_route(
     source: ValidSource,
-    db: DBClientDependency,
+    db: models.DBClientDependency,
     auth: AuthDependency,
     # TODO: add auth scopes
 ) -> GetRegionsResponse:
@@ -74,7 +67,7 @@ async def get_regions_route(
 class GetHistoricGenerationResponse(BaseModel):
     """Model for the historic generation endpoint response."""
 
-    values: list[ActualPower]
+    values: list[models.ActualPower]
 
 
 @router.get(
@@ -83,15 +76,15 @@ class GetHistoricGenerationResponse(BaseModel):
 )
 async def get_historic_timeseries_route(
     source: ValidSource,
-    request: Request,
     region: str,
-    db: DBClientDependency,
+    db: models.DBClientDependency,
     auth: AuthDependency,
+    tz: models.TZDependency,
     # TODO: add auth scopes
     resample_minutes: int | None = None,
 ) -> GetHistoricGenerationResponse:
     """Get observed generation as a timeseries for a given source and region."""
-    values: list[ActualPower] = []
+    values: list[models.ActualPower] = []
 
     try:
         if source == "wind":
@@ -105,17 +98,21 @@ async def get_historic_timeseries_route(
         ) from e
 
     if resample_minutes is not None:
-        values = resample_generation(values=values, internal_minutes=resample_minutes)
+        values = resample_generation(values=values, interval_minutes=resample_minutes)
 
     return GetHistoricGenerationResponse(
-        values=[y.to_timezone(tz=local_tz) for y in values if y.Time < dt.datetime.now(tz=dt.UTC)],
+        values=[
+            y.to_timezone(tz=tz)
+            for y in values
+            if y.Time < dt.datetime.now(tz=dt.UTC)
+        ],
     )
 
 
 class GetForecastGenerationResponse(BaseModel):
     """Model for the forecast generation endpoint response."""
 
-    values: list[PredictedPower]
+    values: list[models.PredictedPower]
 
 
 @router.get(
@@ -125,10 +122,11 @@ class GetForecastGenerationResponse(BaseModel):
 async def get_forecast_timeseries_route(
     source: ValidSource,
     region: str,
-    db: DBClientDependency,
+    db: models.DBClientDependency,
     auth: AuthDependency,
+    tz: models.TZDependency,
     # TODO: add auth scopes
-    forecast_horizon: ForecastHorizon = ForecastHorizon.day_ahead,
+    forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.day_ahead,
     forecast_horizon_minutes: int | None = None,
     smooth_flag: bool = True,
 ) -> GetForecastGenerationResponse:
@@ -137,9 +135,9 @@ async def get_forecast_timeseries_route(
     The smooth_flag indicates whether to return smoothed forecasts or not.
     Note that for Day Ahead forecasts, smoothing is never applied.
     """
-    values: list[PredictedPower] = []
+    values: list[models.PredictedPower] = []
 
-    if forecast_horizon == ForecastHorizon.day_ahead:
+    if forecast_horizon == models.ForecastHorizon.day_ahead:
         smooth_flag = False
 
     try:
@@ -164,7 +162,7 @@ async def get_forecast_timeseries_route(
         ) from e
 
     return GetForecastGenerationResponse(
-        values=[y.to_timezone(tz=local_tz) for y in values],
+        values=[y.to_timezone(tz=tz) for y in values],
     )
 
 
@@ -175,9 +173,10 @@ async def get_forecast_timeseries_route(
 async def get_forecast_csv(
     source: ValidSource,
     region: str,
-    db: DBClientDependency,
+    db: models.DBClientDependency,
     auth: AuthDependency,
-    forecast_horizon: ForecastHorizon | None = ForecastHorizon.latest,
+    tz: models.TZDependency,
+    forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
 ) -> StreamingResponse:
     """Route to get the day ahead forecast as a CSV file.
 
@@ -187,8 +186,8 @@ async def get_forecast_csv(
     - day_ahead: The forecast for the next day, from 00:00.
     """
     if forecast_horizon is not None and forecast_horizon not in [
-        ForecastHorizon.latest,
-        ForecastHorizon.day_ahead,
+        models.ForecastHorizon.latest,
+        models.ForecastHorizon.day_ahead,
     ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -202,6 +201,7 @@ async def get_forecast_csv(
         auth=auth,
         forecast_horizon=forecast_horizon,
         smooth_flag=False,
+        tz=tz,
     )
 
     # format to dataframe
@@ -211,12 +211,13 @@ async def get_forecast_csv(
     )
 
     # make file format
+    # NOTE: See note above format_csv_and_created_time about timezones
     now_ist = pd.Timestamp.now(tz="Asia/Kolkata")
     tomorrow_ist = df["Date [IST]"].iloc[0]
     match forecast_horizon:
-        case ForecastHorizon.latest:
+        case models.ForecastHorizon.latest:
             forecast_type = "intraday"
-        case ForecastHorizon.day_ahead:
+        case models.ForecastHorizon.day_ahead:
             forecast_type = "da"
         case _:
             raise HTTPException(

@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow
+
 name: Tagged CI
 run-name: 'Tagged CI for ${{ github.ref_name }} by ${{ github.actor }}'
 

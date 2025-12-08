@@ -2,20 +2,21 @@
 
 import logging
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from quartz_api.internal import DatabaseInterface
+if TYPE_CHECKING:
+    from quartz_api.internal import models
 
 
 class RequestLoggerMiddleware(BaseHTTPMiddleware):
     """Middleware to log API requests to the database."""
 
-    def __init__(self, server: FastAPI, db_client: DatabaseInterface) -> None:
+    def __init__(self, server: FastAPI) -> None:
         """Initialize the middleware with the FastAPI server and database client."""
         super().__init__(server)
-        self.db_client = db_client
 
     async def dispatch(
         self,
@@ -38,6 +39,9 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
              url += f"?{request.url.query}"
 
         try:
+            db_client: models.DatabaseInterface = getattr(request.app.state, "db_instance", None)
+            if db_client is None:
+                raise RuntimeError("Database client not found in app state.")
             await self.db_client.save_api_call_to_db(url=url, authdata=auth)
         except Exception as e:
             logging.error(f"Failed to log request to DB: {e}")

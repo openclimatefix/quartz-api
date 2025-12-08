@@ -27,10 +27,14 @@ curl -X GET 'https://api.quartz.energy/<route>' -H "Authorization: Bearer $TOKEN
 ```
 """
 
+import functools
+import importlib
+import importlib.metadata
 import logging
 import pathlib
 import sys
-from importlib.metadata import version
+from collections.abc import Generator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
@@ -40,14 +44,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from grpclib.client import Channel
 from pydantic import BaseModel
-from pyhocon import ConfigFactory
+from pyhocon import ConfigFactory, ConfigTree
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
+from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth
-from quartz_api.internal.models import DatabaseInterface, get_db_client
-from quartz_api.internal.service import regions, sites, uk_national_and_gsp
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -58,6 +61,7 @@ class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
 
     status: int
+
 
 def _custom_openapi(server: FastAPI) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
@@ -87,20 +91,51 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
     return openapi_schema
 
 
-def run() -> None:
-    """Run the API using a uvicorn server."""
-    # Get the application configuration from the environment
-    conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
+@asynccontextmanager
+async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
+    """Configure FastAPI app instance with startup and shutdown events."""
+    db_instance: models.DatabaseInterface | None = None
+    grpc_channel: Channel | None = None
 
-    # Create the FastAPI server
+    match conf.get_string("backend.source"):
+        case "quartzdb":
+            db_instance = QuartzClient(
+                database_url=conf.get_string("backend.quartzdb.database_url"),
+            )
+        case "dummydb":
+            db_instance = DummyClient()
+            log.warning("disabled backend. NOT recommended for production")
+        case "dataplatform":
+            grpc_channel = Channel(
+                host=conf.get_string("backend.dataplatform.host"),
+                port=conf.get_int("backend.dataplatform.port"),
+            )
+            client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
+            db_instance = DataPlatformClient.from_dp(dp_client=client)
+        case _ as backend_type:
+            raise ValueError(f"Unknown backend: {backend_type}")
+
+    server.dependency_overrides[models.get_db_client] = lambda: db_instance
+
+    yield
+
+    if grpc_channel:
+        grpc_channel.close()
+
+
+def _create_server(conf: ConfigTree) -> FastAPI:
+    """Configure FastAPI app instance with routes, dependencies, and middleware."""
     server = FastAPI(
-        version=version("quartz_api"),
+        version=importlib.metadata.version("quartz_api"),
+        lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",
         description=__doc__,
-        openapi_tags=[{
-            "name": "API Information",
-            "description": "Routes providing information about the API.",
-        }],
+        openapi_tags=[
+            {
+                "name": "API Information",
+                "description": "Routes providing information about the API.",
+            },
+        ],
         docs_url="/swagger",
         redoc_url=None,
     )
@@ -126,14 +161,33 @@ def run() -> None:
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
         import sentry_sdk
+
         sentry_sdk.init(
             dsn=conf.get_string("sentry.dsn"),
             environment=conf.get_string("sentry.environment"),
             traces_sample_rate=1,
         )
 
-        sentry_sdk.set_tag("app_name", "quartz_api")
-        sentry_sdk.set_tag("version", version("quartz_api"))
+        sentry_sdk.set_tag("server_name", "quartz_api")
+        sentry_sdk.set_tag("version", importlib.metadata.version("quartz_api"))
+
+    # Add routers to the server according to configuration
+    for r in conf.get_string("api.routers").split(","):
+        try:
+            mod = importlib.import_module(service.__name__ + f".{r}")
+            server.include_router(mod.router)
+        except ModuleNotFoundError as e:
+            raise OSError(f"No such router router '{r}'") from e
+        server.openapi_tags = [
+            {
+                "name": mod.__name__.split(".")[-1].capitalize(),
+                "description": mod.__doc__,
+            },
+            *server.openapi_tags,
+        ]
+
+    # Customize the OpenAPI schema
+    server.openapi = lambda: _custom_openapi(server)
 
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
@@ -149,30 +203,8 @@ def run() -> None:
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
-    db_instance: DatabaseInterface
-    match conf.get_string("backend.source"):
-        case "quartzdb":
-            db_instance = QuartzClient(
-                database_url=conf.get_string("backend.quartzdb.database_url"),
-            )
-        case "dummydb":
-            db_instance = DummyClient()
-            log.warning("disabled backend. NOT recommended for production")
-        case "dataplatform":
-
-            channel = Channel(
-                host=conf.get_string("backend.dataplatform.host"),
-                port=conf.get_int("backend.dataplatform.port"),
-            )
-            client = dp.DataPlatformDataServiceStub(channel=channel)
-            db_instance = DataPlatformClient.from_dp(dp_client=client)
-        case _:
-            raise ValueError(
-                "Unknown backend. "
-                f"Expected one of {list(conf.get('backend').keys())}",
-            )
-
-    server.dependency_overrides[get_db_client] = lambda: db_instance
+    timezone: str = conf.get_string("api.timezone")
+    server.dependency_overrides[models.get_timezone] = lambda: timezone
 
     # Add middlewares
     server.add_middleware(
@@ -182,28 +214,23 @@ def run() -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    server.add_middleware(
-        audit.RequestLoggerMiddleware,
-        db_client=db_instance,
-    )
+    server.add_middleware(audit.RequestLoggerMiddleware)
 
-    # Add routers to the server according to configuration
-    for router_module in [sites, regions, uk_national_and_gsp]:
-        if conf.get_string("api.router") == router_module.__name__.split(".")[-1]:
-            server.include_router(router_module.router)
-            server.openapi_tags = [{
-                "name": router_module.__name__.split(".")[-1].capitalize(),
-                "description": router_module.__doc__,
-            }, *server.openapi_tags]
-            break
+    return server
 
-    # Customize the OpenAPI schema
-    server.openapi = lambda: _custom_openapi(server)
+
+
+def run() -> None:
+    """Run the API using a uvicorn server."""
+    # Get the application configuration from the environment
+    conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
+
+    server = _create_server(conf=conf)
 
     # Run the server with uvicorn
     uvicorn.run(
         server,
-        host="0.0.0.0", # noqa: S104
+        host="0.0.0.0",  # noqa: S104
         port=conf.get_int("api.port"),
         log_level=conf.get_string("api.loglevel"),
     )
@@ -211,3 +238,4 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
+
