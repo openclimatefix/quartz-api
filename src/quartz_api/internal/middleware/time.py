@@ -24,7 +24,7 @@ class TimerMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         response = await call_next(request)
         process_time = str(time.time() - start_time)
-        
+
         logging.info(f"Process Time {process_time} {request.url}")
         response.headers["X-Process-Time"] = process_time
 
