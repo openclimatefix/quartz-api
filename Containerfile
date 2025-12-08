@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm AS build-deps
+FROM python:3.12-slim-bookworm AS build-deps
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -40,7 +40,7 @@ FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /opt/app
 # Copy just the virtual environment into a runtime image
-COPY --from=build-app --chown=app:app /opt/app/.venv /opt/app/.venv
+COPY --from=build-app /opt/app/.venv /opt/app/.venv
 
 # Health check and entrypoint
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \

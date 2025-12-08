@@ -1,17 +1,12 @@
 """The 'sites' FastAPI router object and associated routes logic."""
 
 import pathlib
+from uuid import UUID
 
 from fastapi import APIRouter
 from starlette import status
 
-from quartz_api.internal import (
-    ActualPower,
-    DBClientDependency,
-    PredictedPower,
-    Site,
-    SiteProperties,
-)
+from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
@@ -21,21 +16,24 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
     status_code=status.HTTP_200_OK,
 )
 async def get_sites(
-    db: DBClientDependency,
+    db: models.DBClientDependency,
     auth: AuthDependency,
-) -> list[Site]:
+) -> list[models.Site]:
     """Get sites."""
     sites = await db.get_sites(authdata=auth)
     return sites
 
 
-@router.put("/sites/{site_uuid}", response_model=SiteProperties, status_code=status.HTTP_200_OK)
+@router.put(
+    "/sites/{site_uuid}",
+    response_model=models.SiteProperties,
+    status_code=status.HTTP_200_OK)
 async def put_site_info(
-    site_uuid: str,
-    site_info: SiteProperties,
-    db: DBClientDependency,
+    site_uuid: UUID,
+    site_info: models.SiteProperties,
+    db: models.DBClientDependency,
     auth: AuthDependency,
-) -> SiteProperties:
+) -> models.SiteProperties:
     """### This route allows a user to update site information for a single site.
 
     #### Parameters
@@ -53,12 +51,12 @@ async def put_site_info(
     status_code=status.HTTP_200_OK,
 )
 async def get_forecast(
-    site_uuid: str,
-    db: DBClientDependency,
+    site_uuid: UUID,
+    db: models.DBClientDependency,
     auth: AuthDependency,
-) -> list[PredictedPower]:
+) -> list[models.PredictedPower]:
     """Get forecast of a site."""
-    forecast = db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
+    forecast = await db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
     return forecast
 
 
@@ -67,10 +65,10 @@ async def get_forecast(
     status_code=status.HTTP_200_OK,
 )
 async def get_generation(
-    site_uuid: str,
-    db: DBClientDependency,
+    site_uuid: UUID,
+    db: models.DBClientDependency,
     auth: AuthDependency,
-) -> list[ActualPower]:
+) -> list[models.ActualPower]:
     """Get get generation fo a site."""
     generation = await db.get_site_generation(site_uuid=site_uuid, authdata=auth)
     return generation
@@ -81,9 +79,9 @@ async def get_generation(
     status_code=status.HTTP_200_OK,
 )
 async def post_generation(
-    site_uuid: str,
-    generation: list[ActualPower],
-    db: DBClientDependency,
+    site_uuid: UUID,
+    generation: list[models.ActualPower],
+    db: models.DBClientDependency,
     auth: AuthDependency,
 ) -> None:
     """Post observed generation data.

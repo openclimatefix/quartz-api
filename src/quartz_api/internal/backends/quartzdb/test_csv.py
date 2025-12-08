@@ -5,16 +5,13 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from quartz_api.internal import PredictedPower
+from quartz_api.internal.models import PredictedPower
 from quartz_api.internal.service.regions._csv import format_csv_and_created_time
 
 from ...models import ForecastHorizon
 from .client import Client
 
 log = logging.getLogger(__name__)
-
-# TODO add list of test that are here
-
 
 @pytest.fixture()
 def client(engine: Engine, db_session: Session) -> Client:
@@ -27,7 +24,7 @@ def client(engine: Engine, db_session: Session) -> Client:
 # Skip for now
 @pytest.mark.skip(reason="Not finished yet")
 class TestCsvExport:
-    def test_format_csv_and_created_time(self, client, forecast_values_wind) -> None:
+    def test_format_csv_and_created_time(self, client: Client, forecast_values_wind: None) -> None:
         """Test the format_csv_and_created_time function."""
         forecast_values_wind = client.get_predicted_wind_power_production_for_location(
             location="testID",

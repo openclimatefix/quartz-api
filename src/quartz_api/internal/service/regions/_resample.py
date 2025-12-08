@@ -1,33 +1,36 @@
 """Functions to resample data."""
 
-import pandas as pd
+import datetime as dt
+import math
+from collections import defaultdict
 
-from quartz_api.internal import ActualPower
+from quartz_api.internal import models
 
 
-def resample_generation(values: list[ActualPower], internal_minutes: int) -> list[ActualPower]:
-    """Resample generation data to a specified interval."""
+def resample_generation(
+    values: list[models.ActualPower],
+    interval_minutes: int,
+) -> list[models.ActualPower]:
+    """Perform binning on the generation data, with a specified bin width."""
     if not values:
         return []
 
-    # convert to dataframe
-    df = pd.DataFrame(
-        {
-            "Time": [value.Time for value in values],
-            "PowerKW": [value.PowerKW for value in values],
-        },
-    )
+    buckets: dict[dt.datetime, list[float]] = defaultdict(list[float])
+    interval_seconds = interval_minutes * 60
 
-    # resample
-    df = df.set_index("Time").resample(f"{internal_minutes}min").mean().dropna()
+    for value in values:
+        ts = value.Time.timestamp()
+        floored_ts = math.floor(ts / interval_seconds) * interval_seconds
+        bucket_time = dt.datetime.fromtimestamp(floored_ts, tz=value.Time.tzinfo)
+        buckets[bucket_time].append(value.PowerKW)
 
-    df["PowerKW"].clip(lower=0, inplace=True)  # Set negative values of PowerKW up to 0
+    results: list[models.ActualPower] = []
+    for bucket_time in sorted(buckets.keys()):
+        avg_power = sum(buckets[bucket_time]) / len(buckets[bucket_time])
+        if avg_power < 0:
+            avg_power = 0.0
 
-    # convert back to list of ActualPower
-    return [
-        ActualPower(
-            Time=index,
-            PowerKW=row.PowerKW,
-        )
-        for index, row in df.iterrows()
-    ]
+        results.append(models.ActualPower(Time=bucket_time, PowerKW=avg_power))
+
+    return results
+

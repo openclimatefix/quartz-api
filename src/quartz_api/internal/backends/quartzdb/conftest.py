@@ -2,6 +2,7 @@
 
 import datetime as dt
 import logging
+from collections.abc import Generator
 
 import pytest
 from pvsite_datamodel.read.model import get_or_create_model
@@ -21,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
-def engine() -> Engine:
+def engine() -> Generator[Engine]:
     """Database engine fixture."""
     with PostgresContainer("postgres:14.5") as postgres:
         url = postgres.get_connection_url()
@@ -31,7 +32,7 @@ def engine() -> Engine:
 
 
 @pytest.fixture(scope="session")
-def tables(engine: Engine) -> None:
+def tables(engine: Engine) -> Generator[None]:
     """Create tables fixture."""
     Base.metadata.create_all(engine)
     yield
@@ -42,7 +43,7 @@ def tables(engine: Engine) -> None:
 def db_session(
     engine: Engine,
     tables: None,  # noqa: ARG001
-) -> Session:
+) -> Generator[Session]:
     """Return a sqlalchemy session, which tears down everything properly post-test."""
     connection = engine.connect()
     # begin the nested transaction

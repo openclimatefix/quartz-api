@@ -4,12 +4,11 @@
 import datetime as dt
 import math
 import random
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from typing_extensions import override
 
-from quartz_api import internal
-from quartz_api.internal.models import ForecastHorizon
+from quartz_api.internal import models
 
 from ..utils import get_window
 from ._models import DummyDBPredictedPowerProduction
@@ -18,26 +17,27 @@ from ._models import DummyDBPredictedPowerProduction
 step: dt.timedelta = dt.timedelta(minutes=15)
 
 
-class Client(internal.DatabaseInterface):
+class Client(models.DatabaseInterface):
     """Defines a dummy database that conforms to the DatabaseInterface."""
 
     @override
     async def get_predicted_solar_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
-    ) -> list[internal.PredictedPower]:
+        smooth_flag: bool = True,
+    ) -> list[models.PredictedPower]:
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
-        values: list[internal.PredictedPower] = []
+        values: list[models.PredictedPower] = []
 
         for i in range(numSteps):
             time = start + i * step
             _PowerProduction = _basicSolarPowerProductionFunc(int(time.timestamp()))
             values.append(
-                internal.PredictedPower(
+                models.PredictedPower(
                     Time=time,
                     PowerKW=int(_PowerProduction.PowerProductionKW),
                     CreatedTime=dt.datetime.now(tz=dt.UTC),
@@ -50,19 +50,20 @@ class Client(internal.DatabaseInterface):
     async def get_predicted_wind_power_production_for_location(
         self,
         location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
+        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
-    ) -> list[internal.PredictedPower]:
+        smooth_flag: bool = True,
+    ) -> list[models.PredictedPower]:
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
-        values: list[internal.PredictedPower] = []
+        values: list[models.PredictedPower] = []
 
         for i in range(numSteps):
             time = start + i * step
             _PowerProduction = _basicWindPowerProductionFunc()
             values.append(
-                internal.PredictedPower(
+                models.PredictedPower(
                     Time=time,
                     PowerKW=int(_PowerProduction.PowerProductionKW),
                     CreatedTime=dt.datetime.now(tz=dt.UTC),
@@ -75,17 +76,17 @@ class Client(internal.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
-        values: list[internal.ActualPower] = []
+        values: list[models.ActualPower] = []
 
         for i in range(numSteps):
             time = start + i * step
             _PowerProduction = _basicSolarPowerProductionFunc(int(time.timestamp()))
             values.append(
-                internal.ActualPower(
+                models.ActualPower(
                     Time=time,
                     PowerKW=int(_PowerProduction.PowerProductionKW),
                 ),
@@ -97,17 +98,17 @@ class Client(internal.DatabaseInterface):
     async def get_actual_wind_power_production_for_location(
         self,
         location: str,
-    ) -> list[internal.ActualPower]:
+    ) -> list[models.ActualPower]:
         # Get the window
         start, end = get_window()
         numSteps = int((end - start) / step)
-        values: list[internal.ActualPower] = []
+        values: list[models.ActualPower] = []
 
         for i in range(numSteps):
             time = start + i * step
             _PowerProduction = _basicWindPowerProductionFunc()
             values.append(
-                internal.ActualPower(
+                models.ActualPower(
                     Time=time,
                     PowerKW=int(_PowerProduction.PowerProductionKW),
                 ),
@@ -128,15 +129,15 @@ class Client(internal.DatabaseInterface):
         pass
 
     @override
-    async def get_sites(self, authdata: dict[str, str]) -> list[internal.Site]:
-        uuid = str(uuid4())
-
-        site = internal.Site(
-            site_uuid=uuid,
-            client_site_id=1,
+    async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
+        site = models.Site(
+            site_uuid=uuid4(),
+            client_site_name="Dummy Site",
             latitude=26,
             longitude=76,
             capacity_kw=76,
+            orientation=180,
+            tilt=30,
         )
 
         return [site]
@@ -144,40 +145,79 @@ class Client(internal.DatabaseInterface):
     @override
     async def put_site(
         self,
-        site_uuid: str,
-        site_properties: internal.SiteProperties,
+        site_uuid: UUID,
+        site_properties: models.SiteProperties,
         authdata: dict[str, str],
-    ) -> internal.Site:
-        pass
+    ) -> models.Site:
+        sites = await self.get_sites(authdata=authdata)
+        return sites[0]
 
     @override
     async def get_site_forecast(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
-    ) -> list[internal.PredictedPower]:
-        values = self.get_predicted_solar_power_production_for_location(location="dummy")
-
+    ) -> list[models.PredictedPower]:
+        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
         return values
 
     @override
     async def get_site_generation(
         self,
-        site_uuid: str,
+        site_uuid: UUID,
         authdata: dict[str, str],
-    ) -> list[internal.ActualPower]:
-        values = self.get_actual_solar_power_production_for_location(location="dummy")
-
+    ) -> list[models.ActualPower]:
+        values = await self.get_actual_solar_power_production_for_location(location="dummy")
         return values
 
     @override
     async def post_site_generation(
         self,
-        site_uuid: str,
-        generation: list[internal.ActualPower],
+        site_uuid: UUID,
+        generation: list[models.ActualPower],
         authdata: dict[str, str],
     ) -> None:
         pass
+
+    @override
+    async def get_substations(
+        self,
+        authdata: dict[str, str],
+    ) -> list[models.Substation]:
+        sub = models.Substation(
+            substation_uuid=uuid4(),
+            substation_name="Dummy Substation",
+            substation_type="primary",
+            latitude=26,
+            longitude=76,
+            capacity_kw=76,
+        )
+
+        return [sub]
+
+    @override
+    async def get_substation(
+        self,
+        location_uuid: UUID,
+        authdata: dict[str, str],
+    ) -> models.SubstationProperties:
+        return models.SubstationProperties(
+            substation_name="Dummy Substation",
+            substation_type="primary",
+            latitude=26,
+            longitude=76,
+            capacity_kw=76,
+        )
+
+    @override
+    async def get_substation_forecast(
+        self,
+        location_uuid: UUID,
+        authdata: dict[str, str],
+    ) -> list[models.PredictedPower]:
+        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
+
+        return values
 
 
 def _basicSolarPowerProductionFunc(
