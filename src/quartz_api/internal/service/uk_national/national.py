@@ -2,15 +2,14 @@
 
 from enum import Enum
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,
+    ForecastHorizon,
 )
-from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.models import ForecastHorizon
 
 from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
 
@@ -43,8 +42,7 @@ class ModelName(str, Enum):
 )
 async def get_national_forecast(
     db: DBClientDependency,
-    auth: AuthDependency,
-    request: Request,
+    auth: AuthDependency,  #noqa FBT001 # TODO
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
     start_datetime_utc: str | None = None,
@@ -82,20 +80,30 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
+    if start_datetime_utc or end_datetime_utc or creation_limit_utc:
+        raise NotImplementedError()
 
-    sites = await db.get_sites(authdata=auth)
 
-    national_location = sites[0]
+
+
+    model_name = model_names_external_to_internal[model_name]
+    if trend_adjuster_on:
+        model_name = model_name + "_adjust"
+
+    sites = await db.get_solar_regions()
+
+    national_location_uuid = str(sites[0])
 
     forecast_horizon = ForecastHorizon.latest
     if forecast_horizon_minutes is None:
         forecast_horizon = ForecastHorizon.horizon
 
     predicted_powers = await db.get_predicted_solar_power_production_for_location(
-        location=national_location.site_uuid,
+        location=national_location_uuid,
         forecast_horizon=forecast_horizon,
         forecast_horizon_minutes=forecast_horizon_minutes,
         smooth_flag=False,
+        model_name=model_name,
     )
 
     if include_metadata:
