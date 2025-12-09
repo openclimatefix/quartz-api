@@ -3,7 +3,6 @@
 from enum import Enum
 
 from fastapi import APIRouter
-
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
