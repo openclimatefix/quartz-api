@@ -313,8 +313,6 @@ class Client(models.DatabaseInterface):
                 oauth_id,
             )
 
-        print(observer_name)
-
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location_uuid,

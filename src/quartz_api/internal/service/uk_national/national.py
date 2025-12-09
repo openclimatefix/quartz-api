@@ -123,7 +123,7 @@ async def get_national_forecast(
 )
 async def get_national_pvlive(
     db: DBClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency,   #noqa FBT001 # TODO
     regime: str | None = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
@@ -150,8 +150,9 @@ async def get_national_pvlive(
     regime = regime.replace("-", "_")
 
     solar_production \
-        = await db.get_actual_solar_power_production_for_location(location=national_location_uuid,
-                                                                  observer_name=f"pvlive_{regime}")
+        = await db.get_actual_solar_power_production_for_location(
+            location=national_location_uuid,
+            observer_name=f"pvlive_{regime}")
 
 
     national_yields = [NationalYield(
