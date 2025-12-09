@@ -3,6 +3,7 @@
 from enum import Enum
 
 from fastapi import APIRouter
+
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -82,9 +83,6 @@ async def get_national_forecast(
     """
     if start_datetime_utc or end_datetime_utc or creation_limit_utc:
         raise NotImplementedError()
-
-
-
 
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
