@@ -35,14 +35,16 @@ class Client(models.DatabaseInterface):
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
+        model_name: str | None = None,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
-            location_uuid=UUID(location),
+            location_uuid=location,
             energy_source=dp.EnergySource.SOLAR,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
             smooth_flag=smooth_flag,
             oauth_id=None,
+            model_name=model_name,
         )
         return values
 
@@ -55,7 +57,7 @@ class Client(models.DatabaseInterface):
         smooth_flag: bool = True,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
-            location_uuid=UUID(location),
+            location_uuid=location,
             energy_source=dp.EnergySource.WIND,
             forecast_horizon=forecast_horizon,
             forecast_horizon_minutes=forecast_horizon_minutes,
@@ -68,11 +70,13 @@ class Client(models.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
+        observer_name: str | None = None,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
-            UUID(location),
+            location,
             dp.EnergySource.SOLAR,
             oauth_id=None,
+            observer_name=observer_name,
         )
         return values
 
@@ -98,19 +102,22 @@ class Client(models.DatabaseInterface):
         return [loc.location_uuid for loc in resp.locations]
 
     @override
-    async def get_solar_regions(self) -> models.Region:
-        all_locations: list[models.Region] = []
-        for location_type_filter in [
-            dp.LocationType.NATION,
-            dp.LocationType.GSP,
-            dp.LocationType.STATE,
-        ]:
-            req = dp.ListLocationsRequest(
-                energy_source_filter=dp.EnergySource.SOLAR,
-                location_type_filter=location_type_filter,
-            )
-            resp = await self.dp_client.list_locations(req)
-            for loc in resp.locations:
+    async def get_solar_regions(self, type: str | None = None) -> list[str]:
+
+        location_type_filter = dp.LocationType.STATE
+        if type == "nation":
+            location_type_filter = dp.LocationType.NATION
+        elif type == "gsp":
+            location_type_filter = dp.LocationType.GSP
+
+        req = dp.ListLocationsRequest(
+            energy_source_filter=dp.EnergySource.SOLAR,
+            location_type_filter=location_type_filter,
+        )
+        resp = await self.dp_client.list_locations(req)
+        
+        regions = []
+        for loc in resp.locations:
                 region = models.Region(
                     region_name=loc.location_name,
                     region_metadata={
@@ -119,8 +126,8 @@ class Client(models.DatabaseInterface):
                         **dict(loc.metadata.fields.items()),
                     },
                 )
-                all_locations.append(region)
-        return all_locations
+                regions.append(region)
+        return regions
 
     @override
     async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
@@ -308,6 +315,7 @@ class Client(models.DatabaseInterface):
         location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
+        observer_name: str = "ruvnl",
     ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
@@ -321,7 +329,7 @@ class Client(models.DatabaseInterface):
         start, end = get_window()
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location_uuid,
-            observer_name="ruvnl",
+            observer_name=observer_name,
             energy_source=energy_source,
             time_window=dp.TimeWindow(
                 start_timestamp_utc=start,
@@ -347,6 +355,7 @@ class Client(models.DatabaseInterface):
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,  # noqa: ARG002
+        model_name: str | None = None,
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
@@ -367,22 +376,29 @@ class Client(models.DatabaseInterface):
             # from my asking around at least
             forecast_horizon_minutes = 9 * 60
 
-        # Use the forecaster that produced the most recent forecast for the location by default,
-        # taking into account the desired horizon.
-        # * At some point, we may want to allow the user to specify a particular forecaster.
-        req = dp.GetLatestForecastsRequest(
-            location_uuid=location_uuid,
-            energy_source=energy_source,
-            pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
-        )
-        resp = await self.dp_client.get_latest_forecasts(req)
-        if len(resp.forecasts) == 0:
-            return []
-        resp.forecasts.sort(
-            key=lambda f: f.created_timestamp_utc,
-            reverse=True,
-        )
-        forecaster = resp.forecasts[0].forecaster
+
+        if model_name is None:
+            # Use the forecaster that produced the most recent forecast for the location by default,
+            # taking into account the desired horizon.
+            # * At some point, we may want to allow the user to specify a particular forecaster.
+            req = dp.GetLatestForecastsRequest(
+                location_uuid=location_uuid,
+                energy_source=energy_source,
+                pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
+            )
+            resp = await self.dp_client.get_latest_forecasts(req)
+            if len(resp.forecasts) == 0:
+                return []
+            resp.forecasts.sort(
+                key=lambda f: f.created_timestamp_utc,
+                reverse=True,
+            )
+            forecaster = resp.forecasts[0].forecaster
+        else:
+            req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
+                                      latest_versions_only=True)
+            resp = await self.dp_client.list_forecasters(req)
+            forecaster = resp.forecasters[0]
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=location_uuid,

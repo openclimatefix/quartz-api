@@ -76,7 +76,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self, type:str | None = None) -> list[str]:
         """Returns a list of solar regions."""
         pass
 

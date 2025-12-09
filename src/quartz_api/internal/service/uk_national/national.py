@@ -2,12 +2,13 @@
 
 from enum import Enum
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,
+    ForecastHorizon,
 )
 
 from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
@@ -41,8 +42,7 @@ class ModelName(str, Enum):
 )
 async def get_national_forecast(
     db: DBClientDependency,
-    auth: AuthDependency,
-    request: Request,
+    auth: AuthDependency,  #noqa FBT001 # TODO
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
     start_datetime_utc: str | None = None,
@@ -80,7 +80,41 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    raise NotImplementedError()
+    if start_datetime_utc or end_datetime_utc or creation_limit_utc:
+        raise NotImplementedError()
+
+    model_name = model_names_external_to_internal[model_name]
+    if trend_adjuster_on:
+        model_name = model_name + "_adjust"
+
+    sites = await db.get_solar_regions()
+
+    national_location_uuid = str(sites[0])
+
+    forecast_horizon = ForecastHorizon.latest
+    if forecast_horizon_minutes is None:
+        forecast_horizon = ForecastHorizon.horizon
+
+    predicted_powers = await db.get_predicted_solar_power_production_for_location(
+        location=national_location_uuid,
+        forecast_horizon=forecast_horizon,
+        forecast_horizon_minutes=forecast_horizon_minutes,
+        smooth_flag=False,
+        model_name=model_name,
+    )
+
+    if include_metadata:
+        raise NotImplementedError()
+    else:
+
+        national_forecasts = [NationalForecastValue(
+                    target_time=pp.Time,
+                    expected_power_generation_megawatts=pp.PowerKW/1000,
+                ) for pp in predicted_powers]
+
+        return national_forecasts
+
+
 
 
 @router.get(
@@ -89,7 +123,7 @@ async def get_national_forecast(
 )
 async def get_national_pvlive(
     db: DBClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency,   #noqa FBT001 # TODO
     regime: str | None = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
@@ -109,7 +143,24 @@ async def get_national_pvlive(
     - **regime**: can choose __in-day__ or __day-after__
 
     """
-    raise NotImplementedError()
+    sites = await db.get_solar_regions(type="nation")
+
+    national_location_uuid = str(sites[0])
+
+    regime = regime.replace("-", "_")
+
+    solar_production \
+        = await db.get_actual_solar_power_production_for_location(
+            location=national_location_uuid,
+            observer_name=f"pvlive_{regime}")
+
+
+    national_yields = [NationalYield(
+                datetime_utc=sp.Time,
+                solar_generation_kw=sp.PowerKW,
+            ) for sp in solar_production]
+
+    return national_yields
 
 
 # Note have removed elexon API call, as not used
