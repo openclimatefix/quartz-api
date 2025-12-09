@@ -115,7 +115,7 @@ class Client(models.DatabaseInterface):
             location_type_filter=location_type_filter,
         )
         resp = await self.dp_client.list_locations(req)
-        
+
         regions = []
         for loc in resp.locations:
                 region = models.Region(
