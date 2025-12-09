@@ -50,7 +50,7 @@ from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
-from quartz_api.internal.middleware import audit, auth
+from quartz_api.internal.middleware import audit, auth, time
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -215,6 +215,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         allow_headers=["*"],
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
+    server.add_middleware(time.TimerMiddleware)
 
     return server
 
