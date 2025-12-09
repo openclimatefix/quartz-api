@@ -4,7 +4,6 @@
 from fastapi import APIRouter
 from starlette import status
 
-
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,

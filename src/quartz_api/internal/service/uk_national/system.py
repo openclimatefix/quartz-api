@@ -33,9 +33,6 @@ async def get_system_details(
     - **gsp_id**: gsp_id of the requested system
     """
     regions = await db.get_solar_regions()
-
-
-
     locations = []
     for region in regions:
 
@@ -73,3 +70,4 @@ async def get_system_details(
     locations.sort(key=lambda x: x.gsp_id)
 
     return locations
+
