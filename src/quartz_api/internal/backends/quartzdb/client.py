@@ -215,8 +215,9 @@ class Client(models.DatabaseInterface):
     async def get_actual_solar_power_production_for_location(
         self,
         location: str,
+        observer_name: str | None = None,
     ) -> list[models.ActualPower]:
-        return self._get_generation_for_location(location=location, asset_type=LocationAssetType.pv)
+        return self._get_generation_for_location(location=location, asset_type=LocationAssetType.pv, observer_name=observer_name)
 
     @override
     async def get_actual_wind_power_production_for_location(

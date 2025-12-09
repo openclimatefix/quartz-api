@@ -143,7 +143,23 @@ async def get_national_pvlive(
     - **regime**: can choose __in-day__ or __day-after__
 
     """
-    raise NotImplementedError()
+    sites = await db.get_solar_regions(type="nation")
+
+    national_location_uuid = str(sites[0])
+
+    regime = regime.replace("-", "_")
+
+    solar_production \
+        = await db.get_actual_solar_power_production_for_location(location=national_location_uuid,
+                                                                  observer_name=f"pvlive_{regime}")
+
+
+    national_yields = [NationalYield(
+                datetime_utc=sp.Time,
+                solar_generation_kw=sp.PowerKW,
+            ) for sp in solar_production]
+
+    return national_yields
 
 
 # Note have removed elexon API call, as not used
