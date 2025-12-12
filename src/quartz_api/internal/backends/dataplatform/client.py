@@ -8,6 +8,7 @@ from dp_sdk.ocf import dp
 from fastapi import HTTPException
 from typing_extensions import override
 
+# from quartz_api.internal.models import ForecastHorizon, Region
 from quartz_api.internal import models
 
 from ..utils import get_window
@@ -118,7 +119,19 @@ class Client(models.DatabaseInterface):
             location_type_filter=location_type_filter,
         )
         resp = await self.dp_client.list_locations(req)
-        return [loc.location_uuid for loc in resp.locations]
+
+        regions = []
+        for loc in resp.locations:
+                region = models.Region(
+                    region_name=loc.location_name,
+                    region_metadata={
+                        "location_uuid": loc.location_uuid,
+                        "effective_capacity_watts": loc.effective_capacity_watts,
+                        **dict(loc.metadata.fields.items()),
+                    },
+                )
+                regions.append(region)
+        return regions
 
     @override
     async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
