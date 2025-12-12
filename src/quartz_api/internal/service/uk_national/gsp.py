@@ -6,9 +6,10 @@ from starlette import status
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,
+    ForecastHorizon,
 )
 
-from .pydantic_models import Forecast, ForecastValue, GSPYield
+from .pydantic_models import ForecastValue, GSPYield
 from .time_utils import format_datetime
 
 router = APIRouter(tags=["GSP"])
@@ -20,8 +21,13 @@ router = APIRouter(tags=["GSP"])
 )
 async def get_forecasts_for_a_specific_gsp(
     db: DBClientDependency,
-    auth: AuthDependency,
-) -> Forecast | list[ForecastValue]:
+    auth: AuthDependency, # noqa FBT001 # TODO
+    gsp_id: int,
+    forecast_horizon_minutes: int | None = None,
+    start_datetime_utc: str | None = None,
+    end_datetime_utc: str | None = None,
+    creation_utc_limit: str | None = None,
+) -> list[ForecastValue]:
     """### Get recent forecast values for a specific GSP.
 
     This route returns the most recent forecast for each _target_time_ for a
@@ -43,7 +49,38 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
-    raise NotImplementedError()
+    if creation_utc_limit is not None:
+        raise NotImplementedError()
+
+    start_datetime_utc = format_datetime(start_datetime_utc)
+    end_datetime_utc = format_datetime(end_datetime_utc)
+
+    gsps = await db.get_solar_regions(type="gsp")
+    gsp_location = [
+        site for site in gsps if int(site.region_metadata["gsp_id"].number_value) == gsp_id
+    ]
+    gsp_location_uuid = str(gsp_location[0].region_metadata["location_uuid"])
+
+    forecast_horizon = ForecastHorizon.latest
+    if forecast_horizon_minutes is None:
+        forecast_horizon = ForecastHorizon.horizon
+
+    predicted_powers = await db.get_predicted_solar_power_production_for_location(
+        location=gsp_location_uuid,
+        forecast_horizon=forecast_horizon,
+        forecast_horizon_minutes=forecast_horizon_minutes,
+        smooth_flag=False,
+        model_name="blend",
+        start_datetime=start_datetime_utc,
+        end_datetime=end_datetime_utc,
+    )
+
+    national_forecasts = [ForecastValue(
+                target_time=pp.Time,
+                expected_power_generation_megawatts=pp.PowerKW/1000,
+            ) for pp in predicted_powers]
+
+    return national_forecasts
 
 
 @router.get(
