@@ -460,7 +460,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_forecast_for_multiple_locations(
         self,
-        location_uuids: list[str],
+        location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
         start_datetime_utc: dt.datetime | None = None,
         end_datetime_utc: dt.datetime | None = None,
@@ -469,7 +469,7 @@ class Client(models.DatabaseInterface):
         """Get a forecast for multiple sites.
 
         Args:
-            location_uuids: List of site UUIDs to get forecasts for.
+            location_uuids_to_location_ids: A mapping from location UUIDs to location IDs.
             authdata: Authentication data for the user.
             start_datetime_utc: The start datetime for the prediction window. Default is None.
             end_datetime_utc: The end datetime for the prediction window. Default is None.
@@ -493,10 +493,12 @@ class Client(models.DatabaseInterface):
         forecasts_per_timestamp = []
         tasks = []
         for timestamp in timestamps:
-            req = dp.GetForecastAtTimestampRequest(location_uuids=location_uuids,
-                                                    energy_source=dp.EnergySource.SOLAR,
-                                                    timestamp_utc=timestamp,
-                                                    forecaster=forecaster)
+            req = dp.GetForecastAtTimestampRequest(
+                location_uuids=list(location_uuids_to_location_ids.keys()),
+                energy_source=dp.EnergySource.SOLAR,
+                timestamp_utc=timestamp,
+                forecaster=forecaster,
+            )
             # resp = await self.dp_client.get_forecast_at_timestamp(req)
             task = asyncio.create_task(self.dp_client.get_forecast_at_timestamp(req))
             tasks.append(task)
@@ -508,7 +510,7 @@ class Client(models.DatabaseInterface):
             forecasts_per_timestamp.append(
                 models.OneDatetimeManyForecastValues(datetime_utc=resp.timestamp_utc,
                     forecast_values={
-                        forecast.location_uuid: round(
+                        location_uuids_to_location_ids[forecast.location_uuid]: round(
                             forecast.value_fraction * forecast.effective_capacity_watts
                             / 1000.0,
                             2,
@@ -522,7 +524,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_generation_for_multiple_locations(
         self,
-        location_uuids: list[str],
+        location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
         start_datetime: dt.datetime | None = None,
         end_datetime: dt.datetime | None = None,
@@ -532,7 +534,7 @@ class Client(models.DatabaseInterface):
         start, end = get_window(start=start_datetime, end=end_datetime)
 
         tasks = []
-        for location_uuid in location_uuids:
+        for location_uuid in location_uuids_to_location_ids:
             req = dp.GetObservationsAsTimeseriesRequest(
                 location_uuid=location_uuid,
                 observer_name=observer_name,
@@ -555,7 +557,7 @@ class Client(models.DatabaseInterface):
         observations_by_datetime = {}
         for observation in list_results:
 
-            location_uuid = observation.location_uuid
+            location_id = location_uuids_to_location_ids[observation.location_uuid]
 
             for value in observation.values:
                 timestamp = value.timestamp_utc
@@ -564,7 +566,7 @@ class Client(models.DatabaseInterface):
                     observations_by_datetime[timestamp] = {}
 
                 generation_kw = int(value.effective_capacity_watts * value.value_fraction / 1000.0)
-                observations_by_datetime[timestamp][location_uuid] = generation_kw
+                observations_by_datetime[timestamp][location_id] = generation_kw
 
         # format to list of GSPYieldGroupByDatetime
         observations_by_datetime_formated = [

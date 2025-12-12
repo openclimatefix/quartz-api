@@ -198,14 +198,16 @@ async def get_all_available_forecasts(
             gsp_ids = None
 
     # get locations uuids
+    location_uuids_to_gsp_id = {
+        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"].number_value)
+        for gsp in gsps
+    }
     if gsp_ids is not None:
-        location_uuids = [
-            str(gsp.region_metadata["location_uuid"])
-            for gsp in gsps
-            if int(gsp.region_metadata["gsp_id"].number_value) in gsp_ids
-        ]
-    else:
-        location_uuids = [str(gsp.region_metadata["location_uuid"]) for gsp in gsps]
+        location_uuids_to_gsp_id = {
+            location_uuid: gsp_id
+            for location_uuid, gsp_id in location_uuids_to_gsp_id.items()
+            if gsp_id in gsp_ids
+        }
 
     start_datetime_utc = format_datetime(start_datetime_utc)
     end_datetime_utc = format_datetime(end_datetime_utc)
@@ -219,7 +221,7 @@ async def get_all_available_forecasts(
         start_datetime_utc = floor_30_minutes_dt(datetime.now(tz=UTC))
 
     forecast_values = await db.get_forecast_for_multiple_locations(
-        location_uuids=location_uuids,
+        location_uuids_to_location_ids=location_uuids_to_gsp_id,
         start_datetime_utc=start_datetime_utc,
         end_datetime_utc=end_datetime_utc,
         model_name="blend",
@@ -271,17 +273,19 @@ async def get_truths_for_all_gsps(
     end_datetime_utc = format_datetime(end_datetime_utc)
 
     # get locations uuids
+    location_uuids_to_gsp_id = {
+        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"].number_value)
+        for gsp in gsps
+    }
     if gsp_ids is not None:
-        location_uuids = [
-            str(gsp.region_metadata["location_uuid"])
-            for gsp in gsps
-            if int(gsp.region_metadata["gsp_id"].number_value) in gsp_ids
-        ]
-    else:
-        location_uuids = [str(gsp.region_metadata["location_uuid"]) for gsp in gsps]
+        location_uuids_to_gsp_id = {
+            location_uuid: gsp_id
+            for location_uuid, gsp_id in location_uuids_to_gsp_id.items()
+            if gsp_id in gsp_ids
+        }
 
     observations = await db.get_generation_for_multiple_locations(
-        location_uuids=location_uuids,
+        location_uuids_to_location_ids=location_uuids_to_gsp_id,
         observer_name=f"pvlive_{regime.replace('-', '_')}",
         start_datetime=start_datetime_utc,
         end_datetime=end_datetime_utc,

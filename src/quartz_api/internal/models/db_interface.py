@@ -124,11 +124,12 @@ class DatabaseInterface(abc.ABC):
     @abc.abstractmethod
     async def get_forecast_for_multiple_locations(
         self,
-        location_uuids: list[str],
+        location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
         model_name: str | None = None,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
+
     ) -> list[OneDatetimeManyForecastValues]:
         """Get a forecast for multiple sites."""
         pass
@@ -144,7 +145,7 @@ class DatabaseInterface(abc.ABC):
     @abc.abstractmethod
     async def get_generation_for_multiple_locations(
         self,
-        location_uuids: list[str],
+        location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,

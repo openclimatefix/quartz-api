@@ -155,7 +155,8 @@ async def get_national_pvlive(
     regime = regime.replace("-", "_")
 
     solar_production = await db.get_actual_solar_power_production_for_location(
-        location=national_location_uuid, observer_name=f"pvlive_{regime}",
+        location=national_location_uuid,
+        observer_name=f"pvlive_{regime}",
     )
 
     national_yields = [
