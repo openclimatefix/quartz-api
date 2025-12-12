@@ -11,6 +11,7 @@ from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
     PredictedPower,
+    Region,
     Site,
     SiteProperties,
     Substation,
@@ -50,6 +51,8 @@ class DatabaseInterface(abc.ABC):
         self,
         location: str,
         observer_name: str | None = None,
+        start_datetime: datetime | None = None,
+        end_datetime: datetime | None = None,
     ) -> list[ActualPower]:
         """Returns a list of actual solar power production for a given location."""
         pass
@@ -81,7 +84,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_solar_regions(self, type:str | None = None) -> list[str]:
+    async def get_solar_regions(self, type:str | None = None) -> list[str] | list[Region]:
         """Returns a list of solar regions."""
         pass
 

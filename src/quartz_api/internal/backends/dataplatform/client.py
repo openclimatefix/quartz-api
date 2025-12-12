@@ -75,12 +75,16 @@ class Client(models.DatabaseInterface):
         self,
         location: str,
         observer_name: str | None = None,
+        start_datetime: dt.datetime | None = None,
+        end_datetime: dt.datetime | None = None,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
             dp.EnergySource.SOLAR,
             oauth_id=None,
             observer_name=observer_name,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         return values
 
@@ -90,7 +94,7 @@ class Client(models.DatabaseInterface):
         location: str,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
-            UUID(location),
+            location,
             dp.EnergySource.WIND,
             oauth_id=None,
         )
@@ -320,6 +324,8 @@ class Client(models.DatabaseInterface):
         energy_source: dp.EnergySource,
         oauth_id: str | None,
         observer_name: str = "ruvnl",
+        start_datetime: dt.datetime | None = None,
+        end_datetime: dt.datetime | None = None,
     ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
@@ -330,7 +336,7 @@ class Client(models.DatabaseInterface):
                 oauth_id,
             )
 
-        start, end = get_window()
+        start, end = get_window(start=start_datetime, end=end_datetime)
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location_uuid,
             observer_name=observer_name,
