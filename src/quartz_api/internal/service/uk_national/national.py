@@ -12,6 +12,7 @@ from quartz_api.internal.models import (
 )
 
 from .pydantic_models import NationalForecast, NationalForecastValue, NationalYield
+from .time_utils import format_datetime
 
 router = APIRouter(tags=["National"])
 
@@ -80,14 +81,21 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    if start_datetime_utc or end_datetime_utc or creation_limit_utc:
+
+    start_datetime_utc = format_datetime(start_datetime_utc)
+    end_datetime_utc = format_datetime(end_datetime_utc)
+    creation_limit_utc = format_datetime(creation_limit_utc)
+
+    if creation_limit_utc:
         raise NotImplementedError()
+    
+    
 
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
         model_name = model_name + "_adjust"
 
-    sites = await db.get_solar_regions()
+    sites = await db.get_solar_regions(type="nation")
 
     national_location_uuid = str(sites[0])
 
@@ -101,6 +109,8 @@ async def get_national_forecast(
         forecast_horizon_minutes=forecast_horizon_minutes,
         smooth_flag=False,
         model_name=model_name,
+        start_datetime=start_datetime_utc,
+        end_datetime=end_datetime_utc,
     )
 
     if include_metadata:
