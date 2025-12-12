@@ -1,6 +1,5 @@
 """The 'system' FastAPI router object."""
 
-
 from fastapi import APIRouter
 from starlette import status
 
@@ -37,13 +36,14 @@ async def get_system_details(
     national = regions[0]
     installed_capacity_mw = national.region_metadata["effective_capacity_watts"] / 10**6
 
-    location = Location(label="National-GB",
-                        gsp_id=0,
-                        gsp_name="National",
-                        gsp_group="National",
-                        region_name="National",
-                        installed_capacity_mw=installed_capacity_mw)
-
+    location = Location(
+        label="National-GB",
+        gsp_id=0,
+        gsp_name="National",
+        gsp_group="National",
+        region_name="National",
+        installed_capacity_mw=installed_capacity_mw,
+    )
 
     if gsp_id == 0:
         return [location]
@@ -53,7 +53,6 @@ async def get_system_details(
 
     locations = [location]
     for region in regions:
-
         region_gsp_id = int(region.region_metadata["gsp_id"].number_value)
         installed_capacity_mw = region.region_metadata["effective_capacity_watts"] / 10**6
         if "full_name" in region.region_metadata:
@@ -65,15 +64,17 @@ async def get_system_details(
             continue
 
         gsp_name = region.region_name
-        gsp_group=region.region_name
+        gsp_group = region.region_name
         region_name = full_name
 
-        location = Location(label=f"GSP_{region_gsp_id}",
-                            gsp_id=region_gsp_id,
-                            gsp_name=gsp_name,
-                            gsp_group=gsp_group,
-                            region_name=region_name,
-                            installed_capacity_mw=installed_capacity_mw)
+        location = Location(
+            label=f"GSP_{region_gsp_id}",
+            gsp_id=region_gsp_id,
+            gsp_name=gsp_name,
+            gsp_group=gsp_group,
+            region_name=region_name,
+            installed_capacity_mw=installed_capacity_mw,
+        )
 
         if gsp_id is not None and gsp_id == region_gsp_id:
             return [location]
@@ -84,4 +85,3 @@ async def get_system_details(
     locations.sort(key=lambda x: x.gsp_id)
 
     return locations
-

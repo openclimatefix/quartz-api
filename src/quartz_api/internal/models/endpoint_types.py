@@ -141,4 +141,32 @@ def get_timezone() -> str:
     """
     return "UTC"
 
+
+class OneDatetimeManyForecastValues(BaseModel):
+    """One datetime with many forecast values.
+
+    This is a legacy route that is being phased out.
+    """
+
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
+    forecast_values: dict[int|str, float] = Field(
+        ...,
+        description="List of forecasts by ids. Key is gsp_id, value is generation_kw. "
+        "We keep this as a dictionary to keep the size of the file small ",
+    )
+
+class GSPYieldGroupByDatetime(BaseModel):
+    """gsp yields for one a singel datetime.
+
+    This is a legacy route that is being phased out.
+    """
+
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
+    generation_kw_by_gsp_id: dict[int|str, float] = Field(
+        ...,
+        description="List of generations by ids. Key is gsp_id, value is generation_kw. "
+        "We keep this as a dictionary to keep the size of the file small ",
+    )
+
+
 TZDependency = Annotated[str, Depends(get_timezone)]

@@ -54,7 +54,8 @@ class Location(EnhancedBaseModel):
     gsp_group: str | None = Field(None, description="The GSP group name")
     region_name: str | None = Field(None, description="The GSP region name")
     installed_capacity_mw: float | None = Field(
-        None, description="The installed capacity of the GSP in MW",
+        None,
+        description="The installed capacity of the GSP in MW",
     )
 
 
@@ -76,11 +77,15 @@ class ForecastValue(EnhancedBaseModel):
         ),
     )
     expected_power_generation_megawatts: float = Field(
-        ..., ge=0, description="The forecasted value in MW",
+        ...,
+        ge=0,
+        description="The forecasted value in MW",
     )
 
     expected_power_generation_normalized: float | None = Field(
-        None, ge=0, description="The forecasted value divided by the GSP capacity [%]",
+        None,
+        ge=0,
+        description="The forecasted value divided by the GSP capacity [%]",
     )
 
 
@@ -91,7 +96,8 @@ class InputDataLastUpdated(EnhancedBaseModel):
     nwp: datetime = Field(..., description="The time when the input NWP data was last updated")
     pv: datetime = Field(..., description="The time when the input PV data was last updated")
     satellite: datetime = Field(
-        ..., description="The time when the input satellite data was last updated",
+        ...,
+        description="The time when the input satellite data was last updated",
     )
 
 
@@ -101,7 +107,8 @@ class Forecast(EnhancedBaseModel):
     location: Location = Field(..., description="The location object for this forecaster")
     model: MLModel = Field(..., description="The name of the model that made this forecast")
     forecast_creation_time: datetime = Field(
-        ..., description="The time when the forecaster was made",
+        ...,
+        description="The time when the forecaster was made",
     )
     historic: bool = Field(
         False,
@@ -163,79 +170,6 @@ class LocationWithGSPYields(Location):
         )
 
 
-class GSPYieldGroupByDatetime(EnhancedBaseModel):
-    """gsp yields for one a singel datetime."""
-
-    datetime_utc: datetime = Field(..., description="The timestamp of the gsp yield")
-    generation_kw_by_gsp_id: dict[int, float] = Field(
-        ...,
-        description="List of generations by gsp_id. Key is gsp_id, value is generation_kw. "
-        "We keep this as a dictionary to keep the size of the file small ",
-    )
-
-
-class OneDatetimeManyForecastValues(EnhancedBaseModel):
-    """One datetime with many forecast values."""
-
-    datetime_utc: datetime = Field(..., description="The timestamp of the gsp yield")
-    forecast_values: dict[int, float] = Field(
-        ...,
-        description="List of forecasts by gsp_id. Key is gsp_id, value is generation_kw. "
-        "We keep this as a dictionary to keep the size of the file small ",
-    )
-
-
-def convert_forecasts_to_many_datetime_many_generation(
-    forecasts: list[Forecast],
-    historic: bool = True,
-    start_datetime_utc: datetime | None = None,
-    end_datetime_utc: datetime | None = None,
-) -> list[OneDatetimeManyForecastValues]:
-    """Change forecasts to list of OneDatetimeManyForecastValues.
-
-    This converts a list of forecast objects to a list of OneDatetimeManyForecastValues objects.
-
-    N forecasts, which T forecast values each,
-    is converted into
-    T OneDatetimeManyForecastValues objects with N forecast values each.
-
-    This reduces the size of the object as the datetimes are not repeated for each forecast values.
-    """
-    many_forecast_values_by_datetime = {}
-
-    # loop over locations and gsp yields to create a dictionary of gsp generation by datetime
-    for forecast in forecasts:
-        gsp_id = str(forecast.location.gsp_id)
-        forecast_values = forecast.forecast_values_latest if historic else forecast.forecast_values
-
-        for forecast_value in forecast_values:
-            datetime_utc = forecast_value.target_time
-            if start_datetime_utc is not None and datetime_utc < start_datetime_utc:
-                continue
-            if end_datetime_utc is not None and datetime_utc > end_datetime_utc:
-                continue
-
-            forecast_mw = forecast_value.expected_power_generation_megawatts
-            forecast_mw = round(forecast_mw, 2)
-
-            # if the datetime object is not in the dictionary, add it
-            if datetime_utc not in many_forecast_values_by_datetime:
-                many_forecast_values_by_datetime[datetime_utc] = {gsp_id: forecast_mw}
-            else:
-                many_forecast_values_by_datetime[datetime_utc][gsp_id] = forecast_mw
-
-    # convert dictionary to list of OneDatetimeManyForecastValues objects
-    many_forecast_values = []
-    for datetime_utc, forecast_values in many_forecast_values_by_datetime.items():
-        many_forecast_values.append(
-            OneDatetimeManyForecastValues(
-                datetime_utc=datetime_utc, forecast_values=forecast_values,
-            ),
-        )
-
-    return many_forecast_values
-
-
 NationalYield = GSPYield
 
 
@@ -243,7 +177,8 @@ class NationalForecastValue(ForecastValue):
     """One Forecast of generation at one timestamp include properties."""
 
     plevels: dict = Field(
-        None, description="Dictionary to hold properties of the forecast, like p_levels. ",
+        None,
+        description="Dictionary to hold properties of the forecast, like p_levels. ",
     )
 
     expected_power_generation_normalized: float | None = Field(

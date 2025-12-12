@@ -1,6 +1,5 @@
 """The 'uk national and gsp' FastAPI router object and associated routes logic."""
 
-
 from importlib.metadata import version
 
 from fastapi import APIRouter
@@ -17,7 +16,9 @@ version = version("quartz-api")
 general_routes_prefix = "/v0/solar/GB"
 
 router.include_router(
-    national_router, prefix=f"{general_routes_prefix}/national", tags=["National"],
+    national_router,
+    prefix=f"{general_routes_prefix}/national",
+    tags=["National"],
 )
 router.include_router(gsp_router, prefix=f"{general_routes_prefix}/gsp", tags=["GSP"])
 router.include_router(status_router, prefix=f"{general_routes_prefix}/status")

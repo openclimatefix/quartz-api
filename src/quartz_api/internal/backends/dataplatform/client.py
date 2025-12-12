@@ -1,5 +1,6 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
+import asyncio
 import datetime as dt
 import logging
 from uuid import UUID
@@ -455,3 +456,122 @@ class Client(models.DatabaseInterface):
                 detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
             )
         return True
+
+    @override
+    async def get_forecast_for_multiple_locations(
+        self,
+        location_uuids: list[str],
+        authdata: dict[str, str],
+        start_datetime_utc: dt.datetime | None = None,
+        end_datetime_utc: dt.datetime | None = None,
+        model_name: str | None = None,
+    ) -> list[models.OneDatetimeManyForecastValues]:
+        """Get a forecast for multiple sites.
+
+        Args:
+            location_uuids: List of site UUIDs to get forecasts for.
+            authdata: Authentication data for the user.
+            start_datetime_utc: The start datetime for the prediction window. Default is None.
+            end_datetime_utc: The end datetime for the prediction window. Default is None.
+            model_name: The name of the forecasting model to use. Default is None.
+
+        Returns:
+            A list of OneDatetimeManyForecastValues objects.
+        """
+        start, end = get_window(start=start_datetime_utc, end=end_datetime_utc)
+
+        # timestamps 30 mins apart from start to end
+        n_half_hours = int((((end - start).total_seconds() // 60) // 30) + 1)
+        timestamps = [start + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
+
+        # get forecasters
+        req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
+                                      latest_versions_only=True)
+        resp = await self.dp_client.list_forecasters(req)
+        forecaster = resp.forecasters[0]
+
+        forecasts_per_timestamp = []
+        tasks = []
+        for timestamp in timestamps:
+            req = dp.GetForecastAtTimestampRequest(location_uuids=location_uuids,
+                                                    energy_source=dp.EnergySource.SOLAR,
+                                                    timestamp_utc=timestamp,
+                                                    forecaster=forecaster)
+            # resp = await self.dp_client.get_forecast_at_timestamp(req)
+            task = asyncio.create_task(self.dp_client.get_forecast_at_timestamp(req))
+            tasks.append(task)
+        list_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for exc in filter(lambda x: isinstance(x, Exception), list_results):
+            raise exc
+
+        for resp in list_results:
+            forecasts_per_timestamp.append(
+                models.OneDatetimeManyForecastValues(datetime_utc=resp.timestamp_utc,
+                    forecast_values={
+                        forecast.location_uuid: round(
+                            forecast.value_fraction * forecast.effective_capacity_watts
+                            / 1000.0,
+                            2,
+                        )
+                        for forecast in resp.values
+                    }),
+           )
+
+        return forecasts_per_timestamp
+
+    @override
+    async def get_generation_for_multiple_locations(
+        self,
+        location_uuids: list[str],
+        authdata: dict[str, str],
+        start_datetime: dt.datetime | None = None,
+        end_datetime: dt.datetime | None = None,
+        observer_name: str = "ruvnl",
+    ) -> list[models.GSPYieldGroupByDatetime]:
+        """Get a forecast for multiple sites."""
+        start, end = get_window(start=start_datetime, end=end_datetime)
+
+        tasks = []
+        for location_uuid in location_uuids:
+            req = dp.GetObservationsAsTimeseriesRequest(
+                location_uuid=location_uuid,
+                observer_name=observer_name,
+                energy_source=dp.EnergySource.SOLAR,
+                time_window=dp.TimeWindow(
+                    start_timestamp_utc=start,
+                    end_timestamp_utc=end,
+                ),
+            )
+            task = asyncio.create_task(self.dp_client.get_observations_as_timeseries(req))
+            tasks.append(task)
+            # observation = await self.dp_client.get_observations_as_timeseries(req)
+            # observations.append(observation)
+
+        list_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for exc in filter(lambda x: isinstance(x, Exception), list_results):
+            raise exc
+
+        # Combine results into GSPYieldGroupByDatetime
+        observations_by_datetime = {}
+        for observation in list_results:
+
+            location_uuid = observation.location_uuid
+
+            for value in observation.values:
+                timestamp = value.timestamp_utc
+                if timestamp not in observations_by_datetime:
+                    # make a dictionary generation_kw_by_gsp_id
+                    observations_by_datetime[timestamp] = {}
+
+                generation_kw = int(value.effective_capacity_watts * value.value_fraction / 1000.0)
+                observations_by_datetime[timestamp][location_uuid] = generation_kw
+
+        # format to list of GSPYieldGroupByDatetime
+        observations_by_datetime_formated = [
+            models.GSPYieldGroupByDatetime(
+                datetime_utc=timestamp,
+                generation_kw_by_gsp_id=generation_kw_by_gsp_id,
+            )
+            for timestamp, generation_kw_by_gsp_id in observations_by_datetime.items()
+        ]
+        return observations_by_datetime_formated

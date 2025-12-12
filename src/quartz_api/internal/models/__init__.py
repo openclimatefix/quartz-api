@@ -10,6 +10,8 @@ from .endpoint_types import (
     ForecastHorizon,
     PredictedPower,
     Region,
+    GSPYieldGroupByDatetime,
+    OneDatetimeManyForecastValues,
     SiteProperties,
     Site,
     SubstationProperties,

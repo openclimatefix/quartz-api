@@ -43,7 +43,7 @@ class ModelName(str, Enum):
 )
 async def get_national_forecast(
     db: DBClientDependency,
-    auth: AuthDependency,  #noqa FBT001 # TODO
+    auth: AuthDependency,  # noqa FBT001 # TODO
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
     start_datetime_utc: str | None = None,
@@ -88,8 +88,6 @@ async def get_national_forecast(
     if creation_limit_utc:
         raise NotImplementedError()
 
-
-
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
         model_name = model_name + "_adjust"
@@ -114,15 +112,15 @@ async def get_national_forecast(
     if include_metadata:
         raise NotImplementedError()
     else:
-
-        national_forecasts = [NationalForecastValue(
-                    target_time=pp.Time,
-                    expected_power_generation_megawatts=pp.PowerKW/1000,
-                ) for pp in predicted_powers]
+        national_forecasts = [
+            NationalForecastValue(
+                target_time=pp.Time,
+                expected_power_generation_megawatts=pp.PowerKW / 1000,
+            )
+            for pp in predicted_powers
+        ]
 
         return national_forecasts
-
-
 
 
 @router.get(
@@ -131,7 +129,7 @@ async def get_national_forecast(
 )
 async def get_national_pvlive(
     db: DBClientDependency,
-    auth: AuthDependency,   #noqa FBT001 # TODO
+    auth: AuthDependency,  # noqa FBT001 # TODO
     regime: str | None = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
@@ -156,16 +154,17 @@ async def get_national_pvlive(
 
     regime = regime.replace("-", "_")
 
-    solar_production \
-        = await db.get_actual_solar_power_production_for_location(
-            location=national_location_uuid,
-            observer_name=f"pvlive_{regime}")
+    solar_production = await db.get_actual_solar_power_production_for_location(
+        location=national_location_uuid, observer_name=f"pvlive_{regime}",
+    )
 
-
-    national_yields = [NationalYield(
-                datetime_utc=sp.Time,
-                solar_generation_kw=sp.PowerKW,
-            ) for sp in solar_production]
+    national_yields = [
+        NationalYield(
+            datetime_utc=sp.Time,
+            solar_generation_kw=sp.PowerKW,
+        )
+        for sp in solar_production
+    ]
 
     return national_yields
 

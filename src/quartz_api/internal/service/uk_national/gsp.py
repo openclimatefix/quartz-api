@@ -1,5 +1,7 @@
 """The 'gsp' FastAPI router object."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter
 from starlette import status
 
@@ -7,10 +9,12 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,
     ForecastHorizon,
+    GSPYieldGroupByDatetime,
+    OneDatetimeManyForecastValues,
 )
 
 from .pydantic_models import ForecastValue, GSPYield
-from .time_utils import format_datetime
+from .time_utils import floor_30_minutes_dt, format_datetime
 
 router = APIRouter(tags=["GSP"])
 
@@ -21,7 +25,7 @@ router = APIRouter(tags=["GSP"])
 )
 async def get_forecasts_for_a_specific_gsp(
     db: DBClientDependency,
-    auth: AuthDependency, # noqa FBT001 # TODO
+    auth: AuthDependency,  # noqa FBT001 # TODO
     gsp_id: int,
     forecast_horizon_minutes: int | None = None,
     start_datetime_utc: str | None = None,
@@ -75,10 +79,13 @@ async def get_forecasts_for_a_specific_gsp(
         end_datetime=end_datetime_utc,
     )
 
-    national_forecasts = [ForecastValue(
-                target_time=pp.Time,
-                expected_power_generation_megawatts=pp.PowerKW/1000,
-            ) for pp in predicted_powers]
+    national_forecasts = [
+        ForecastValue(
+            target_time=pp.Time,
+            expected_power_generation_megawatts=pp.PowerKW / 1000,
+        )
+        for pp in predicted_powers
+    ]
 
     return national_forecasts
 
@@ -146,5 +153,139 @@ async def get_truths_for_a_specific_gsp(
     return gsp_yields
 
 
-# TODO add forecast/all and pvlive/all route.
-# These are hidden but used by the UI
+# corresponds to route /v0/solar/GB/gsp/forecast/all/
+# TODO currently takes 9 seconds to load, so probably needs optimization
+@router.get(
+    "/forecast/all/",
+    response_model=list[OneDatetimeManyForecastValues],
+    include_in_schema=False,
+)
+async def get_all_available_forecasts(
+    db: DBClientDependency,
+    auth: AuthDependency,
+    start_datetime_utc: str | None = None,
+    end_datetime_utc: str | None = None,
+    gsp_ids: str | None = None,
+    creation_limit_utc: str | None = None,
+) -> list[OneDatetimeManyForecastValues]:
+    """### Get all forecasts for all GSPs.
+
+    The return object contains a forecast object with system details and
+    forecast values for all GSPs.
+
+    This request may take a longer time to load because a lot of data is being
+    pulled from the database.
+
+    If _compact_ is set to true, the response will be a list of GSPGenerations objects.
+    This return object is significantly smaller, but less readable.
+
+    _gsp_ids_ is a list of integers that correspond to the GSP ids.
+    If this is 1,2,3,4 the response will only contain those GSPs.
+
+    #### Parameters
+    - **historic**: boolean that defaults to `true`, returning yesterday's and
+    today's forecasts for all GSPs
+    - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
+    - **end_datetime_utc**: optional end datetime for the query. e.g '2023-08-12 14:00:00+00:00'
+    """
+    gsps = await db.get_solar_regions(type="gsp")
+    # might need to add nation location in here too
+
+    # format gsp_ids
+    if isinstance(gsp_ids, str):
+        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",")]
+        if gsp_ids == "":
+            gsp_ids = None
+
+    # get locations uuids
+    if gsp_ids is not None:
+        location_uuids = [
+            str(gsp.region_metadata["location_uuid"])
+            for gsp in gsps
+            if int(gsp.region_metadata["gsp_id"].number_value) in gsp_ids
+        ]
+    else:
+        location_uuids = [str(gsp.region_metadata["location_uuid"]) for gsp in gsps]
+
+    start_datetime_utc = format_datetime(start_datetime_utc)
+    end_datetime_utc = format_datetime(end_datetime_utc)
+    creation_limit_utc = format_datetime(creation_limit_utc)
+
+    # TODO
+    # end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
+
+    # by default, don't get any data in the past if more than one gsp
+    if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
+        start_datetime_utc = floor_30_minutes_dt(datetime.now(tz=UTC))
+
+    forecast_values = await db.get_forecast_for_multiple_locations(
+        location_uuids=location_uuids,
+        start_datetime_utc=start_datetime_utc,
+        end_datetime_utc=end_datetime_utc,
+        model_name="blend",
+        authdata=auth,
+    )
+
+    return forecast_values
+
+
+# corresponds to API route /v0/solar/GB/gsp/pvlive/all
+# TODO currently takes 2 seconds to load, so probably needs optimization
+@router.get(
+    "/pvlive/all",
+    response_model=list[GSPYieldGroupByDatetime],
+    include_in_schema=False,
+)
+async def get_truths_for_all_gsps(
+    db: DBClientDependency,
+    auth: AuthDependency,
+    regime: str = "in-day",
+    start_datetime_utc: str | None = None,
+    end_datetime_utc: str | None = None,
+    gsp_ids: str | None = None,
+) -> list[GSPYieldGroupByDatetime]:
+    """### Get PV_Live values for all GSPs for yesterday and today.
+
+    The return object is a series of real-time PV generation estimates or
+    truth values from __PV_Live__ for all GSPs.
+
+    Setting the _regime_ parameter to _day-after_ includes
+    the previous day's truth values for the GSPs.
+
+    If _regime_ is not specified, the parameter defaults to _in-day_.
+
+    If _compact_ is set to true, the response will be a list of GSPGenerations objects.
+    This return object is significantly smaller, but less readable.
+
+    #### Parameters
+    - **regime**: can choose __in-day__ or __day-after__
+    - **start_datetime_utc**: optional start datetime for the query.
+    - **end_datetime_utc**: optional end datetime for the query.
+    """
+    if isinstance(gsp_ids, str):
+        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",")]
+
+    gsps = await db.get_solar_regions(type="gsp")
+
+    start_datetime_utc = format_datetime(start_datetime_utc)
+    end_datetime_utc = format_datetime(end_datetime_utc)
+
+    # get locations uuids
+    if gsp_ids is not None:
+        location_uuids = [
+            str(gsp.region_metadata["location_uuid"])
+            for gsp in gsps
+            if int(gsp.region_metadata["gsp_id"].number_value) in gsp_ids
+        ]
+    else:
+        location_uuids = [str(gsp.region_metadata["location_uuid"]) for gsp in gsps]
+
+    observations = await db.get_generation_for_multiple_locations(
+        location_uuids=location_uuids,
+        observer_name=f"pvlive_{regime.replace('-', '_')}",
+        start_datetime=start_datetime_utc,
+        end_datetime=end_datetime_utc,
+        authdata=auth,
+    )
+
+    return observations
