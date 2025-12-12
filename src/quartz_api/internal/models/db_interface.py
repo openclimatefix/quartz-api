@@ -1,9 +1,9 @@
 """Defines the domain interface for interacting with a backend."""
 
 import abc
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
-from datetime import datetime
 
 from fastapi import Depends, HTTPException
 

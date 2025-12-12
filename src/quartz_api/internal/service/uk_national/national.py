@@ -81,15 +81,14 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-
     start_datetime_utc = format_datetime(start_datetime_utc)
     end_datetime_utc = format_datetime(end_datetime_utc)
     creation_limit_utc = format_datetime(creation_limit_utc)
 
     if creation_limit_utc:
         raise NotImplementedError()
-    
-    
+
+
 
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
