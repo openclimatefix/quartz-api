@@ -35,6 +35,8 @@ class Client(models.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
         model_name: str | None = None,
+        start_datetime: dt.datetime | None = None,
+        end_datetime: dt.datetime | None = None,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location_uuid=location,
@@ -44,6 +46,8 @@ class Client(models.DatabaseInterface):
             smooth_flag=smooth_flag,
             oauth_id=None,
             model_name=model_name,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         return values
 
@@ -340,6 +344,8 @@ class Client(models.DatabaseInterface):
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,  # noqa: ARG002
         model_name: str | None = None,
+        start_datetime: dt.datetime | None = None,
+        end_datetime: dt.datetime | None = None,
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
@@ -350,7 +356,7 @@ class Client(models.DatabaseInterface):
                 oauth_id,
             )
 
-        start, end = get_window()
+        start, end = get_window(start=start_datetime, end=end_datetime)
 
         if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
