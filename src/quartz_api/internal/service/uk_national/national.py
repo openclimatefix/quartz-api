@@ -95,8 +95,9 @@ async def get_national_forecast(
         model_name = model_name + "_adjust"
 
     sites = await db.get_solar_regions(type="nation")
+    national_location_uuid = sites[0].region_metadata['location_uuid']
 
-    national_location_uuid = str(sites[0])
+    print(f"National location UUID: {national_location_uuid}")
 
     forecast_horizon = ForecastHorizon.latest
     if forecast_horizon_minutes is None:
@@ -153,8 +154,7 @@ async def get_national_pvlive(
 
     """
     sites = await db.get_solar_regions(type="nation")
-
-    national_location_uuid = str(sites[0])
+    national_location_uuid = sites[0].region_metadata['location_uuid']
 
     regime = regime.replace("-", "_")
 
