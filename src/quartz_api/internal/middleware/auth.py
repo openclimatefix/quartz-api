@@ -1,55 +1,15 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
 
-# ruff: noqa: B008
+import os
 from typing import Annotated
 
-import jwt
-from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, Security
+from fastapi.security import HTTPBearer
+from fastapi_auth0 import Auth0, Auth0User
 
 token_auth_scheme = HTTPBearer()
 
 EMAIL_KEY = "https://openclimatefix.org/email"
-
-
-class Auth0:
-    """Fast api dependency that validates an JWT token."""
-
-    def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
-        """Initialize the Auth dependency."""
-        self._domain = domain
-        self._api_audience = api_audience
-        self._algorithm = algorithm
-
-        self._jwks_client = jwt.PyJWKClient(f"https://{domain}/.well-known/jwks.json")
-
-    def __call__(
-        self,
-        request: Request,
-        auth_credentials: HTTPAuthorizationCredentials = Depends(token_auth_scheme),
-    ) -> dict[str, str]:
-        """Validate the JWT token and return the payload."""
-        token = auth_credentials.credentials
-
-        try:
-            signing_key = self._jwks_client.get_signing_key_from_jwt(token).key
-        except (jwt.exceptions.PyJWKClientError, jwt.exceptions.DecodeError) as e:
-            raise HTTPException(status_code=401, detail=str(e)) from e
-
-        try:
-            payload: dict[str, str] = jwt.decode(
-                token,
-                signing_key,
-                algorithms=self._algorithm,
-                audience=self._api_audience,
-                issuer=f"https://{self._domain}/",
-            )
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=str(e)) from e
-
-        request.state.auth = payload
-
-        return payload
 
 
 class DummyAuth:
@@ -62,13 +22,16 @@ class DummyAuth:
             "sub": "google-oath2|012345678909876543210",
         }
 
-def get_auth() -> dict[str, str]:
-    """Get the authentication payload.
 
-    Note: This should be overridden via FastAPI's dependency injection system with an actual
-    authentication method (e.g., Auth0 or DummyAuth).
-    """
-    raise HTTPException(status_code=401, detail="No authentication method configured.")
+# Lets setup the auths
+# 'auth' can be imported into the route if we want to limit a route by scopes
+auth = DummyAuth()
+if (os.getenv("AUTH0_DOMAIN") is not None) and (os.getenv("AUTH0_AUDIENCE") is not None):
+    auth = Auth0(api_audience=os.getenv("AUTH0_AUDIENCE"), domain=os.getenv("AUTH0_DOMAIN"))
 
-AuthDependency = Annotated[dict[str, str], Depends(get_auth)]
+    # we do this so that "Authorization" button appears in swagger ui
+    security = Security(auth.get_user)
 
+# this is the dependency we can use in routes to get the user info
+get_user = auth.get_user
+AuthDependency = Annotated[Auth0User, Depends(get_user)]

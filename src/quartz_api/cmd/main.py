@@ -192,14 +192,11 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
         case (_, "") | ("", _):
-            server.dependency_overrides[auth.get_auth] = auth.DummyAuth()
+            server.dependency_overrides[auth.get_user] = auth.DummyAuth()
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            server.dependency_overrides[auth.get_auth] = auth.Auth0(
-                domain=domain,
-                api_audience=audience,
-                algorithm="RS256",
-            )
+            auth0 = auth.Auth0(domain=domain, api_audience=audience)
+            server.dependency_overrides[auth.get_user] = auth0.get_user
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
