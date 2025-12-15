@@ -51,6 +51,12 @@ class PredictedPower(BaseModel):
     PowerKW: float
     Time: dt.datetime
     CreatedTime: dt.datetime = Field(exclude=True)
+    PlevelKW: dict[str, float]  = Field(
+        {},
+        description="A dictionary of probabilistic levels for the forecast. "
+        "Keys are the level names (e.g., 'p10', 'p50', 'p90'), "
+        "and values are the corresponding power values in kW.",
+    )
 
     def to_timezone(self, tz: str) -> "PredictedPower":
         """Converts the time of this predicted power value to the given timezone."""

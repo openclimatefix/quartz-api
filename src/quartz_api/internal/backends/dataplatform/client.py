@@ -464,6 +464,13 @@ class Client(models.DatabaseInterface):
                 Time=value.target_timestamp_utc,
                 PowerKW=int(value.effective_capacity_watts * value.p50_value_fraction / 1000.0),
                 CreatedTime=value.created_timestamp_utc,
+                PlevelKW={
+                    "p10": int(value.effective_capacity_watts \
+                               * value.other_statistics_fractions["p10"] / 1000.0),
+                    "p90": int(value.effective_capacity_watts \
+                               * value.other_statistics_fractions["p90"] / 1000.0),
+                } if "p10" in value.other_statistics_fractions
+                and "p90" in value.other_statistics_fractions else {},
             )
             for value in resp.values
         ]

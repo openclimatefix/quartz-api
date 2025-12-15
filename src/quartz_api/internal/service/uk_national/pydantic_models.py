@@ -22,6 +22,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from quartz_api.internal.models import Region
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,6 +59,33 @@ class Location(EnhancedBaseModel):
         None,
         description="The installed capacity of the GSP in MW",
     )
+
+    @classmethod
+    def from_region(cls, region: Region) -> "Location":
+        """Change RegionSQL to Location.
+
+        RegionSQL is defined in nowcasting_datamodel
+        """
+        region_gsp_id = int(region.region_metadata["gsp_id"].number_value)
+        installed_capacity_mw = region.region_metadata["effective_capacity_watts"] / 10**6
+        if "full_name" in region.region_metadata:
+            full_name = region.region_metadata["full_name"].string_value
+        else:
+            full_name = region.region_name
+
+        gsp_name = region.region_name
+        gsp_group = region.region_name
+        region_name = full_name
+
+        return Location(
+            label=f"GSP_{region_gsp_id}",
+            gsp_id=region_gsp_id,
+            gsp_name=gsp_name,
+            gsp_group=gsp_group,
+            region_name=region_name,
+            installed_capacity_mw=installed_capacity_mw,
+        )
+
 
 
 class MLModel(EnhancedBaseModel):
