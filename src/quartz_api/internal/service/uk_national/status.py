@@ -1,8 +1,10 @@
 """The 'status' FastAPI router object."""
 
+import os
 from datetime import datetime
 
 from fastapi import APIRouter
+from sqlalchemy import create_engine, text
 from starlette import status
 
 from quartz_api.internal.models import (
@@ -12,6 +14,9 @@ from quartz_api.internal.models import (
 from .pydantic_models import Status
 
 router = APIRouter()
+
+db_url = os.getenv("DB_URL")
+engine = create_engine(db_url)
 
 
 @router.get(
@@ -24,7 +29,17 @@ async def get_status() -> Status:
     Occasionally there may be a small problem or interruption with the forecast. This
     route is where the OCF team communicates the forecast status to users.
     """
-    raise NotImplementedError()
+    # Note that we want to upgrade this,
+    # but currently this will pull from the nowcasting_datamodel database
+
+    with engine.connect() as connection:
+        result = connection.execute(text("SELECT * from status order by created_utc desc limit 1"))
+        row = result.fetchone()
+        status = Status(
+            status=row[2],
+            message=row[3],
+        )
+    return status
 
 
 @router.get("/check_last_forecast_run", include_in_schema=False)

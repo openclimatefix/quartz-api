@@ -30,6 +30,7 @@ dependencies = [
     "numpy >= 1.25.0",
     "sentry-sdk >= 2.1.1",
     "pyhocon>=0.3.61",
+    "sqlalchemy>=2.0.44",
 ]
 
 [dependency-groups]
