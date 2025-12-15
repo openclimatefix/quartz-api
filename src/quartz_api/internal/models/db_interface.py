@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException
 from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
+    ForecastMetadata,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValues,
     PredictedPower,
@@ -134,6 +135,18 @@ class DatabaseInterface(abc.ABC):
         """Get a forecast for multiple sites."""
         pass
 
+
+    @abc.abstractmethod
+    async def get_forecast_metadata(
+        self,
+        location_uuid: str,
+        authdata: dict[str, str],
+        model_name: str | None = None,
+    ) -> ForecastMetadata:
+        """Get forecast metadata for a site."""
+        pass
+
+
     @abc.abstractmethod
     async def get_site_generation(
         self, site_uuid: UUID, authdata: dict[str, str], observer_name: str | None = None,
@@ -183,6 +196,8 @@ class DatabaseInterface(abc.ABC):
     ) -> SubstationProperties:
         """Get substation metadata."""
         pass
+
+
 
 def get_db_client() -> DatabaseInterface:
     """Get the client implementation.

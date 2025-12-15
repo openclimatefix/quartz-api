@@ -319,6 +319,40 @@ class Client(models.DatabaseInterface):
         )
 
 
+    async def get_forecast_metadata(
+        self,
+        location_uuid: str,
+        authdata: dict[str, str],  #noqa: ARG002
+        model_name: str | None = None,
+    ) -> models.ForecastMetadata:
+        """Get forecast metadata for a site."""
+        req = dp.GetLatestForecastsRequest(
+                location_uuid=location_uuid,
+                energy_source=dp.EnergySource.SOLAR,
+            )
+        resp = await self.dp_client.get_latest_forecasts(req)
+
+        # Filter by model name if provided
+        if model_name:
+            resp.forecasts = [
+                forecast for forecast in resp.forecasts
+                if forecast.forecaster.forecaster_name == model_name
+            ]
+
+        resp.forecasts.sort(
+            key=lambda f: f.created_timestamp_utc,
+            reverse=True,
+        )
+        forecasts = resp.forecasts[0]
+
+        return models.ForecastMetadata(
+            initialization_timestamp_utc=forecasts.initialization_timestamp_utc,
+            created_timestamp_utc=forecasts.created_timestamp_utc,
+            forecaster_name=forecasts.forecaster.forecaster_name,
+            forecaster_version=forecasts.forecaster.forecaster_version,
+        )
+
+
     async def _get_actual_power_production_for_location(
         self,
         location_uuid: UUID,

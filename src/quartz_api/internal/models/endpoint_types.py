@@ -60,6 +60,16 @@ class PredictedPower(BaseModel):
             CreatedTime=self.CreatedTime.astimezone(tz=ZoneInfo(key=tz)),
         )
 
+class ForecastMetadata(BaseModel):
+    """Defines the forecast metadata structure."""
+
+    initialization_timestamp_utc: dt.datetime \
+        = Field(..., description="The initialization timestamp of the forecast in UTC.")
+    created_timestamp_utc: dt.datetime \
+        = Field(..., description="The created timestamp of the forecast in UTC.")
+    forecaster_name: str = Field(..., description="The name of the forecaster.")
+    forecaster_version: str = Field(..., description="The version of the forecaster.")
+
 
 class ActualPower(BaseModel):
     """Defines the data structure for an actual power value returned by the API."""
