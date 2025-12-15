@@ -15,8 +15,10 @@ from .pydantic_models import Status
 
 router = APIRouter()
 
-db_url = os.getenv("DB_URL")
-engine = create_engine(db_url)
+
+db_url = os.getenv("DB_URL", None)
+if db_url is not None:
+    engine = create_engine(db_url)
 
 
 @router.get(
