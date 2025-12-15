@@ -21,6 +21,14 @@ class DummyAuth:
             EMAIL_KEY: "test@test.com",
             "sub": "google-oath2|012345678909876543210",
         }
+    
+    def get_user(self, *kwargs) -> dict[str, str]:
+        """Return a dummy user payload."""
+        return {
+            "email": "test@test.com",
+            "id": "012345678909876543210",
+        }
+    
 
 
 # Lets setup the auths
