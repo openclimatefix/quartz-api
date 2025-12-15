@@ -27,7 +27,7 @@ async def get_status() -> Status:
     raise NotImplementedError()
 
 
-@router.get("/check_last_forecast_run", include_in_schema=True)
+@router.get("/check_last_forecast_run", include_in_schema=False)
 async def check_last_forecast_run(
     db: DBClientDependency,
     model_name: str | None = None) -> datetime:
