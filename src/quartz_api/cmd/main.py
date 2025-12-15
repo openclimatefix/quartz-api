@@ -37,6 +37,7 @@ from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import apitally
 import uvicorn
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
@@ -51,10 +52,15 @@ from starlette.staticfiles import StaticFiles
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth, time
+from apitally.fastapi import ApitallyMiddleware
+
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 static_dir = pathlib.Path(__file__).parent.parent / "static"
+
+# set hpack to not logDEBUG messages
+logging.getLogger("hpack").setLevel(logging.INFO)
 
 
 class GetHealthResponse(BaseModel):
@@ -216,6 +222,14 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(time.TimerMiddleware)
+
+
+    if conf.get_string("apitally.client_id") != "":
+        server.add_middleware(
+            ApitallyMiddleware,
+            client_id=conf.get_string("apitally.client_id"),
+            environment=conf.get_string("apitally.environment"),
+                              )
 
     return server
 
