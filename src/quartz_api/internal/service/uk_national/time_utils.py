@@ -42,3 +42,19 @@ def floor_30_minutes_dt(dt: datetime) -> datetime:
     dt += timedelta(minutes=approx)
 
     return dt
+
+
+def ceil_30_minutes_dt(dt: datetime) -> datetime:
+    """Ceil a datetime by 30 mins.
+
+    For example:
+    2021-01-01 17:01:01 --> 2021-01-01 17:30:00
+    2021-01-01 17:35:01 --> 2021-01-01 18:00:00
+    2021-01-01 17:30:00 --> 2021-01-01 17:30:00
+    """
+    dt_floor = floor_30_minutes_dt(dt)
+    if dt == dt_floor:
+        return dt_floor
+    dt_ceil = dt_floor + timedelta(minutes=30)
+    return dt_ceil
+

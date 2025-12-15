@@ -14,7 +14,7 @@ from quartz_api.internal.models import (
 )
 
 from .pydantic_models import ForecastValue, GSPYield
-from .time_utils import floor_30_minutes_dt, format_datetime
+from .time_utils import ceil_30_minutes_dt, floor_30_minutes_dt, format_datetime
 
 router = APIRouter(tags=["GSP"])
 
@@ -213,12 +213,20 @@ async def get_all_available_forecasts(
     end_datetime_utc = format_datetime(end_datetime_utc)
     creation_limit_utc = format_datetime(creation_limit_utc)
 
+    if start_datetime_utc is not None:
+        start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
+    if end_datetime_utc is not None:
+        end_datetime_utc = floor_30_minutes_dt(end_datetime_utc)
+
     # TODO
     # end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
 
     # by default, don't get any data in the past if more than one gsp
     if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
         start_datetime_utc = floor_30_minutes_dt(datetime.now(tz=UTC))
+
+    if start_datetime_utc is not None:
+        start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
 
     forecast_values = await db.get_forecast_for_multiple_locations(
         location_uuids_to_location_ids=location_uuids_to_gsp_id,
