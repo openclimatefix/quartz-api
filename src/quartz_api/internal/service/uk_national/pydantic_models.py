@@ -51,7 +51,7 @@ class Location(EnhancedBaseModel):
     """Location that the forecast is for."""
 
     label: str = Field(..., description="")
-    gsp_id: int | None = Field(None, description="The Grid Supply Point (GSP) id", index=True)
+    gsp_id: int | None = Field(None, description="The Grid Supply Point (GSP) id")
     gsp_name: str | None = Field(None, description="The GSP name")
     gsp_group: str | None = Field(None, description="The GSP group name")
     region_name: str | None = Field(None, description="The GSP region name")
@@ -91,7 +91,7 @@ class Location(EnhancedBaseModel):
 class MLModel(EnhancedBaseModel):
     """ML model that is being used."""
 
-    name: str | None = Field(..., description="The name of the model", index=True)
+    name: str | None = Field(..., description="The name of the model")
     version: str | None = Field(..., description="The version of the model")
 
 
