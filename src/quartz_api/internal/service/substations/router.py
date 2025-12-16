@@ -55,7 +55,7 @@ async def get_substation_forecast(
 ) -> list[models.PredictedPower]:
     """Get forecasted generation values of a substation."""
     forecast = await db.get_substation_forecast(
-        location_uuid=substation_uuid,
+        substation_uuid=substation_uuid,
         authdata=auth,
     )
     forecast = [

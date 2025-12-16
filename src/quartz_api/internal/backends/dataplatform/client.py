@@ -212,7 +212,7 @@ class Client(models.DatabaseInterface):
     ) -> list[models.PredictedPower]:
         # Get the substation
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[substation_uuid],
+            location_uuids_filter=[str(substation_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
             user_oauth_id_filter=authdata["sub"],
@@ -227,7 +227,7 @@ class Client(models.DatabaseInterface):
 
         # Get the GSP that the substation belongs to
         req = dp.ListLocationsRequest(
-            enclosed_location_uuid_filter=[substation_uuid],
+            enclosed_location_uuid_filter=[str(substation_uuid)],
             location_type_filter=dp.LocationType.GSP,
             user_oauth_id_filter=authdata["sub"],
         )
@@ -265,7 +265,7 @@ class Client(models.DatabaseInterface):
         authdata: dict[str, str],
     ) -> models.SubstationProperties:
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[location_uuid],
+            location_uuids_filter=[str(location_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             user_oauth_id_filter=authdata["sub"],
         )
