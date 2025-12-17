@@ -42,13 +42,12 @@ from dp_sdk.ocf import dp
 from fastapi import FastAPI, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi_auth0 import Auth0User
+from fastapi_auth0 import Auth0, Auth0User
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
-from fastapi_auth0 import Auth0
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
