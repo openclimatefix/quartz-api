@@ -35,18 +35,20 @@ import pathlib
 import sys
 from collections.abc import Generator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 
 import uvicorn
 from dp_sdk.ocf import dp
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi_auth0 import Auth0User
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
+from fastapi_auth0 import Auth0
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
@@ -192,13 +194,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
         case (_, "") | ("", _):
-            server.dependency_overrides[auth.get_user] = auth.DummyAuth()
+            # server.dependency_overrides[auth.get_user] = auth.DummyAuth()
+            get_user = auth.DummyAuth().get_user
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            auth0 = auth.Auth0(domain=domain, api_audience=audience)
-            server.dependency_overrides[auth.get_user] = auth0.get_user
+            auth0 = Auth0(domain=domain, api_audience=audience)
+            get_user = auth0.get_user
         case _:
             raise ValueError("Invalid Auth0 configuration")
+    server.dependency_overrides[auth.get_user] = get_user
+
+    # This sets up a test route to check authentication is working
+    # We need to do this, so that a "Authentication" button appears in swagger ui
+    @server.get("/check_authentication", tags=["API Information"])
+    def check_authentication(user: Annotated[Auth0User, Security(get_user)]) -> dict:
+        """Check if the user is authenticated."""
+        return {"authenticated": True, "user": user}
 
     timezone: str = conf.get_string("api.timezone")
     server.dependency_overrides[models.get_timezone] = lambda: timezone
