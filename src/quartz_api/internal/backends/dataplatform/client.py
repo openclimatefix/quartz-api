@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from typing_extensions import override
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.audit import get_oauth_id_from_sub
+from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
 from ..utils import get_window
 
