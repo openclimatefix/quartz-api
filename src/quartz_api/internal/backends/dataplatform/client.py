@@ -190,6 +190,9 @@ class Client(models.DatabaseInterface):
             user_oauth_id_filter=authdata["sub"],
         )
         resp = await self.dp_client.list_locations(req)
+
+        log.debug("Found %d substations", len(resp.locations))
+
         return [
             models.Substation(
                 substation_uuid=loc.location_uuid,
