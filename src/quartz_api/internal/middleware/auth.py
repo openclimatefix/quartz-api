@@ -79,7 +79,7 @@ def get_oauth_id_from_sub(auth0_sub: str) -> str:
     """
     if "|" not in auth0_sub:
         return auth0_sub
-    
+
     print(auth0_sub.split("|"))
 
     return auth0_sub.split("|")[1]
