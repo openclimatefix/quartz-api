@@ -269,7 +269,7 @@ class Client(models.DatabaseInterface):
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
-            user_oauth_id_filter=authdata["sub"],
+            user_oauth_id_filter=get_oauth_id_from_sub(authdata["sub"]),
         )
         resp = await self.dp_client.list_locations(req)
         if len(resp.locations) == 0:
