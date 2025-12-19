@@ -69,12 +69,21 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "prashantpandeygit",
+      "name": "Prashant Pandey",
+      "avatar_url": "https://avatars.githubusercontent.com/u/132379659?v=4",
+      "profile": "http://prashantpandeygit.github.io",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
   "skipCi": true,
   "repoType": "github",
   "repoHost": "https://github.com",
-  "projectName": "india-api",
+  "projectName": "quartz-api",
   "projectOwner": "openclimatefix"
 }
