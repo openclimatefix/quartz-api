@@ -187,7 +187,7 @@ class Client(models.DatabaseInterface):
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=authdata["sub"].strip("google-oauth2|"),
+            user_oauth_id_filter=authdata["sub"].removeprefix("google-oauth2|"),
         )
         resp = await self.dp_client.list_locations(req)
 
@@ -216,7 +216,7 @@ class Client(models.DatabaseInterface):
             location_uuids_filter=[str(substation_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=authdata["sub"].strip("google-oauth2|"),
+            user_oauth_id_filter=authdata["sub"].removeprefix("google-oauth2|"),
         )
         resp = await self.dp_client.list_locations(req)
         if len(resp.locations) == 0:
@@ -230,7 +230,7 @@ class Client(models.DatabaseInterface):
         req = dp.ListLocationsRequest(
             enclosed_location_uuid_filter=[str(substation_uuid)],
             location_type_filter=dp.LocationType.GSP,
-            user_oauth_id_filter=authdata["sub"].strip("google-oauth2|"),
+            user_oauth_id_filter=authdata["sub"].removeprefix("google-oauth2|"),
         )
         gsps = await self.dp_client.list_locations(req)
         if len(gsps.locations) == 0:
