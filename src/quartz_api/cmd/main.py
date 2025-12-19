@@ -37,6 +37,7 @@ from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import sentry_sdk
 import uvicorn
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
@@ -50,7 +51,7 @@ from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
-from quartz_api.internal.middleware import audit, auth, time
+from quartz_api.internal.middleware import audit, auth, sentry, time
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -160,12 +161,12 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
-        import sentry_sdk
 
         sentry_sdk.init(
             dsn=conf.get_string("sentry.dsn"),
             environment=conf.get_string("sentry.environment"),
             traces_sample_rate=1,
+            send_default_pii=True,
         )
 
         sentry_sdk.set_tag("server_name", "quartz_api")
@@ -189,17 +190,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)
 
+    # Store auth instance for middleware
+    auth_instance = None
+
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
         case (_, "") | ("", _):
-            server.dependency_overrides[auth.get_auth] = auth.DummyAuth()
+            auth_instance = auth.DummyAuth()
+            server.dependency_overrides[auth.get_auth] = auth_instance
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            server.dependency_overrides[auth.get_auth] = auth.Auth0(
+            auth_instance = auth.Auth0(
                 domain=domain,
                 api_audience=audience,
                 algorithm="RS256",
             )
+            server.dependency_overrides[auth.get_auth] = auth_instance
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
@@ -216,9 +222,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(time.TimerMiddleware)
+    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
     return server
-
 
 
 def run() -> None:
