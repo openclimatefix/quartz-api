@@ -47,3 +47,13 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
             logging.error(f"Failed to log request to DB: {e}")
 
         return response
+
+def get_oauth_id_from_sub(auth0_sub: str) -> str:
+    """Extract the auth ID from a auth0 sub ID.
+
+    For example auth0|66a4 .... or google-oauth2|1042
+    """
+    if "|" not in auth0_sub:
+        return auth0_sub
+
+    return auth0_sub.split("|")[1]
