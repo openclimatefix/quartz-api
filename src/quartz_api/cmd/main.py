@@ -25,7 +25,7 @@ enabling authenticated requests using the Bearer scheme:
 ```
 curl -X GET 'http://uk-development-quartz-api.eu-west-1.elasticbeanstalk.com/<route>' -H "Authorization: Bearer $TOKEN"
 ```
-"""
+"""  # noqa: E501
 
 import functools
 import importlib
