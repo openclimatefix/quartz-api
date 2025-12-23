@@ -24,7 +24,7 @@ async def get_substations(
 
     Note that currently only 'primary' substations are supported.
     """
-    substations = await db.get_substations(authdata=auth)
+    substations = await db.get_substations(authdata={})
     return substations
 
 @router.get(
@@ -39,7 +39,7 @@ async def get_substation(
     """Get a substation by UUID."""
     substation = await db.get_substation(
         location_uuid=substation_uuid,
-        authdata=auth,
+        authdata={},
     )
     return substation
 
@@ -56,7 +56,7 @@ async def get_substation_forecast(
     """Get forecasted generation values of a substation."""
     forecast = await db.get_substation_forecast(
         substation_uuid=substation_uuid,
-        authdata=auth,
+        authdata={},
     )
     forecast = [
         value.to_timezone(tz=tz)
