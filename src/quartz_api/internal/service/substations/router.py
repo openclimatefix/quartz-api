@@ -17,7 +17,7 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 )
 async def get_substations(
     db: models.DBClientDependency,
-    auth: AuthDependency,
+    _: AuthDependency,
     substation_type: Literal["primary"] = "primary", # noqa: ARG001
 ) -> list[models.Substation]:
     """Get all substations.
@@ -34,7 +34,7 @@ async def get_substations(
 async def get_substation(
     substation_uuid: UUID,
     db: models.DBClientDependency,
-    auth: AuthDependency,
+    _: AuthDependency,
 ) -> models.SubstationProperties:
     """Get a substation by UUID."""
     substation = await db.get_substation(
@@ -50,7 +50,7 @@ async def get_substation(
 async def get_substation_forecast(
     substation_uuid: UUID,
     db: models.DBClientDependency,
-    auth: AuthDependency,
+    _: AuthDependency,
     tz: models.TZDependency,
 ) -> list[models.PredictedPower]:
     """Get forecasted generation values of a substation."""
