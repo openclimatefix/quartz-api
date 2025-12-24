@@ -2,15 +2,15 @@
 
 ### Authentication
 
-Some routes may require authentication. An access token can be obtained via CURL:
+Some routes may require authentication. An access token can be obtained via cURL:
 
 ```
 export AUTH=$(curl --request POST
-   --url https://nowcasting-pro.eu.auth0.com/oauth/token
+   --url https://nowcasting-dev.eu.auth0.com/oauth/token
    --header 'content-type: application/json'
    --data '{
-      "client_id":"TODO",
-      "audience":"https://api.nowcasting.io/",
+      "client_id":"ONgyGHNXnOW8NjrlkuxLoEdOa5FkELEn",
+      "audience":"https://nowcasting-api-eu-auth0.com/",
       "grant_type":"password",
       "username":"username",
       "password":"password"
@@ -23,9 +23,9 @@ export TOKEN=$(echo "${AUTH}" | jq '.access_token' | tr -d '"')
 enabling authenticated requests using the Bearer scheme:
 
 ```
-curl -X GET 'https://api.quartz.energy/<route>' -H "Authorization: Bearer $TOKEN"
+curl -X GET 'http://uk-development-quartz-api.eu-west-1.elasticbeanstalk.com/<route>' -H "Authorization: Bearer $TOKEN"
 ```
-"""
+"""  # noqa: E501
 
 import functools
 import importlib

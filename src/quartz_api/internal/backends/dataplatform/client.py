@@ -218,10 +218,11 @@ class Client(models.DatabaseInterface):
         self,
         authdata: dict[str, str],
     ) -> list[models.Substation]:
+        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=get_oauth_id_from_sub(authdata["sub"]),
+            user_oauth_id_filter=oauth_id,
         )
         resp = await self.dp_client.list_locations(req)
 
@@ -246,11 +247,12 @@ class Client(models.DatabaseInterface):
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
         # Get the substation
+        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(substation_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=get_oauth_id_from_sub(authdata["sub"]),
+            user_oauth_id_filter=oauth_id,
         )
         resp = await self.dp_client.list_locations(req)
         if len(resp.locations) == 0:
@@ -264,7 +266,7 @@ class Client(models.DatabaseInterface):
         req = dp.ListLocationsRequest(
             enclosed_location_uuid_filter=[str(substation_uuid)],
             location_type_filter=dp.LocationType.GSP,
-            user_oauth_id_filter=get_oauth_id_from_sub(authdata["sub"]),
+            user_oauth_id_filter=oauth_id,
         )
         gsps = await self.dp_client.list_locations(req)
         if len(gsps.locations) == 0:
@@ -276,7 +278,7 @@ class Client(models.DatabaseInterface):
         forecast = await self._get_predicted_power_production_for_location(
             gsp.location_uuid,
             dp.EnergySource.SOLAR,
-            authdata["sub"],
+            oauth_id,
         )
 
         # Scale the forecast to the substation capacity
@@ -299,10 +301,11 @@ class Client(models.DatabaseInterface):
         location_uuid: UUID,
         authdata: dict[str, str],
     ) -> models.SubstationProperties:
+        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
-            user_oauth_id_filter=get_oauth_id_from_sub(authdata["sub"]),
+            user_oauth_id_filter=oauth_id,
         )
         resp = await self.dp_client.list_locations(req)
         if len(resp.locations) == 0:
