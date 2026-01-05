@@ -47,3 +47,4 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
             logging.error(f"Failed to log request to DB: {e}")
 
         return response
+

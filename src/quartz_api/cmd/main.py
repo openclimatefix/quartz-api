@@ -2,15 +2,15 @@
 
 ### Authentication
 
-Some routes may require authentication. An access token can be obtained via CURL:
+Some routes may require authentication. An access token can be obtained via cURL:
 
 ```
 export AUTH=$(curl --request POST
-   --url https://nowcasting-pro.eu.auth0.com/oauth/token
+   --url https://nowcasting-dev.eu.auth0.com/oauth/token
    --header 'content-type: application/json'
    --data '{
-      "client_id":"TODO",
-      "audience":"https://api.nowcasting.io/",
+      "client_id":"ONgyGHNXnOW8NjrlkuxLoEdOa5FkELEn",
+      "audience":"https://nowcasting-api-eu-auth0.com/",
       "grant_type":"password",
       "username":"username",
       "password":"password"
@@ -23,9 +23,9 @@ export TOKEN=$(echo "${AUTH}" | jq '.access_token' | tr -d '"')
 enabling authenticated requests using the Bearer scheme:
 
 ```
-curl -X GET 'https://api.quartz.energy/<route>' -H "Authorization: Bearer $TOKEN"
+curl -X GET 'http://uk-development-quartz-api.eu-west-1.elasticbeanstalk.com/<route>' -H "Authorization: Bearer $TOKEN"
 ```
-"""
+"""  # noqa: E501
 
 import functools
 import importlib
@@ -38,6 +38,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import apitally
+import sentry_sdk
 import uvicorn
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
@@ -53,6 +54,7 @@ from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth, time
 from apitally.fastapi import ApitallyMiddleware
+from quartz_api.internal.middleware import audit, auth, sentry, time
 
 
 log = logging.getLogger(__name__)
@@ -166,12 +168,12 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
-        import sentry_sdk
 
         sentry_sdk.init(
             dsn=conf.get_string("sentry.dsn"),
             environment=conf.get_string("sentry.environment"),
             traces_sample_rate=1,
+            send_default_pii=True,
         )
 
         sentry_sdk.set_tag("server_name", "quartz_api")
@@ -195,17 +197,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)
 
+    # Store auth instance for middleware
+    auth_instance = None
+
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
         case (_, "") | ("", _):
-            server.dependency_overrides[auth.get_auth] = auth.DummyAuth()
+            auth_instance = auth.DummyAuth()
+            server.dependency_overrides[auth.get_auth] = auth_instance
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            server.dependency_overrides[auth.get_auth] = auth.Auth0(
+            auth_instance = auth.Auth0(
                 domain=domain,
                 api_audience=audience,
                 algorithm="RS256",
             )
+            server.dependency_overrides[auth.get_auth] = auth_instance
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
@@ -222,6 +229,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(time.TimerMiddleware)
+    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
 
     if conf.get_string("apitally.client_id") != "":
@@ -232,7 +240,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                               )
 
     return server
-
 
 
 def run() -> None:
