@@ -5,7 +5,6 @@ from importlib.metadata import version
 
 from fastapi import APIRouter
 
-from .description import description
 from .gsp import router as gsp_router
 from .national import router as national_router
 from .status import router as status_router
@@ -24,17 +23,3 @@ router.include_router(status_router, prefix=f"{general_routes_prefix}/status")
 
 router.include_router(system_router, prefix="/v0/system/GB", tags=["System"])
 
-
-@router.get("/")
-def get_api_information() -> dict:
-    """### Get basic Quartz Solar API information.
-
-    Returns a json object with basic information about the Quartz Solar API.
-    """
-    return {
-        "title": "Quartz Solar API",
-        "version": version,
-        "description": description,
-        "documentation": "https://api.quartz.solar/docs",
-        "swagger ui": "https://api.quartz.solar/swagger",
-    }

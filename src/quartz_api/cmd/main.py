@@ -1,31 +1,4 @@
-"""API providing access to OCF's Quartz Forecasts.
-
-### Authentication
-
-Some routes may require authentication. An access token can be obtained via cURL:
-
-```
-export AUTH=$(curl --request POST
-   --url https://nowcasting-dev.eu.auth0.com/oauth/token
-   --header 'content-type: application/json'
-   --data '{
-      "client_id":"ONgyGHNXnOW8NjrlkuxLoEdOa5FkELEn",
-      "audience":"https://nowcasting-api-eu-auth0.com/",
-      "grant_type":"password",
-      "username":"username",
-      "password":"password"
-    }'
-)
-
-export TOKEN=$(echo "${AUTH}" | jq '.access_token' | tr -d '"')
-```
-
-enabling authenticated requests using the Bearer scheme:
-
-```
-curl -X GET 'http://uk-development-quartz-api.eu-west-1.elasticbeanstalk.com/<route>' -H "Authorization: Bearer $TOKEN"
-```
-"""  # noqa: E501
+"""API providing access to OCF's Quartz Forecasts."""
 
 import functools
 import importlib
@@ -126,11 +99,12 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
 
 def _create_server(conf: ConfigTree) -> FastAPI:
     """Configure FastAPI app instance with routes, dependencies, and middleware."""
+    description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",
-        description=__doc__,
+        # description=description,
         openapi_tags=[
             {
                 "name": "API Information",
@@ -177,6 +151,10 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         try:
             mod = importlib.import_module(service.__name__ + f".{r}")
             server.include_router(mod.router)
+
+            mod_description = getattr(mod, "description", f"TODO: Add description for {r}")
+            description = mod_description
+
         except ModuleNotFoundError as e:
             raise OSError(f"No such router router '{r}'") from e
         server.openapi_tags = [
@@ -199,6 +177,13 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             auth_instance = auth.DummyAuth()
             server.dependency_overrides[auth.get_auth] = auth_instance
             log.warning("disabled authentication. NOT recommended for production")
+
+            description += """
+            ### Authentication
+
+            This API does not require authentication.
+            """
+
         case (domain, audience):
             auth_instance = auth.Auth0(
                 domain=domain,
@@ -206,8 +191,20 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 algorithm="RS256",
             )
             server.dependency_overrides[auth.get_auth] = auth_instance
+
+            auth_description = auth.make_api_auth_description(
+                domain=domain,
+                audience=audience,
+                host_url=conf.get_string("api.host_url"),
+                client_id=conf.get_string("auth0.client_id"),
+            )
+
+            description += auth_description
+
         case _:
             raise ValueError("Invalid Auth0 configuration")
+
+
 
     timezone: str = conf.get_string("api.timezone")
     server.dependency_overrides[models.get_timezone] = lambda: timezone
@@ -223,6 +220,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(time.TimerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
+
+    # update description
+    server.description = description
 
     return server
 
