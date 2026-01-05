@@ -30,6 +30,7 @@ dependencies = [
     "numpy >= 1.25.0",
     "sentry-sdk >= 2.1.1",
     "pyhocon>=0.3.61",
+    "apitally[fastapi]>=0.22.3",
 ]
 
 [dependency-groups]
