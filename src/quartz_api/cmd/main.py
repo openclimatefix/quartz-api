@@ -140,6 +140,11 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         ],
         docs_url="/swagger",
         redoc_url=None,
+        swagger_ui_init_oauth={
+            "clientId": conf.get_string("auth0.client_id"),
+            "appName": "Quartz API",
+            "usePkceWithAuthorizationCodeGrant": True,
+        },
     )
 
     # Add the default routes
@@ -196,17 +201,16 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
-        case (_, "") | ("", _):
-            auth_instance = auth.DummyAuth()
-            server.dependency_overrides[auth.get_auth] = auth_instance
+        case (_, "") | ("", _) | ("", ""):
+            auth.auth_instance.instantiate_dummy()
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            auth_instance = auth.Auth0(
+            auth.auth_instance.instantiate_auth0(
                 domain=domain,
-                api_audience=audience,
-                algorithm="RS256",
+                audience=audience,
             )
-            server.dependency_overrides[auth.get_auth] = auth_instance
+            auth.oauth2_scheme.model.flows.authorizationCode.authorizationUrl = f"https://{domain}/authorize"
+            auth.oauth2_scheme.model.flows.authorizationCode.tokenUrl = f"https://{domain}/oauth/token"
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
