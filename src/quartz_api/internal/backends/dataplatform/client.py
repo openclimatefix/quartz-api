@@ -211,7 +211,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation_forecast(
         self,
-        substation_uuid: UUID,
+        location_uuid: UUID,
         authdata: dict[str, str],
         traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
@@ -219,7 +219,7 @@ class Client(models.DatabaseInterface):
         oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         # Get the substation to ensure user has access and it exists
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[str(substation_uuid)],
+            location_uuids_filter=[str(location_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
             user_oauth_id_filter=oauth_id,
@@ -228,13 +228,13 @@ class Client(models.DatabaseInterface):
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No substation found for UUID '{substation_uuid}'",
+                detail=f"No substation found for UUID '{location_uuid}'",
             )
         substation = resp.locations[0]
 
         # Get the GSP that the substation belongs to
         req = dp.ListLocationsRequest(
-            enclosed_location_uuid_filter=[str(substation_uuid)],
+            enclosed_location_uuid_filter=[str(location_uuid)],
             location_type_filter=dp.LocationType.GSP,
             user_oauth_id_filter=oauth_id,
         )
@@ -242,7 +242,7 @@ class Client(models.DatabaseInterface):
         if len(gsps.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No GSP found for substation UUID '{substation_uuid}'",
+                detail=f"No GSP found for substation UUID '{location_uuid}'",
             )
         gsp = gsps.locations[0]
         forecast = await self._get_predicted_power_production_for_location(

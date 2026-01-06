@@ -32,7 +32,6 @@ import importlib
 import importlib.metadata
 import logging
 import pathlib
-import sys
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -53,11 +52,10 @@ from starlette.staticfiles import StaticFiles
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
 from quartz_api.internal.middleware import audit, auth, sentry, trace
+
 from ._logging import setup_json_logging
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
-
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
 

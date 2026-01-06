@@ -2,8 +2,8 @@
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
 import uuid
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -37,7 +37,10 @@ class TracerMiddleware(BaseHTTPMiddleware):
 
         # Log the end of the request processing and enrich response headers
         process_time = str(time.time() - start_time)
-        logging.info(f"Finished request {request.url}", extra={"trace_id": trace_id, "process_time": process_time})
+        logging.info(
+            f"Finished request {request.url}",
+            extra={"trace_id": trace_id, "process_time": process_time},
+        )
         response.headers[PROC_TIME_HEADER] = process_time
         response.headers[CORR_HEADER] = trace_id
 
