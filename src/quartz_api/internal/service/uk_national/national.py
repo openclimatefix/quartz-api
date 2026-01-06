@@ -96,7 +96,7 @@ async def get_national_forecast(
 
     if creation_limit_utc:
         raise NotImplementedError()
-    
+
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
 

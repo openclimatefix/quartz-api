@@ -14,7 +14,12 @@ from quartz_api.internal.models import (
 )
 
 from .pydantic_models import ForecastValue, GSPYield
-from .time_utils import ceil_30_minutes_dt, floor_30_minutes_dt, format_datetime, limit_end_datetime_by_permissions
+from .time_utils import (
+    ceil_30_minutes_dt,
+    floor_30_minutes_dt,
+    format_datetime,
+    limit_end_datetime_by_permissions,
+)
 
 router = APIRouter(tags=["GSP"])
 
@@ -25,7 +30,7 @@ router = APIRouter(tags=["GSP"])
 )
 async def get_forecasts_for_a_specific_gsp(
     db: DBClientDependency,
-    auth: AuthDependency,  # noqa FBT001 # TODO
+    auth: AuthDependency,
     gsp_id: int,
     forecast_horizon_minutes: int | None = None,
     start_datetime_utc: str | None = None,

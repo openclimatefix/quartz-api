@@ -1,13 +1,16 @@
 """Utility functions for handling datetime objects in UK National context."""
 
-from datetime import datetime, timedelta
+import os
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
-import os
-from pytz import timezone
 import sentry_sdk
+from pytz import timezone
 
 utc = timezone("UTC")
+# TODO this would be nice if this was done with the high level quartz-api config file
+# One idea is we could put end_datetime_utc with auth into some middleware,
+# and the time clipping is done then
 INTRADAY_LIMIT_HOURS = float(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 
 
@@ -66,9 +69,8 @@ def limit_end_datetime_by_permissions(
     permissions: list[str],
     end_datetime_utc: datetime | None = None,
     intraday_limit_hours: int = INTRADAY_LIMIT_HOURS,
-):
-    """
-    Limit end datetime so that intraday users can receive forecast values max. 8 hours ahead of now.
+) -> datetime:
+    """Limit end datetime so that intraday users can receive forecast values max.
 
     Check if end_datetime_utc is set; if set, check it's not more than 8 hours from now,
     and if not set, set it to 8 hours from now.
@@ -78,11 +80,10 @@ def limit_end_datetime_by_permissions(
     :param intraday_limit_hours: int, maximum number of hours allowed ahead of now for forecasts
     :return: datetime, end time of forecast, limited to max 8 hours from now
     """
-
     if permissions is None or len(permissions) == 0:
         sentry_sdk.capture_message(
             "User has no permissions during limit_end_datetime_by_permissions check;"
-            "by default, users should have at least one role, so check in Auth0."
+            "by default, users should have at least one role, so check in Auth0.",
         )
         return end_datetime_utc
 
