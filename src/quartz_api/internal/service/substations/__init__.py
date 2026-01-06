@@ -1,11 +1,4 @@
-"""Routes for accessing substation-level forecasts."""
-
-from .router import router
-
-
-description = """
-
-# Substation-Level Forecasts
+"""# Substation-Level Forecasts
 
 This API provides access to substation-level solar forecasts. There are three main routes
 - `/substations/`: to get a list of all substations
@@ -13,3 +6,5 @@ This API provides access to substation-level solar forecasts. There are three ma
 - `/substations/{substation_uuid}/forecast`: to get the latest forecasts for a specific substation
 
 """
+
+from .router import router

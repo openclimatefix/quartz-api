@@ -155,7 +155,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             mod = importlib.import_module(service.__name__ + f".{r}")
             server.include_router(mod.router)
 
-            mod_description = getattr(mod, "description", f"TODO: Add description for {r}")
+            mod_description = getattr(mod, "__doc__", f"TODO: Add description for {r}")
             description = mod_description
 
         except ModuleNotFoundError as e:

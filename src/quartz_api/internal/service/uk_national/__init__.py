@@ -1,11 +1,4 @@
-"""Routes for accessing site-level forecasts."""
-
-from .router import router
-
-
-description = """
-
-## General Overview
+""" ## General Overview
 
 As part of Open Climate Fix's
 [open source project](https://github.com/openclimatefix), the Quartz Solar API
@@ -121,3 +114,5 @@ Here a few use cases for of the Quartz Solar API routes.
 The end
 
 """
+
+from .router import router
