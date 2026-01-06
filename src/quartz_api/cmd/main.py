@@ -39,6 +39,7 @@ from typing import Any
 
 import sentry_sdk
 import uvicorn
+from apitally.fastapi import ApitallyMiddleware
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -223,6 +224,18 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(time.TimerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
+
+    if conf.get_string("apitally.client_id") != "":
+        server.add_middleware(
+            ApitallyMiddleware,
+            client_id=conf.get_string("apitally.client_id"),
+            environment=conf.get_string("apitally.environment"),
+            enable_request_logging=True,
+            log_request_headers=True,
+            log_request_body=True,
+            log_response_body=True,
+            capture_logs=True,
+        )
 
     return server
 
