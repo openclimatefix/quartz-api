@@ -4,7 +4,6 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
-from fastapi.security import HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from quartz_api.internal.middleware import auth
@@ -18,7 +17,7 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         server: FastAPI,
-        auth_instance: auth.Auth0 | auth.DummyAuth,
+        auth_instance: auth.AuthClient | None,
     ) -> None:
         """Initialize FastAPI server and auth instance."""
         super().__init__(server)
@@ -31,23 +30,17 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """Add user details to a context before processing request."""
         if self.auth_instance is not None and not isinstance(
-            self.auth_instance, auth.DummyAuth,
+            self.auth_instance, auth.DummyBackend,
         ):
             try:
-                authorization = request.headers.get("Authorization", "")
-                if authorization.startswith("Bearer "):
-                    token = authorization.replace("Bearer ", "")
-                    credentials = HTTPAuthorizationCredentials(
-                        scheme="Bearer", credentials=token,
-                    )
-                    payload = self.auth_instance(request, credentials)
-                    if payload:
-                        import sentry_sdk
+                payload = await self.auth_instance.require_auth()(request)
+                if payload:
+                    import sentry_sdk
 
-                        sentry_sdk.set_user({
-                            "id": payload.get("sub"),
-                            "email": payload.get(auth.EMAIL_KEY),
-                        })
+                    sentry_sdk.set_user({
+                        "id": payload.get("sub"),
+                        "email": payload.get(auth.EMAIL_KEY),
+                    })
             except Exception:
                 # silently fail to not break requests
                 log.debug("Could not extract user for Sentry")

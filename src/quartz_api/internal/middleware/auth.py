@@ -1,76 +1,86 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
 
-# ruff: noqa: B008
+import logging
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-import jwt
 from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPBearer
+from fastapi_plugin.fast_api_client import Auth0FastAPI
 
-token_auth_scheme = HTTPBearer()
-
+log = logging.getLogger(__name__)
 EMAIL_KEY = "https://openclimatefix.org/email"
 
+# Uninstantiated OAuth2 scheme that enables authorization button in swagger.
+# Must be overwritten when configuring server.
+oauth2_scheme = HTTPBearer(auto_error=False)
 
-class Auth0:
-    """Fast api dependency that validates an JWT token."""
+class DummyBackend:
+    """Mock backend for testing without auth."""
 
-    def __init__(self, domain: str, api_audience: str, algorithm: str) -> None:
-        """Initialize the Auth dependency."""
-        self._domain = domain
-        self._api_audience = api_audience
-        self._algorithm = algorithm
+    def __init__(self) -> None:
+        """Initialize the dummy backend."""
+        log.warning("Using DummyBackend for authentication. This should not be used in production!")
 
-        self._jwks_client = jwt.PyJWKClient(f"https://{domain}/.well-known/jwks.json")
-
-    def __call__(
+    def require_auth(
         self,
-        request: Request,
-        auth_credentials: HTTPAuthorizationCredentials = Depends(token_auth_scheme),
-    ) -> dict[str, str]:
-        """Validate the JWT token and return the payload."""
-        token = auth_credentials.credentials
+        scopes: str | list[str] | None = None, # noqa: ARG002
+    ) -> Callable[[Request], Awaitable[dict[str, str]]]:
+        """Return a simulated authentication function."""
+        async def _dummy_dependency(_: Request) -> dict[str, str]:
+            return {
+                "sub": "dummy|123456",
+                EMAIL_KEY: "test@test.com",
+                "scope": "openid profile email",
+            }
+        return _dummy_dependency
 
-        try:
-            signing_key = self._jwks_client.get_signing_key_from_jwt(token).key
-        except (jwt.exceptions.PyJWKClientError, jwt.exceptions.DecodeError) as e:
-            raise HTTPException(status_code=401, detail=str(e)) from e
+class AuthClient:
+    """Generic client interface for authorization.
 
-        try:
-            payload: dict[str, str] = jwt.decode(
-                token,
-                signing_key,
-                algorithms=self._algorithm,
-                audience=self._api_audience,
-                issuer=f"https://{self._domain}/",
-            )
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=str(e)) from e
-
-        request.state.auth = payload
-
-        return payload
-
-
-class DummyAuth:
-    """Dummy auth dependency for testing purposes."""
-
-    def __call__(self) -> dict[str, str]:
-        """Return a dummy authentication payload."""
-        return {
-            EMAIL_KEY: "test@test.com",
-            "sub": "google-oath2|012345678909876543210",
-        }
-
-def get_auth() -> dict[str, str]:
-    """Get the authentication payload.
-
-    Note: This should be overridden via FastAPI's dependency injection system with an actual
-    authentication method (e.g., Auth0 or DummyAuth).
+    Must be instantiated with a backend implementation.
     """
-    raise HTTPException(status_code=401, detail="No authentication method configured.")
 
-AuthDependency = Annotated[dict[str, str], Depends(get_auth)]
+    def __init__(self) -> None:
+        """Initialize with a dummy backend by default."""
+        self._backend: Auth0FastAPI | DummyBackend | None = None
+
+    def instantiate_auth0(self, domain: str, audience: str) -> None:
+        """Instantiate the Auth0 backend."""
+        self._backend = Auth0FastAPI(
+            domain=domain,
+            audience=audience,
+        )
+
+    def instantiate_dummy(self) -> None:
+        """Instantiate the dummy backend."""
+        self._backend = DummyBackend()
+
+    def require_auth(self, scopes: str | list[str] | None = None) -> Callable[[Request], Awaitable[dict[str, str]]]: # noqa
+        """Authentication function to be used as a FastAPI dependency."""
+        async def _proxy_dependency(
+            request: Request,
+            token: str = Depends(oauth2_scheme), # noqa: ARG001
+        ) -> dict[str, str]:
+            if self._backend is None:
+                raise HTTPException(status_code=500, detail="Auth backend not configured")
+
+            validator_dependency = self._backend.require_auth(scopes)
+            try:
+                claims = await validator_dependency(request)
+            except HTTPException as e:
+                if e.status_code == 403:
+                    log.info(f"Unauthorized access attempt: {e.detail}")
+
+                raise e
+
+            return claims
+
+        return _proxy_dependency
+
+auth_instance = AuthClient()
+
+AuthDependency = Annotated[dict[str, str], Depends(auth_instance.require_auth())]
 
 def get_oauth_id_from_sub(auth0_sub: str) -> str:
     """Extract the auth ID from a auth0 sub ID.

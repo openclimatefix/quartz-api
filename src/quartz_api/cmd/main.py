@@ -32,7 +32,6 @@ import importlib
 import importlib.metadata
 import logging
 import pathlib
-import sys
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -52,10 +51,11 @@ from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
-from quartz_api.internal.middleware import audit, auth, sentry, time
+from quartz_api.internal.middleware import audit, auth, sentry, trace
+
+from ._logging import setup_json_logging
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
 
@@ -140,6 +140,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         ],
         docs_url="/swagger",
         redoc_url=None,
+        swagger_ui_init_oauth={
+            "usePkceWithAuthorizationCodeGrant": True,
+        },
     )
 
     # Add the default routes
@@ -196,17 +199,14 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
-        case (_, "") | ("", _):
-            auth_instance = auth.DummyAuth()
-            server.dependency_overrides[auth.get_auth] = auth_instance
+        case (_, "") | ("", _) | ("", ""):
+            auth.auth_instance.instantiate_dummy()
             log.warning("disabled authentication. NOT recommended for production")
         case (domain, audience):
-            auth_instance = auth.Auth0(
+            auth.auth_instance.instantiate_auth0(
                 domain=domain,
-                api_audience=audience,
-                algorithm="RS256",
+                audience=audience,
             )
-            server.dependency_overrides[auth.get_auth] = auth_instance
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
@@ -222,7 +222,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         allow_headers=["*"],
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
-    server.add_middleware(time.TimerMiddleware)
+    server.add_middleware(trace.TracerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
     if conf.get_string("apitally.client_id") != "":
@@ -244,6 +244,7 @@ def run() -> None:
     """Run the API using a uvicorn server."""
     # Get the application configuration from the environment
     conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
+    setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
 
     server = _create_server(conf=conf)
 
