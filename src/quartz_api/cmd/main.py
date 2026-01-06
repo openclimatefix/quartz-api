@@ -230,6 +230,11 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             ApitallyMiddleware,
             client_id=conf.get_string("apitally.client_id"),
             environment=conf.get_string("apitally.environment"),
+            enable_request_logging=True,
+            log_request_headers=True,
+            log_request_body=True,
+            log_response_body=True,
+            capture_logs=True,
         )
 
     return server
