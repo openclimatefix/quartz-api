@@ -66,7 +66,15 @@ class AuthClient:
                 raise HTTPException(status_code=500, detail="Auth backend not configured")
 
             validator_dependency = self._backend.require_auth(scopes)
-            return await validator_dependency(request)
+            try:
+                claims = await validator_dependency(request)
+            except HTTPException as e:
+                if e.status_code == 403:
+                    log.info(f"Unauthorized access attempt: {e.detail}")
+
+                raise e
+
+            return claims
 
         return _proxy_dependency
 
