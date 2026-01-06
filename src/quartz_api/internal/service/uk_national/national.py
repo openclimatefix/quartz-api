@@ -21,7 +21,7 @@ from .pydantic_models import (
     NationalForecastValue,
     NationalYield,
 )
-from .time_utils import format_datetime
+from .time_utils import format_datetime, limit_end_datetime_by_permissions
 
 router = APIRouter(tags=["National"])
 
@@ -96,6 +96,9 @@ async def get_national_forecast(
 
     if creation_limit_utc:
         raise NotImplementedError()
+    
+    permissions = getattr(auth, "permissions", [])
+    end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
 
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:

@@ -3,9 +3,12 @@
 from datetime import datetime, timedelta
 
 import numpy as np
+import os
 from pytz import timezone
+import sentry_sdk
 
 utc = timezone("UTC")
+INTRADAY_LIMIT_HOURS = float(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 
 
 def format_datetime(datetime_str: str | None = None) -> datetime | None:
@@ -58,3 +61,38 @@ def ceil_30_minutes_dt(dt: datetime) -> datetime:
     dt_ceil = dt_floor + timedelta(minutes=30)
     return dt_ceil
 
+
+def limit_end_datetime_by_permissions(
+    permissions: list[str],
+    end_datetime_utc: datetime | None = None,
+    intraday_limit_hours: int = INTRADAY_LIMIT_HOURS,
+):
+    """
+    Limit end datetime so that intraday users can receive forecast values max. 8 hours ahead of now.
+
+    Check if end_datetime_utc is set; if set, check it's not more than 8 hours from now,
+    and if not set, set it to 8 hours from now.
+
+    :param permissions: list of permissions, e.g. ['read:uk-intraday']
+    :param end_datetime_utc: datetime, requested end time of forecast
+    :param intraday_limit_hours: int, maximum number of hours allowed ahead of now for forecasts
+    :return: datetime, end time of forecast, limited to max 8 hours from now
+    """
+
+    if permissions is None or len(permissions) == 0:
+        sentry_sdk.capture_message(
+            "User has no permissions during limit_end_datetime_by_permissions check;"
+            "by default, users should have at least one role, so check in Auth0."
+        )
+        return end_datetime_utc
+
+    is_intraday_only_user = "read:uk-intraday" in permissions
+
+    intraday_max_allowed = datetime.now(UTC) + timedelta(hours=intraday_limit_hours)
+    if is_intraday_only_user:
+        if end_datetime_utc is None:
+            return intraday_max_allowed
+        else:
+            return min(end_datetime_utc, intraday_max_allowed)
+
+    return end_datetime_utc
