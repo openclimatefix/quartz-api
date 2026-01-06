@@ -40,9 +40,11 @@ import sentry_sdk
 import uvicorn
 from apitally.fastapi import ApitallyMiddleware
 from dp_sdk.ocf import dp
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.security import HTTPBearer
+from fastapi_plugin.fast_api_client import Auth0FastAPI
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
@@ -63,6 +65,11 @@ class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
 
     status: int
+
+class GetCheckProtectedRouteResponse(BaseModel):
+    """Model for the protected endpoint response."""
+
+    user_id: str
 
 
 def _custom_openapi(server: FastAPI) -> dict[str, Any]:
@@ -142,6 +149,17 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         redoc_url=None,
     )
 
+    # Create the Auth0 integration
+    auth0 = Auth0FastAPI(
+        domain=conf.get_string("auth0.domain"),
+        audience=conf.get_string("auth0.audience"),
+    )
+
+    swagger_bearer = HTTPBearer(
+        scheme_name="Auth0Bearer",
+        description="Paste a valid Auth0 access token here",
+    )
+
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
 
@@ -149,6 +167,13 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     def get_health_route() -> GetHealthResponse:
         """Health endpoint for the API."""
         return GetHealthResponse(status=status.HTTP_200_OK)
+
+    @server.get("/api/protected")
+    def protected_route(
+            _: str = Security(swagger_bearer),
+            claims=Depends(auth0.require_auth())
+    ) -> GetCheckProtectedRouteResponse:
+        return {"user_id": claims["sub"]}
 
     @server.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:

@@ -30,6 +30,7 @@ dependencies = [
     "sentry-sdk >= 2.1.1",
     "pyhocon>=0.3.61",
     "apitally[fastapi]>=0.22.3",
+    "auth0-fastapi-api>=1.0.0b5",
 ]
 
 [dependency-groups]
