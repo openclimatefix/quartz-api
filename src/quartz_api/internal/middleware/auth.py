@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.security import OAuth2AuthorizationCodeBearer
+from fastapi.security import HTTPBearer
 from fastapi_plugin.fast_api_client import Auth0FastAPI
 
 log = logging.getLogger(__name__)
@@ -13,11 +13,7 @@ EMAIL_KEY = "https://openclimatefix.org/email"
 
 # Uninstantiated OAuth2 scheme that enables authorization button in swagger.
 # Must be overwritten when configuring server.
-oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl="",
-    tokenUrl="",
-    auto_error=False,
-)
+oauth2_scheme = HTTPBearer(auto_error=False)
 
 class DummyBackend:
     """Mock backend for testing without auth."""

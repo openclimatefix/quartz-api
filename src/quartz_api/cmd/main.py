@@ -141,8 +141,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         docs_url="/swagger",
         redoc_url=None,
         swagger_ui_init_oauth={
-            "clientId": conf.get_string("auth0.client_id"),
-            "appName": "Quartz API",
             "usePkceWithAuthorizationCodeGrant": True,
         },
     )
@@ -209,8 +207,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 domain=domain,
                 audience=audience,
             )
-            auth.oauth2_scheme.model.flows.authorizationCode.authorizationUrl = f"https://{domain}/authorize"
-            auth.oauth2_scheme.model.flows.authorizationCode.tokenUrl = f"https://{domain}/oauth/token"
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
