@@ -13,7 +13,10 @@ from .client import Client
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
 
-def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsResponse:
+def mock_list_locations(
+    req: dp.ListLocationsRequest,
+    metadata: object | None = None, # noqa: ARG001
+) -> dp.ListLocationsResponse:
     if req.user_oauth_id_filter != "access_user":
         return dp.ListLocationsResponse(locations=[])
 
@@ -47,6 +50,7 @@ def mock_list_locations(req: dp.ListLocationsRequest) -> dp.ListLocationsRespons
 
 def mock_get_forecast(
     req: dp.GetForecastAsTimeseriesRequest,
+    metadata: object | None = None, # noqa: ARG001
 ) -> dp.GetForecastAsTimeseriesResponse:
     return dp.GetForecastAsTimeseriesResponse(
         values=[
@@ -68,6 +72,7 @@ def mock_get_forecast(
 
 def mock_get_observations(
     _: dp.GetObservationsAsTimeseriesRequest,
+    metadata: object | None = None, # noqa: ARG001
 ) -> dp.GetObservationsAsTimeseriesResponse:
     return dp.GetObservationsAsTimeseriesResponse(
         values=[
@@ -83,6 +88,7 @@ def mock_get_observations(
 
 def mock_get_latest_forecasts(
     req: dp.GetLatestForecastsRequest,
+    metadata: object | None = None, # noqa: ARG001
 ) -> dp.GetLatestForecastsResponse:
     t = req.pivot_timestamp_utc - dt.timedelta(hours=1)
     forecaster_name = f"mock_forecaster_{t.day}{t.hour}"
@@ -340,12 +346,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
                         resp = await client.get_substation_forecast(
-                            substation_uuid=tc.substation_uuid,
+                            location_uuid=tc.substation_uuid,
                             authdata=tc.authdata,
                         )
                 else:
                     resp = await client.get_substation_forecast(
-                        substation_uuid=tc.substation_uuid,
+                        location_uuid=tc.substation_uuid,
                         authdata=tc.authdata,
                     )
                     actual_values = [v.PowerKW for v in resp]
