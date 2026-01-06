@@ -4,7 +4,7 @@ import pathlib
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -16,6 +16,7 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
     status_code=status.HTTP_200_OK,
 )
 async def get_substations(
+    request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
     substation_type: Literal["primary"] = "primary", # noqa: ARG001
@@ -24,7 +25,7 @@ async def get_substations(
 
     Note that currently only 'primary' substations are supported.
     """
-    substations = await db.get_substations(authdata={})
+    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
     return substations
 
 @router.get(
@@ -32,6 +33,7 @@ async def get_substations(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation(
+    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -40,6 +42,7 @@ async def get_substation(
     substation = await db.get_substation(
         location_uuid=substation_uuid,
         authdata={},
+        traceid=request.state.trace_id,
     )
     return substation
 
@@ -48,6 +51,7 @@ async def get_substation(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation_forecast(
+    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -55,8 +59,9 @@ async def get_substation_forecast(
 ) -> list[models.PredictedPower]:
     """Get forecasted generation values of a substation."""
     forecast = await db.get_substation_forecast(
-        substation_uuid=substation_uuid,
+        location_uuid=substation_uuid,
         authdata={},
+        traceid=request.state.trace_id,
     )
     forecast = [
         value.to_timezone(tz=tz)

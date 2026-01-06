@@ -184,6 +184,7 @@ class Client(models.DatabaseInterface):
     async def get_substations(
         self,
         authdata: dict[str, str],
+        traceid: str = "unknown",
     ) -> list[models.Substation]:
         oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         req = dp.ListLocationsRequest(
@@ -191,7 +192,7 @@ class Client(models.DatabaseInterface):
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.list_locations(req)
+        resp = await self.dp_client.list_locations(req, metadata={"traceid": traceid})
 
         return [
             models.Substation(
@@ -210,42 +211,45 @@ class Client(models.DatabaseInterface):
     @override
     async def get_substation_forecast(
         self,
-        substation_uuid: UUID,
+        location_uuid: UUID,
         authdata: dict[str, str],
+        traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
         # Get the substation
         oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
+        # Get the substation to ensure user has access and it exists
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[str(substation_uuid)],
+            location_uuids_filter=[str(location_uuid)],
             energy_source_filter=dp.EnergySource.SOLAR,
             location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.list_locations(req)
+        resp = await self.dp_client.list_locations(req, metadata={"traceid": traceid})
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No substation found for UUID '{substation_uuid}'",
+                detail=f"No substation found for UUID '{location_uuid}'",
             )
         substation = resp.locations[0]
 
         # Get the GSP that the substation belongs to
         req = dp.ListLocationsRequest(
-            enclosed_location_uuid_filter=[str(substation_uuid)],
+            enclosed_location_uuid_filter=[str(location_uuid)],
             location_type_filter=dp.LocationType.GSP,
             user_oauth_id_filter=oauth_id,
         )
-        gsps = await self.dp_client.list_locations(req)
+        gsps = await self.dp_client.list_locations(req, metadata={"traceid":  traceid})
         if len(gsps.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No GSP found for substation UUID '{substation_uuid}'",
+                detail=f"No GSP found for substation UUID '{location_uuid}'",
             )
         gsp = gsps.locations[0]
         forecast = await self._get_predicted_power_production_for_location(
-            gsp.location_uuid,
-            dp.EnergySource.SOLAR,
-            oauth_id,
+            location_uuid=gsp.location_uuid,
+            energy_source=dp.EnergySource.SOLAR,
+            oauth_id=oauth_id,
+            traceid=traceid,
         )
 
         # Scale the forecast to the substation capacity
@@ -267,6 +271,7 @@ class Client(models.DatabaseInterface):
         self,
         location_uuid: UUID,
         authdata: dict[str, str],
+        traceid: str = "unknown",
     ) -> models.SubstationProperties:
         oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
         req = dp.ListLocationsRequest(
@@ -274,7 +279,7 @@ class Client(models.DatabaseInterface):
             energy_source_filter=dp.EnergySource.SOLAR,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.list_locations(req)
+        resp = await self.dp_client.list_locations(req, metadata={"traceid": traceid})
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
@@ -296,6 +301,7 @@ class Client(models.DatabaseInterface):
         location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
+        traceid: str = "unknown",
     ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
         if oauth_id is not None:
@@ -304,6 +310,7 @@ class Client(models.DatabaseInterface):
                 energy_source,
                 dp.LocationType.SITE,
                 oauth_id,
+                traceid,
             )
 
         start, end = get_window()
@@ -316,7 +323,10 @@ class Client(models.DatabaseInterface):
                 end_timestamp_utc=end,
             ),
         )
-        resp = await self.dp_client.get_observations_as_timeseries(req)
+        resp = await self.dp_client.get_observations_as_timeseries(
+            req,
+            metadata={"traceid": traceid},
+        )
         out: list[models.ActualPower] = [
             models.ActualPower(
                 Time=value.timestamp_utc,
@@ -335,6 +345,7 @@ class Client(models.DatabaseInterface):
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,  # noqa: ARG002
+        traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
         if oauth_id is not None:
@@ -343,6 +354,7 @@ class Client(models.DatabaseInterface):
                 energy_source,
                 dp.LocationType.SITE,
                 oauth_id,
+                traceid,
             )
 
         start, end = get_window()
@@ -363,7 +375,7 @@ class Client(models.DatabaseInterface):
             energy_source=energy_source,
             pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
         )
-        resp = await self.dp_client.get_latest_forecasts(req)
+        resp = await self.dp_client.get_latest_forecasts(req, metadata={"traceid": traceid})
         if len(resp.forecasts) == 0:
             return []
         resp.forecasts.sort(
@@ -382,7 +394,7 @@ class Client(models.DatabaseInterface):
             ),
             forecaster=forecaster,
         )
-        resp = await self.dp_client.get_forecast_as_timeseries(req)
+        resp = await self.dp_client.get_forecast_as_timeseries(req, metadata={"traceid": traceid})
 
         out: list[models.PredictedPower] = [
             models.PredictedPower(
@@ -400,6 +412,7 @@ class Client(models.DatabaseInterface):
         energy_source: dp.EnergySource,
         location_type: dp.LocationType,
         oauth_id: str,
+        traceid: str = "unknown",
     ) -> bool:
         """Check if a user has access to a given location."""
         req = dp.ListLocationsRequest(
@@ -408,10 +421,11 @@ class Client(models.DatabaseInterface):
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.list_locations(req)
+        resp = await self.dp_client.list_locations(req, metadata={"traceid": traceid})
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
             )
         return True
+
