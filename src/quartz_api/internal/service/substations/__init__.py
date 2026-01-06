@@ -5,7 +5,7 @@ from .router import router
 
 description = """
 
-### Substation-Level Forecasts
+# Substation-Level Forecasts
 
 This API provides access to substation-level solar forecasts. There are three main routes
 - `/substations/`: to get a list of all substations
