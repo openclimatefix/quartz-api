@@ -99,7 +99,7 @@ def make_api_auth_description(
         host_url:str,
         client_id:str) -> str:
     """Generate API authentication description."""
-    # not that the odd indentation here is needed for to make the f-string and markdown work
+    # note that the odd indentation here is needed for to make the f-string and markdown work
     t = f"""
 # Authentication
 
