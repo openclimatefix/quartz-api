@@ -105,7 +105,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",
-        # description=description,
         openapi_tags=[
             {
                 "name": "API Information",
