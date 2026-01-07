@@ -110,9 +110,6 @@ Here a few use cases for of the Quartz Solar API routes.
     - **Get National Pvlive**
     ```https://api.quartz.solar/v0/solar/GB/national/pvlive```
 
-
-The end
-
 """
 
 from .router import router
