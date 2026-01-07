@@ -60,7 +60,6 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
     )
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
-    openapi_schema["tags"] = server.openapi_tags
     server.openapi_schema = openapi_schema
 
     return openapi_schema
