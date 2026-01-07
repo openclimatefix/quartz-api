@@ -40,6 +40,7 @@ class Client(models.DatabaseInterface):
         model_name: str | None = None,
         start_datetime: dt.datetime | None = None,
         end_datetime: dt.datetime | None = None,
+        created_utc_upper_limit: dt.datetime | None = None,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location_uuid=location,
@@ -51,6 +52,7 @@ class Client(models.DatabaseInterface):
             model_name=model_name,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
+            created_utc_upper_limit=created_utc_upper_limit,
         )
         return values
 
@@ -418,6 +420,7 @@ class Client(models.DatabaseInterface):
         model_name: str | None = None,
         start_datetime: dt.datetime | None = None,
         end_datetime: dt.datetime | None = None,
+        created_utc_upper_limit: dt.datetime | None = None,
         traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
@@ -472,6 +475,7 @@ class Client(models.DatabaseInterface):
                 end_timestamp_utc=end,
             ),
             forecaster=forecaster,
+            pivot_timestamp_utc=created_utc_upper_limit,
         )
         resp = await self.dp_client.get_forecast_as_timeseries(req, metadata={"traceid": traceid})
 

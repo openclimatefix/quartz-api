@@ -58,11 +58,9 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
-    if creation_utc_limit is not None:
-        raise NotImplementedError()
-
     start_datetime_utc = format_datetime(start_datetime_utc)
     end_datetime_utc = format_datetime(end_datetime_utc)
+    creation_utc_limit = format_datetime(creation_utc_limit)
 
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
@@ -85,6 +83,7 @@ async def get_forecasts_for_a_specific_gsp(
         model_name="blend",
         start_datetime=start_datetime_utc,
         end_datetime=end_datetime_utc,
+        creation_utc_limit=creation_utc_limit,
     )
 
     national_forecasts = [
