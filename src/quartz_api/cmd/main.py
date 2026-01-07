@@ -60,6 +60,7 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
     )
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
+    openapi_schema["tags"] = server.openapi_tags
     server.openapi_schema = openapi_schema
 
     return openapi_schema
@@ -159,13 +160,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
         except ModuleNotFoundError as e:
             raise OSError(f"No such router router '{r}'") from e
-        server.openapi_tags = [
-            {
-                "name": mod.__name__.split(".")[-1].capitalize(),
-                "description": mod.__doc__,
-            },
-            *server.openapi_tags,
-        ]
+
 
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)
