@@ -569,17 +569,20 @@ class Client(models.DatabaseInterface):
             raise exc
 
         for resp in list_results:
-            forecasts_per_timestamp.append(
-                models.OneDatetimeManyForecastValues(datetime_utc=resp.timestamp_utc,
-                    forecast_values={
-                        location_uuids_to_location_ids[forecast.location_uuid]: round(
-                            forecast.value_fraction * forecast.effective_capacity_watts
-                            / 1000.0,
-                            2,
-                        )
-                        for forecast in resp.values
-                    }),
-           )
+
+            forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
+                datetime_utc=resp.timestamp_utc,
+                forecast_values={
+                    location_uuids_to_location_ids[forecast.location_uuid]: round(
+                        forecast.value_fraction * forecast.effective_capacity_watts / 1000.0, 2)
+                    for forecast in resp.values
+                })
+
+            # sort by dictionary by keys
+            forecasts_one_timestamp.forecast_values =\
+                dict(sorted(forecasts_one_timestamp.forecast_values.items()))
+
+            forecasts_per_timestamp.append(forecasts_one_timestamp)
 
         return forecasts_per_timestamp
 
@@ -634,7 +637,7 @@ class Client(models.DatabaseInterface):
         observations_by_datetime_formated = [
             models.GSPYieldGroupByDatetime(
                 datetime_utc=timestamp,
-                generation_kw_by_gsp_id=generation_kw_by_gsp_id,
+                generation_kw_by_gsp_id=dict(sorted(generation_kw_by_gsp_id.items())),
             )
             for timestamp, generation_kw_by_gsp_id in observations_by_datetime.items()
         ]
