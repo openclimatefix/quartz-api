@@ -13,7 +13,7 @@ from .pydantic_models import Location
 router = APIRouter(tags=["System"])
 
 @router.get(
-    "/gsp",
+    "/gsp/",
     status_code=status.HTTP_200_OK,
 )
 async def get_system_details(
