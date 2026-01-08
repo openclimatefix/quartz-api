@@ -30,8 +30,8 @@ model_names_external_to_internal = {
     "pvnet_intraday": "pvnet_v2",
     "pvnet_day_ahead": "pvnet_day_ahead",
     "pvnet_intraday_ecmwf_only": "pvnet_ecmwf",
-    "pvnet_intraday_met_office_only": "pvnet-ukv-only",
-    "pvnet_intraday_sat_only": "pvnet-sat-only",
+    "pvnet_intraday_met_office_only": "pvnet_ukv_only",
+    "pvnet_intraday_sat_only": "pvnet_sat_only",
 }
 
 
