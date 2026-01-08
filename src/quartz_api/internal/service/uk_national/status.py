@@ -22,7 +22,7 @@ if db_url is not None:
 
 
 @router.get(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
 )
 async def get_status() -> Status:
