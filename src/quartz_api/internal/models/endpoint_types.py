@@ -188,7 +188,7 @@ class OneDatetimeManyForecastValues(EnhancedBaseModel):
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
     forecast_values: dict[int|str, float] = Field(
         ...,
-        description="List of forecasts by ids. Key is gsp_id, value is generation_kw. "
+        description="List of forecasts by ids. Key is gsp_id, value is generation_mw. "
         "We keep this as a dictionary to keep the size of the file small ",
     )
 

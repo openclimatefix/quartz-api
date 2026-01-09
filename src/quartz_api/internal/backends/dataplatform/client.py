@@ -577,7 +577,7 @@ class Client(models.DatabaseInterface):
                 datetime_utc=resp.timestamp_utc,
                 forecast_values={
                     location_uuids_to_location_ids[forecast.location_uuid]: round(
-                        forecast.value_fraction * forecast.effective_capacity_watts / 1000.0, 2)
+                        forecast.value_fraction * forecast.effective_capacity_watts / 10**6, 2)
                     for forecast in resp.values
                 })
 
