@@ -1,6 +1,7 @@
 """The 'system' FastAPI router object."""
 
 from fastapi import APIRouter
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -8,6 +9,7 @@ from quartz_api.internal.models import (
     DBClientDependency,
 )
 
+from .cache import key_builder
 from .pydantic_models import Location
 
 router = APIRouter(tags=["System"])
@@ -16,6 +18,7 @@ router = APIRouter(tags=["System"])
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder)
 async def get_system_details(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa TODO use auth

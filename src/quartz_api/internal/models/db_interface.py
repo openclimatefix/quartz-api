@@ -35,7 +35,7 @@ class DatabaseInterface(abc.ABC):
         model_name: str | None = None,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
-        creation_limit_utc: datetime | None = None,
+        created_utc_upper_limit: datetime | None = None,
     ) -> list[PredictedPower]:
         """Returns a list of predicted solar power production for a given location.
 
@@ -47,7 +47,7 @@ class DatabaseInterface(abc.ABC):
             model_name: The name of the model to use for predictions.
             start_datetime: The start datetime for the prediction window. Default is None.
             end_datetime: The end datetime for the prediction window. Default is None.
-            creation_limit_utc: The upper limit for the creation datetime. Default is None.
+            created_utc_upper_limit: The upper limit for the creation datetime. Default is None.
         """
         pass
 

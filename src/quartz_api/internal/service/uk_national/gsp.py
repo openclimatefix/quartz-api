@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -13,6 +14,7 @@ from quartz_api.internal.models import (
     OneDatetimeManyForecastValues,
 )
 
+from .cache import key_builder
 from .pydantic_models import ForecastValue, GSPYield
 from .time_utils import (
     ceil_30_minutes_dt,
@@ -28,6 +30,7 @@ router = APIRouter(tags=["GSP"])
     "/{gsp_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
     db: DBClientDependency,
     auth: AuthDependency,
@@ -83,7 +86,7 @@ async def get_forecasts_for_a_specific_gsp(
         model_name="blend",
         start_datetime=start_datetime_utc,
         end_datetime=end_datetime_utc,
-        creation_utc_limit=creation_utc_limit,
+        created_utc_upper_limit=creation_utc_limit,
     )
 
     national_forecasts = [
@@ -101,6 +104,7 @@ async def get_forecasts_for_a_specific_gsp(
     "/{gsp_id}/pvlive",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa FBT001 # TODO
@@ -167,6 +171,7 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValues],
     include_in_schema=False,
 )
+@cache(key_builder=key_builder)
 async def get_all_available_forecasts(
     db: DBClientDependency,
     auth: AuthDependency,
@@ -253,6 +258,7 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
+@cache(key_builder=key_builder)
 async def get_truths_for_all_gsps(
     db: DBClientDependency,
     auth: AuthDependency,

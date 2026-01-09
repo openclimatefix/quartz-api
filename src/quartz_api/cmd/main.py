@@ -16,6 +16,8 @@ from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
@@ -29,6 +31,8 @@ from quartz_api.internal.middleware import audit, auth, sentry, trace
 from ._logging import setup_json_logging
 
 log = logging.getLogger(__name__)
+# set hpack to warning log level
+logging.getLogger("hpack").setLevel(logging.WARNING)
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
 
@@ -64,7 +68,6 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
     server.openapi_schema = openapi_schema
 
     return openapi_schema
-
 
 @asynccontextmanager
 async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
@@ -117,6 +120,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             "usePkceWithAuthorizationCodeGrant": True,
         },
     )
+
+    # set up cache
+    FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
 
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")

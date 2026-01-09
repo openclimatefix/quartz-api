@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from enum import Enum
 
 from fastapi import APIRouter
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -13,6 +14,7 @@ from quartz_api.internal.models import (
     ForecastMetadata,
 )
 
+from .cache import key_builder
 from .pydantic_models import (
     InputDataLastUpdated,
     Location,
@@ -50,6 +52,7 @@ class ModelName(str, Enum):
     "/forecast",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder)
 async def get_national_forecast(
     db: DBClientDependency,
     auth: AuthDependency,
@@ -168,6 +171,7 @@ async def get_national_forecast(
     "/pvlive",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder)
 async def get_national_pvlive(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa FBT001 # TODO
