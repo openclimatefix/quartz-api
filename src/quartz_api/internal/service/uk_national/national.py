@@ -129,7 +129,7 @@ async def get_national_forecast(
         )
 
     forecast_horizon = ForecastHorizon.latest
-    if forecast_horizon_minutes is None:
+    if forecast_horizon_minutes is not None:
         forecast_horizon = ForecastHorizon.horizon
 
     predicted_powers = await db.get_predicted_solar_power_production_for_location(
