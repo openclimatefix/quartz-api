@@ -80,8 +80,8 @@ class Location(EnhancedBaseModel):
         return Location(
             label=f"GSP_{region_gsp_id}",
             gsp_id=region_gsp_id,
-            gsp_name=gsp_name,
-            gsp_group=gsp_group,
+            gsp_name=gsp_name.upper(),
+            gsp_group=gsp_group.upper(),
             region_name=region_name,
             installed_capacity_mw=installed_capacity_mw,
         )
