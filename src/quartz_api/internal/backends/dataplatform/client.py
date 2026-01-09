@@ -570,6 +570,9 @@ class Client(models.DatabaseInterface):
 
         for resp in list_results:
 
+            if len(resp.values) == 0:
+                continue
+
             forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
                 datetime_utc=resp.timestamp_utc,
                 forecast_values={
