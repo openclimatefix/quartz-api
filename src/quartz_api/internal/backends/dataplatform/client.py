@@ -205,6 +205,7 @@ class Client(models.DatabaseInterface):
                 capacity_kw=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
+                metadta = dict(loc.metadata.fields.items())
             )
             for loc in resp.locations
         ]
