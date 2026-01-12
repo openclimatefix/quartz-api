@@ -33,7 +33,49 @@ async def get_substations(
 
 
 @router.get(
-    "/substations/forecast",
+    "/substations/{substation_uuid}",
+    status_code=status.HTTP_200_OK,
+)
+async def get_substation(
+    request: Request,
+    substation_uuid: UUID,
+    db: models.DBClientDependency,
+    _: AuthDependency,
+) -> models.SubstationProperties:
+    """Get a substation by UUID."""
+    substation = await db.get_substation(
+        location_uuid=substation_uuid,
+        authdata={},
+        traceid=request.state.trace_id,
+    )
+    return substation
+
+@router.get(
+    "/substations/{substation_uuid}/forecast",
+    status_code=status.HTTP_200_OK,
+)
+async def get_substation_forecast(
+    request: Request,
+    substation_uuid: UUID,
+    db: models.DBClientDependency,
+    _: AuthDependency,
+    tz: models.TZDependency,
+) -> list[models.PredictedPower]:
+    """Get forecasted generation values of a substation."""
+    forecast = await db.get_substation_forecast(
+        location_uuid=substation_uuid,
+        authdata={},
+        traceid=request.state.trace_id,
+    )
+    forecast = [
+        value.to_timezone(tz=tz)
+        for value in forecast
+    ]
+    return forecast
+
+
+@router.get(
+    "/substations/forecast/",
     status_code=status.HTTP_200_OK,
 )
 async def get_all_substation_forecast_at_one_timestamp(
@@ -88,45 +130,3 @@ async def get_all_substation_forecast_at_one_timestamp(
         forecasts.forecast_values_kw.pop(gsp_location_uuid, None)
 
     return forecasts
-
-
-@router.get(
-    "/substations/{substation_uuid}",
-    status_code=status.HTTP_200_OK,
-)
-async def get_substation(
-    request: Request,
-    substation_uuid: UUID,
-    db: models.DBClientDependency,
-    _: AuthDependency,
-) -> models.SubstationProperties:
-    """Get a substation by UUID."""
-    substation = await db.get_substation(
-        location_uuid=substation_uuid,
-        authdata={},
-        traceid=request.state.trace_id,
-    )
-    return substation
-
-@router.get(
-    "/substations/{substation_uuid}/forecast",
-    status_code=status.HTTP_200_OK,
-)
-async def get_substation_forecast(
-    request: Request,
-    substation_uuid: UUID,
-    db: models.DBClientDependency,
-    _: AuthDependency,
-    tz: models.TZDependency,
-) -> list[models.PredictedPower]:
-    """Get forecasted generation values of a substation."""
-    forecast = await db.get_substation_forecast(
-        location_uuid=substation_uuid,
-        authdata={},
-        traceid=request.state.trace_id,
-    )
-    forecast = [
-        value.to_timezone(tz=tz)
-        for value in forecast
-    ]
-    return forecast

@@ -449,6 +449,17 @@ class Client(models.DatabaseInterface):
     ) -> models.SubstationProperties:
         raise NotImplementedError("QuartzDB backend does not support substations")
 
+
+    @override
+    async def get_forecast_for_multiple_locations_one_timestamp(
+        self,
+        location_uuids: list[UUID],
+        timestamp: dt.datetime,
+        authdata: dict[str, str],
+    ) -> list[models.PredictedPower]:
+        raise NotImplementedError("DummyDB client does not support multi-location forecasts.")
+
+
 def check_user_has_access_to_site(
     session: Session,
     email: str,
