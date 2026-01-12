@@ -171,7 +171,7 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValues],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder)
+@cache(key_builder=key_builder, expire=60*30)
 async def get_all_available_forecasts(
     db: DBClientDependency,
     auth: AuthDependency,
@@ -258,7 +258,7 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder)
+@cache(key_builder=key_builder, expire=60*30)
 async def get_truths_for_all_gsps(
     db: DBClientDependency,
     auth: AuthDependency,
