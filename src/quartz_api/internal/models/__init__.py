@@ -9,6 +9,7 @@ from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
     PredictedPower,
+    OneDatetimeManyForecastValues,
     SiteProperties,
     Site,
     SubstationProperties,

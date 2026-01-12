@@ -1,6 +1,7 @@
 """The 'substations' FastAPI router object and associated routes logic."""
 
 import pathlib
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -27,6 +28,26 @@ async def get_substations(
     """
     substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
     return substations
+
+
+@router.get(
+    "/substations/forecast",
+    status_code=status.HTTP_200_OK,
+)
+async def get_substation_forecast_at_one_timestamp(    
+    request: Request,
+    db: models.DBClientDependency,
+    timestamp: datetime | None = None) -> models.OneDatetimeManyForecastValues:
+    """Get forecasted generation values of all substations at a specific timestamp."""
+    
+    # 1. Get all substation locations
+    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
+    
+    print(substations)
+    print(substations[0])
+
+    pass
+    
 
 @router.get(
     "/substations/{substation_uuid}",
@@ -69,3 +90,19 @@ async def get_substation_forecast(
     ]
     return forecast
 
+
+
+
+
+
+    forecast = await db.get_one_forecast_for_multiple_locations(
+        location_uuid=substation_uuid,
+        authdata={},
+        timestamp=timestamp,
+        traceid=request.state.trace_id,
+    )
+    forecast = [
+        value.to_timezone(tz=tz)
+        for value in forecast
+    ]
+    return forecast

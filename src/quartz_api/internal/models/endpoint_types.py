@@ -73,6 +73,10 @@ class LocationPropertiesBase(BaseModel):
         json_schema_extra={"description": "The location's total capacity in kw"},
         ge=0,
     )
+    metadata: dict[str, str] = Field(
+        {},
+        json_schema_extra={"description": "Metadata associated with the location"},
+    )
 
 class SiteProperties(LocationPropertiesBase):
     """Properties specific to a site."""
@@ -120,6 +124,17 @@ class Substation(SubstationProperties):
     substation_uuid: UUID = Field(
         ...,
         json_schema_extra={"description": "The unique identifier for the substation."},
+    )
+
+class OneDatetimeManyForecastValues(BaseModel):
+    """One datetime with many forecast values.
+    """
+
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
+    forecast_values: dict[int|str, float] = Field(
+        ...,
+        description="List of forecasts by ids. Key is forecast id, value is generation_kw. "
+        "We keep this as a dictionary to keep the size of the file small.",
     )
 
 
