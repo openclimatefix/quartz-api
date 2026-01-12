@@ -1,17 +1,18 @@
 """Defines the domain interface for interacting with a backend."""
 
 import abc
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
-from datetime import datetime
 
 from fastapi import Depends, HTTPException
 
 from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
-    PredictedPower,
     OneDatetimeManyForecastValues,
+    PredictedPower,
+    Region,
     Site,
     SiteProperties,
     Substation,
@@ -78,7 +79,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self) -> list[Region]:
         """Returns a list of solar regions."""
         pass
 
@@ -150,7 +151,7 @@ class DatabaseInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_one_forecast_for_multiple_locations(
+    async def get_forecast_for_multiple_locations_one_timestamp(
         self,
         location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
@@ -159,7 +160,7 @@ class DatabaseInterface(abc.ABC):
     ) -> OneDatetimeManyForecastValues:
         """Get a forecast for multiple sites."""
         pass
-        
+
 
 def get_db_client() -> DatabaseInterface:
     """Get the client implementation.

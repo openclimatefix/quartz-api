@@ -219,6 +219,15 @@ class Client(models.DatabaseInterface):
 
         return values
 
+    @override
+    async def get_forecast_for_multiple_locations_one_timestamp(
+        self,
+        location_uuids: list[UUID],
+        timestamp: dt.datetime,
+        authdata: dict[str, str],
+    ) -> list[models.PredictedPower]:
+        raise NotImplementedError("DummyDB client does not support multi-location forecasts.")
+
 
 def _basicSolarPowerProductionFunc(
     timeUnix: int,

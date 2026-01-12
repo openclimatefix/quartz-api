@@ -479,14 +479,14 @@ wheels = [
 
 [[package]]
 name = "dp-sdk"
-version = "0.16.0"
-source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.16.0/dp_sdk-0.16.0-py3-none-any.whl" }
+version = "0.18.2"
+source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.18.2/dp_sdk-0.18.2-py3-none-any.whl" }
 dependencies = [
     { name = "betterproto" },
     { name = "grpcio" },
 ]
 wheels = [
-    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.16.0/dp_sdk-0.16.0-py3-none-any.whl", hash = "sha256:4494a160fc3e59e6c6d5df26f6433c7a77754851a3748b51e79bc76de358c470" },
+    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.18.2/dp_sdk-0.18.2-py3-none-any.whl", hash = "sha256:999752acc1f9f0e54418c6217554d5d6f4976fc5434c966ab9ef2f10f91e26b3" },
 ]
 
 [package.metadata]
@@ -1554,7 +1554,7 @@ requires-dist = [
     { name = "apitally", extras = ["fastapi"], specifier = ">=0.22.3" },
     { name = "auth0-fastapi-api", specifier = ">=1.0.0b5" },
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.16.0/dp_sdk-0.16.0-py3-none-any.whl" },
+    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.18.2/dp_sdk-0.18.2-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "numpy", specifier = ">=1.25.0" },
     { name = "pvsite-datamodel", specifier = "==1.2.3" },

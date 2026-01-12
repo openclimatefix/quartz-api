@@ -1,8 +1,8 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 
 import datetime as dt
-import asyncio
 import logging
+from struct import Struct
 from uuid import UUID
 
 from dp_sdk.ocf import dp
@@ -99,12 +99,32 @@ class Client(models.DatabaseInterface):
         return [loc.location_uuid for loc in resp.locations]
 
     @override
-    async def get_solar_regions(self) -> list[str]:
+    async def get_solar_regions(self, type: str | None = None) -> list[models.Region]:
+
+        location_type_filter = dp.LocationType.STATE
+        if type == "nation":
+            location_type_filter = dp.LocationType.NATION
+        elif type == "gsp":
+            location_type_filter = dp.LocationType.GSP
+
         req = dp.ListLocationsRequest(
             energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.STATE,
+            location_type_filter=location_type_filter,
         )
         resp = await self.dp_client.list_locations(req)
+
+        regions = []
+        for loc in resp.locations:
+                region = models.Region(
+                    region_name=loc.location_name,
+                    region_metadata={
+                        "location_uuid": loc.location_uuid,
+                        "effective_capacity_watts": loc.effective_capacity_watts,
+                        **dict(struct_to_dict(loc.metadata)),
+                    },
+                )
+                regions.append(region)
+        return regions
         return [loc.location_uuid for loc in resp.locations]
 
     @override
@@ -205,7 +225,7 @@ class Client(models.DatabaseInterface):
                 capacity_kw=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
-                metadta = dict(loc.metadata.fields.items())
+                metadata = struct_to_dict(loc.metadata),
             )
             for loc in resp.locations
         ]
@@ -433,69 +453,68 @@ class Client(models.DatabaseInterface):
 
 
     @override
-    async def get_one_forecast_for_multiple_locations(
+    async def get_forecast_for_multiple_locations_one_timestamp(
         self,
-        location_uuids_to_location_ids: dict[str, int],
+        location_uuids: dict[str, int],
         authdata: dict[str, str],
-        timestamp: dt.datetime | None = None,
+        timestamp: dt.datetime,
+        model_name: str = "blend",
     ) -> list[models.OneDatetimeManyForecastValues]:
         """Get a forecast for multiple sites.
 
         Args:
-            location_uuids_to_location_ids: A mapping from location UUIDs to location IDs.
+            location_uuids: A list of location UUIDs.
             authdata: Authentication data for the user.
-            start_datetime_utc: The start datetime for the prediction window. Default is None.
-            end_datetime_utc: The end datetime for the prediction window. Default is None.
+            timestamp: The datetime for the prediction window
             model_name: The name of the forecasting model to use. Default is None.
 
         Returns:
             A list of OneDatetimeManyForecastValues objects.
         """
-        start, end = get_window(start=start_datetime_utc, end=end_datetime_utc)
+        pass
 
-        # timestamps 30 mins apart from start to end
-        n_half_hours = int((((end - start).total_seconds() // 60) // 30) + 1)
-        timestamps = [start + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
-
-        # get forecasters
+        # get forecasters"
         req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
                                       latest_versions_only=True)
         resp = await self.dp_client.list_forecasters(req)
         forecaster = resp.forecasters[0]
 
-        forecasts_per_timestamp = []
-        tasks = []
-        for timestamp in timestamps:
-            req = dp.GetForecastAtTimestampRequest(
-                location_uuids=list(location_uuids_to_location_ids.keys()),
-                energy_source=dp.EnergySource.SOLAR,
-                timestamp_utc=timestamp,
-                forecaster=forecaster,
-            )
-            # resp = await self.dp_client.get_forecast_at_timestamp(req)
-            task = asyncio.create_task(self.dp_client.get_forecast_at_timestamp(req))
-            tasks.append(task)
-        list_results = await asyncio.gather(*tasks, return_exceptions=True)
-        for exc in filter(lambda x: isinstance(x, Exception), list_results):
-            raise exc
 
-        for resp in list_results:
+        req = dp.GetForecastAtTimestampRequest(
+            location_uuids=location_uuids,
+            energy_source=dp.EnergySource.SOLAR,
+            timestamp_utc=timestamp,
+            forecaster=forecaster,
+        )
+        resp = await self.dp_client.get_forecast_at_timestamp(req)
 
-            if len(resp.values) == 0:
-                continue
 
-            forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
-                datetime_utc=resp.timestamp_utc,
-                forecast_values={
-                    location_uuids_to_location_ids[forecast.location_uuid]: round(
-                        forecast.value_fraction * forecast.effective_capacity_watts / 10**6, 2)
-                    for forecast in resp.values
-                })
+        forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
+            datetime_utc=resp.timestamp_utc,
+            forecast_values_kw={
+                forecast.location_uuid: round(
+                    forecast.value_fraction * forecast.effective_capacity_watts / 10**3, 2)
+                for forecast in resp.values
+            })
 
-            # sort by dictionary by keys
-            forecasts_one_timestamp.forecast_values =\
-                dict(sorted(forecasts_one_timestamp.forecast_values.items()))
+        # sort by dictionary by keys
+        forecasts_one_timestamp.forecast_values_kw =\
+            dict(sorted(forecasts_one_timestamp.forecast_values_kw.items()))
 
-            forecasts_per_timestamp.append(forecasts_one_timestamp)
 
-        return forecasts_per_timestamp
+        return forecasts_one_timestamp
+
+
+def struct_to_dict(values:Struct) -> dict:
+    """Converts a Struct to a dictionary."""
+    d = values.to_dict()
+
+    # change any number_values to float
+    for key, value in d.items():
+        if isinstance(value, dict):
+            if "numberValue" in value:
+                d[key] = float(value["numberValue"])
+            if "stringValue" in value:
+                d[key] = str(value["stringValue"])
+
+    return d
