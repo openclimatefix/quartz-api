@@ -81,10 +81,10 @@ async def get_substation_forecast(
 async def get_all_substation_forecast_at_one_timestamp(
     request: Request,
     db: models.DBClientDependency,
-    timestamp: datetime | None = None) -> models.OneDatetimeManyForecastValues:
+    datetime_utc: datetime | None = None) -> models.OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
-    if timestamp is None:
-        timestamp = floor_30_minutes_dt(datetime.now(UTC))
+    if datetime_utc is None:
+        datetime_utc = floor_30_minutes_dt(datetime.now(UTC))
 
     # 1. Get all substation locations
     substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
@@ -100,7 +100,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     forecasts = await db.get_forecast_for_multiple_locations_one_timestamp(
         location_uuids=[gsp.region_metadata["location_uuid"] for gsp in gsp_regions],
         authdata={},
-        timestamp=timestamp,
+        timestamp=datetime_utc,
     )
 
     # 4. Add substation forecasts
