@@ -432,13 +432,11 @@ class Client(models.DatabaseInterface):
 
 
     @override
-    async def get_forecast_for_multiple_locations(
+    async def get_one_forecast_for_multiple_locations(
         self,
         location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
-        start_datetime_utc: dt.datetime | None = None,
-        end_datetime_utc: dt.datetime | None = None,
-        model_name: str | None = None,
+        timestamp: dt.datetime | None = None,
     ) -> list[models.OneDatetimeManyForecastValues]:
         """Get a forecast for multiple sites.
 

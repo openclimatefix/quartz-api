@@ -3,6 +3,7 @@
 import abc
 from typing import Annotated
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import Depends, HTTPException
 
@@ -146,6 +147,18 @@ class DatabaseInterface(abc.ABC):
     ) -> SubstationProperties:
         """Get substation metadata."""
         pass
+
+    @abc.abstractmethod
+    async def get_one_forecast_for_multiple_locations(
+        self,
+        location_uuids_to_location_ids: dict[str, int],
+        authdata: dict[str, str],
+        timestamp: datetime | None = None,
+
+    ) -> OneDatetimeManyForecastValues:
+        """Get a forecast for multiple sites."""
+        pass
+        
 
 def get_db_client() -> DatabaseInterface:
     """Get the client implementation.
