@@ -81,6 +81,7 @@ async def get_substation_forecast(
 async def get_all_substation_forecast_at_one_timestamp(
     request: Request,
     db: models.DBClientDependency,
+    _: AuthDependency,
     datetime_utc: datetime | None = None) -> models.OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
     if datetime_utc is None:
