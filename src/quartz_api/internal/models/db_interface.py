@@ -13,6 +13,7 @@ from .endpoint_types import (
     ForecastMetadata,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValues,
+    OneDatetimeManyForecastValuesMW,
     PredictedPower,
     Region,
     Site,
@@ -133,7 +134,7 @@ class DatabaseInterface(abc.ABC):
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
 
-    ) -> list[OneDatetimeManyForecastValues]:
+    ) -> list[OneDatetimeManyForecastValuesMW]:
         """Get a forecast for multiple sites."""
         pass
 
@@ -199,6 +200,16 @@ class DatabaseInterface(abc.ABC):
         """Get substation metadata."""
         pass
 
+    @abc.abstractmethod
+    async def get_forecast_for_multiple_locations_one_timestamp(
+        self,
+        location_uuids_to_location_ids: dict[str, int],
+        authdata: dict[str, str],
+        datetime_utc: datetime | None = None,
+
+    ) -> OneDatetimeManyForecastValues:
+        """Get a forecast for multiple sites."""
+        pass
 
 
 def get_db_client() -> DatabaseInterface:

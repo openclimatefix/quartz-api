@@ -13,6 +13,8 @@ from .endpoint_types import (
     ForecastMetadata,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValues,
+    OneDatetimeManyForecastValuesMW,
+
     SiteProperties,
     Site,
     SubstationProperties,

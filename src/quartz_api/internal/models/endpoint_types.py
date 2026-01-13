@@ -110,6 +110,10 @@ class LocationPropertiesBase(BaseModel):
         json_schema_extra={"description": "The location's total capacity in kw"},
         ge=0,
     )
+    metadata: dict[str, str|int|dict] = Field(
+        {},
+        json_schema_extra={"description": "Metadata associated with the location"},
+    )
 
 class SiteProperties(LocationPropertiesBase):
     """Properties specific to a site."""
@@ -170,6 +174,16 @@ class Substation(SubstationProperties):
         json_schema_extra={"description": "The unique identifier for the substation."},
     )
 
+class OneDatetimeManyForecastValues(BaseModel):
+    """One datetime with many forecast values."""
+
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
+    forecast_values_kw: dict[int|str, float] = Field(
+        ...,
+        description="List of forecasts by ids. Key is forecast id, value is generation_kw. "
+        "We keep this as a dictionary to keep the size of the file small.",
+    )
+
 
 def get_timezone() -> str:
     """Stub function for timezone dependency.
@@ -179,7 +193,7 @@ def get_timezone() -> str:
     return "UTC"
 
 
-class OneDatetimeManyForecastValues(EnhancedBaseModel):
+class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
     """One datetime with many forecast values.
 
     This is a legacy route that is being phased out.
