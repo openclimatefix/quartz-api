@@ -33,7 +33,7 @@ async def get_substations(
 
 
 @router.get(
-    "/substations/{substation_uuid}",
+    "/substations/{substation_uuid:uuid}",
     status_code=status.HTTP_200_OK,
 )
 async def get_substation(
@@ -51,7 +51,7 @@ async def get_substation(
     return substation
 
 @router.get(
-    "/substations/{substation_uuid}/forecast",
+    "/substations/{substation_uuid:uuid}/forecast",
     status_code=status.HTTP_200_OK,
 )
 async def get_substation_forecast(
@@ -75,7 +75,7 @@ async def get_substation_forecast(
 
 
 @router.get(
-    "/substations/forecast/",
+    "/substations/forecast",
     status_code=status.HTTP_200_OK,
 )
 async def get_all_substation_forecast_at_one_timestamp(
