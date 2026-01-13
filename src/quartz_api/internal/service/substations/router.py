@@ -100,7 +100,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     forecasts = await db.get_forecast_for_multiple_locations_one_timestamp(
         location_uuids=[gsp.region_metadata["location_uuid"] for gsp in gsp_regions],
         authdata={},
-        timestamp=datetime_utc,
+        datetime_utc=datetime_utc,
     )
 
     # 4. Add substation forecasts
