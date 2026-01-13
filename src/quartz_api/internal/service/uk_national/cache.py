@@ -1,7 +1,10 @@
 """Cache key builder."""
+import logging
 from collections.abc import Callable
 
 from fastapi import Request, Response
+
+log = logging.getLogger(__name__)
 
 
 async def key_builder(
@@ -33,5 +36,7 @@ async def key_builder(
         request.url.path,
         repr(sorted(params)),
     ])
+
+    log.info(f"Cache key generated: {key}")
 
     return key
