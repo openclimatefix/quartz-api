@@ -223,7 +223,7 @@ class Client(models.DatabaseInterface):
     async def get_forecast_for_multiple_locations_one_timestamp(
         self,
         location_uuids: list[UUID],
-        timestamp: dt.datetime,
+        datetime_utc: dt.datetime,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
         raise NotImplementedError("DummyDB client does not support multi-location forecasts.")

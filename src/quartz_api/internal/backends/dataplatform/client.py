@@ -457,7 +457,7 @@ class Client(models.DatabaseInterface):
         self,
         location_uuids: dict[str, int],
         authdata: dict[str, str],
-        timestamp: dt.datetime,
+        datetime_utc: dt.datetime,
         model_name: str = "blend",
     ) -> list[models.OneDatetimeManyForecastValues]:
         """Get a forecast for multiple sites.
@@ -465,14 +465,12 @@ class Client(models.DatabaseInterface):
         Args:
             location_uuids: A list of location UUIDs.
             authdata: Authentication data for the user.
-            timestamp: The datetime for the prediction window
+            datetime_utc: The datetime for the prediction window
             model_name: The name of the forecasting model to use. Default is None.
 
         Returns:
             A list of OneDatetimeManyForecastValues objects.
         """
-        pass
-
         # get forecasters"
         req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
                                       latest_versions_only=True)
@@ -483,7 +481,7 @@ class Client(models.DatabaseInterface):
         req = dp.GetForecastAtTimestampRequest(
             location_uuids=location_uuids,
             energy_source=dp.EnergySource.SOLAR,
-            timestamp_utc=timestamp,
+            timestamp_utc=datetime_utc,
             forecaster=forecaster,
         )
         resp = await self.dp_client.get_forecast_at_timestamp(req)

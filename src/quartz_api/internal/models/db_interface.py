@@ -155,7 +155,7 @@ class DatabaseInterface(abc.ABC):
         self,
         location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
-        timestamp: datetime | None = None,
+        datetime_utc: datetime | None = None,
 
     ) -> OneDatetimeManyForecastValues:
         """Get a forecast for multiple sites."""

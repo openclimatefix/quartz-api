@@ -91,7 +91,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     gsp_ids = [substation.metadata["gsp_id"] for substation in substations]
     gsp_ids = sorted(set(gsp_ids))
 
-    # 2. get all the gsps locations
+    # 2. get the relevant gsps locations
     all_gsp_regions = await db.get_solar_regions(type="gsp")
     gsp_regions = [region for region in all_gsp_regions
                    if region.region_metadata["gsp_id"] in gsp_ids]
@@ -118,7 +118,7 @@ async def get_all_substation_forecast_at_one_timestamp(
         if substation.capacity_kw == 0:
             continue
         scale_factor = substation.capacity_kw / \
-            (gsp_region.region_metadata["effective_capacity_watts"] / 10**3)
+            (gsp_region.region_metadata["effective_capacity_watts"] / 1000)
         substation_forecast_value = round(gsp_forecast_value * scale_factor,3)
 
         # assign to substation
