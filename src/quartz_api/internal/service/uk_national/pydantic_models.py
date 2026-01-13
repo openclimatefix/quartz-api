@@ -66,10 +66,10 @@ class Location(EnhancedBaseModel):
 
         RegionSQL is defined in nowcasting_datamodel
         """
-        region_gsp_id = int(region.region_metadata["gsp_id"].number_value)
+        region_gsp_id = int(region.region_metadata["gsp_id"])
         installed_capacity_mw = region.region_metadata["effective_capacity_watts"] / 10**6
         if "full_name" in region.region_metadata:
-            full_name = region.region_metadata["full_name"].string_value
+            full_name = region.region_metadata["full_name"]
         else:
             full_name = region.region_name
 

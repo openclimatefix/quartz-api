@@ -11,7 +11,7 @@ from quartz_api.internal.models import (
     DBClientDependency,
     ForecastHorizon,
     GSPYieldGroupByDatetime,
-    OneDatetimeManyForecastValues,
+    OneDatetimeManyForecastValuesMW,
 )
 
 from .cache import key_builder
@@ -70,7 +70,7 @@ async def get_forecasts_for_a_specific_gsp(
 
     gsps = await db.get_solar_regions(type="gsp")
     gsp_location = [
-        site for site in gsps if int(site.region_metadata["gsp_id"].number_value) == gsp_id
+        site for site in gsps if int(site.region_metadata["gsp_id"]) == gsp_id
     ]
     gsp_location_uuid = str(gsp_location[0].region_metadata["location_uuid"])
 
@@ -139,7 +139,7 @@ async def get_truths_for_a_specific_gsp(
     gsps = await db.get_solar_regions(type="gsp")
 
     gsp_location = [
-        site for site in gsps if int(site.region_metadata["gsp_id"].number_value) == gsp_id
+        site for site in gsps if int(site.region_metadata["gsp_id"]) == gsp_id
     ]
 
     gsp_location_uuid = str(gsp_location[0].region_metadata["location_uuid"])
@@ -168,7 +168,7 @@ async def get_truths_for_a_specific_gsp(
 # TODO currently takes 9 seconds to load, so probably needs optimization
 @router.get(
     "/forecast/all/",
-    response_model=list[OneDatetimeManyForecastValues],
+    response_model=list[OneDatetimeManyForecastValuesMW],
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=60*30)
@@ -179,7 +179,7 @@ async def get_all_available_forecasts(
     end_datetime_utc: str | None = None,
     gsp_ids: str | None = None,
     creation_limit_utc: str | None = None,
-) -> list[OneDatetimeManyForecastValues]:
+) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
 
     The return object contains a forecast object with system details and
@@ -211,7 +211,7 @@ async def get_all_available_forecasts(
 
     # get locations uuids
     location_uuids_to_gsp_id = {
-        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"].number_value)
+        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"])
         for gsp in gsps
     }
     if gsp_ids is not None:
@@ -295,7 +295,7 @@ async def get_truths_for_all_gsps(
 
     # get locations uuids
     location_uuids_to_gsp_id = {
-        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"].number_value)
+        str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"])
         for gsp in gsps
     }
     if gsp_ids is not None:
