@@ -20,10 +20,18 @@ async def key_builder(
     but I thought it was too much of a risk to be used accidentally
     on private user routes
     """
+    params = request.query_params.items()
+    # remove UI tag
+    params = [(k, v) for k, v in params if k != "UI"]
+    # remove some legacy query params that arent needed anymore
+    legacy_query_params = ["compact", "historic"]
+    params = [(k, v) for k, v in params if k not in legacy_query_params]
+
     key = ":".join([
         namespace,
         request.method.lower(),
         request.url.path,
-        repr(sorted(request.query_params.items())),
+        repr(sorted(params)),
     ])
+
     return key
