@@ -10,26 +10,26 @@ def smooth_forecast(values: list[models.PredictedPower]) -> list[models.Predicte
     # convert to dataframe
     df = pd.DataFrame(
         {
-            "Time": [value.Time for value in values],
-            "PowerKW": [value.PowerKW for value in values],
+            "time": [value.time for value in values],
+            "power_kW": [value.power_kW for value in values],
         },
     )
 
     # smooth and make sure it is symmetrical
-    df = df.set_index("Time")
+    df = df.set_index("time")
     # try to do this in one step, but couldnt, center=True and closed='both' didnt work
     df = (df.rolling(4, min_periods=1).mean() + df[::-1].rolling(4, min_periods=1).mean()) / 2.0
 
     # convert to ints
-    df["PowerKW"] = df["PowerKW"].astype(int)
-    df["CreatedTime"] = [value.CreatedTime for value in values]
+    df["power_kW"] = df["power_kW"].astype(int)
+    df["created_time"] = [value.created_time for value in values]
 
     # convert back to list of PredictedPower
     return [
         models.PredictedPower(
-            Time=index,
-            PowerKW=row.PowerKW,
-            CreatedTime=row.CreatedTime,
+            time=index,
+            power_kW=row.power_kW,
+            created_time=row.created_time,
         )
         for index, row in df.iterrows()
     ]

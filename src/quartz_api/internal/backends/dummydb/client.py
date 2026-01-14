@@ -38,9 +38,9 @@ class Client(models.DatabaseInterface):
             _PowerProduction = _basicSolarPowerProductionFunc(int(time.timestamp()))
             values.append(
                 models.PredictedPower(
-                    Time=time,
-                    PowerKW=int(_PowerProduction.PowerProductionKW),
-                    CreatedTime=dt.datetime.now(tz=dt.UTC),
+                    time=time,
+                    power_kW=int(_PowerProduction.PowerProductionKW),
+                    created_time=dt.datetime.now(tz=dt.UTC),
                 ),
             )
 
@@ -64,9 +64,9 @@ class Client(models.DatabaseInterface):
             _PowerProduction = _basicWindPowerProductionFunc()
             values.append(
                 models.PredictedPower(
-                    Time=time,
-                    PowerKW=int(_PowerProduction.PowerProductionKW),
-                    CreatedTime=dt.datetime.now(tz=dt.UTC),
+                    time=time,
+                    power_kW=int(_PowerProduction.PowerProductionKW),
+                    created_time=dt.datetime.now(tz=dt.UTC),
                 ),
             )
 
@@ -135,7 +135,7 @@ class Client(models.DatabaseInterface):
             client_site_name="Dummy Site",
             latitude=26,
             longitude=76,
-            capacity_kw=76,
+            capacity_kW=76,
             orientation=180,
             tilt=30,
         )
@@ -190,7 +190,7 @@ class Client(models.DatabaseInterface):
             substation_type="primary",
             latitude=26,
             longitude=76,
-            capacity_kw=76,
+            capacity_kW=76,
         )
 
         return [sub]
