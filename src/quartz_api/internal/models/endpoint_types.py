@@ -15,6 +15,13 @@ def to_pascal_case(snake_str: str) -> str:
     return "".join(word.capitalize() for word in snake_str.split("_"))
 
 
+class BaseModelPascalCase(BaseModel):
+    """Base model with PascalCase alias generation."""
+
+    class Config: # noqa
+        alias_generator = to_pascal_case
+
+
 class ForecastHorizon(str, Enum):
     """Defines the forecast horizon options.
 
@@ -29,7 +36,7 @@ class ForecastHorizon(str, Enum):
     day_ahead = "day_ahead"
 
 
-class PredictedPower(BaseModel):
+class PredictedPower(BaseModelPascalCase):
     """Defines the data structure for a predicted power value returned by the API."""
 
     PowerKW: float
@@ -58,7 +65,7 @@ class ActualPower(BaseModel):
             Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
-class LocationPropertiesBase(BaseModel):
+class LocationPropertiesBase(BaseModelPascalCase):
     """Properties common to all locations."""
 
     latitude: float = Field(
@@ -75,7 +82,7 @@ class LocationPropertiesBase(BaseModel):
     )
     capacity_kw: float = Field(
         ...,
-        json_schema_extra={"description": "The location's total capacity in kw"},
+        json_schema_extra={"description": "The location's total capacity in kW"},
         ge=0,
     )
     metadata: dict[str, str|int|dict] = Field(
@@ -123,9 +130,6 @@ class SubstationProperties(LocationPropertiesBase):
         json_schema_extra={"description": "The type of the substation."},
     )
 
-    class Config:
-        alias_generator = to_pascal_case
-
 class Substation(SubstationProperties):
     """Substation information, including properties and unique identifier."""
 
@@ -134,21 +138,16 @@ class Substation(SubstationProperties):
         json_schema_extra={"description": "The unique identifier for the substation."},
     )
 
-    class Config:
-        alias_generator = to_pascal_case
-
-class OneDatetimeManyForecastValues(BaseModel):
+class OneDatetimeManyForecastValues(BaseModelPascalCase):
     """One datetime with many forecast values."""
 
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
-    forecast_values_kW: dict[int|str, float] = Field(
+    forecast_values_kw: dict[int|str, float] = Field(
         ...,
         description="List of forecasts by ids. Key is forecast id, value is generation_kw. "
         "We keep this as a dictionary to keep the size of the file small.",
     )
 
-    class Config:
-        alias_generator = to_pascal_case
 
 class Region(BaseModel):
     """Region metadata."""

@@ -489,15 +489,15 @@ class Client(models.DatabaseInterface):
 
         forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
             datetime_utc=resp.timestamp_utc,
-            forecast_values_kW={
+            forecast_values_kw={
                 forecast.location_uuid: round(
                     forecast.value_fraction * forecast.effective_capacity_watts / 10**3, 2)
                 for forecast in resp.values
             })
 
         # sort by dictionary by keys
-        forecasts_one_timestamp.forecast_values_kW =\
-            dict(sorted(forecasts_one_timestamp.forecast_values_kW.items()))
+        forecasts_one_timestamp.forecast_values_kw =\
+            dict(sorted(forecasts_one_timestamp.forecast_values_kw.items()))
 
 
         return forecasts_one_timestamp
