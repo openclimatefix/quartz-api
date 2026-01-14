@@ -10,16 +10,17 @@ from fastapi import Depends
 from pydantic import BaseModel, Field
 
 
-def to_pascal_case(snake_str: str) -> str:
-    """Converts a snake_case string to PascalCase."""
-    return "".join(word.capitalize() for word in snake_str.split("_"))
+def to_camel_case(snake_str: str) -> str:
+    """Converts a string to camelCase."""
+    words = snake_str.split("_")
+    return words[0].lower() + "".join(word.capitalize() for word in words[1:])
 
 
-class BaseModelPascalCase(BaseModel):
-    """Base model with PascalCase alias generation."""
+class BaseModelCamelCase(BaseModel):
+    """Base model with camelCase alias generation."""
 
     class Config: # noqa
-        alias_generator = to_pascal_case
+        alias_generator = to_camel_case
         populate_by_name = True
 
 
@@ -37,7 +38,7 @@ class ForecastHorizon(str, Enum):
     day_ahead = "day_ahead"
 
 
-class PredictedPower(BaseModelPascalCase):
+class PredictedPower(BaseModelCamelCase):
     """Defines the data structure for a predicted power value returned by the API."""
 
     PowerKW: float
@@ -66,7 +67,7 @@ class ActualPower(BaseModel):
             Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
-class LocationPropertiesBase(BaseModelPascalCase):
+class LocationPropertiesBase(BaseModelCamelCase):
     """Properties common to all locations."""
 
     latitude: float = Field(
@@ -139,7 +140,7 @@ class Substation(SubstationProperties):
         json_schema_extra={"description": "The unique identifier for the substation."},
     )
 
-class OneDatetimeManyForecastValues(BaseModelPascalCase):
+class OneDatetimeManyForecastValues(BaseModelCamelCase):
     """One datetime with many forecast values."""
 
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
