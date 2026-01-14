@@ -10,6 +10,11 @@ from fastapi import Depends
 from pydantic import BaseModel, Field
 
 
+def to_pascal_case(snake_str: str) -> str:
+    """Converts a snake_case string to PascalCase."""
+    return "".join(word.capitalize() for word in snake_str.split("_"))
+
+
 class ForecastHorizon(str, Enum):
     """Defines the forecast horizon options.
 
@@ -118,6 +123,9 @@ class SubstationProperties(LocationPropertiesBase):
         json_schema_extra={"description": "The type of the substation."},
     )
 
+    class Config:
+        alias_generator = to_pascal_case
+
 class Substation(SubstationProperties):
     """Substation information, including properties and unique identifier."""
 
@@ -126,15 +134,21 @@ class Substation(SubstationProperties):
         json_schema_extra={"description": "The unique identifier for the substation."},
     )
 
+    class Config:
+        alias_generator = to_pascal_case
+
 class OneDatetimeManyForecastValues(BaseModel):
     """One datetime with many forecast values."""
 
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
-    forecast_values_kw: dict[int|str, float] = Field(
+    forecast_values_kW: dict[int|str, float] = Field(
         ...,
         description="List of forecasts by ids. Key is forecast id, value is generation_kw. "
         "We keep this as a dictionary to keep the size of the file small.",
     )
+
+    class Config:
+        alias_generator = to_pascal_case
 
 class Region(BaseModel):
     """Region metadata."""
