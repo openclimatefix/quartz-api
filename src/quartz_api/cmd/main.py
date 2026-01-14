@@ -20,7 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
@@ -128,7 +128,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     ### CHANGE 2: Add the custom Swagger UI route
     @server.get("/swagger", include_in_schema=False)
-    async def custom_swagger_ui_html()-> Any:
+    async def custom_swagger_ui_html()-> HTMLResponse:
         return get_swagger_ui_html(
             openapi_url=server.openapi_url,
             title=server.title + " - Swagger UI",
