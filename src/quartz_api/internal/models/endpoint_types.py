@@ -20,6 +20,7 @@ class BaseModelPascalCase(BaseModel):
 
     class Config: # noqa
         alias_generator = to_pascal_case
+        populate_by_name = True
 
 
 class ForecastHorizon(str, Enum):
