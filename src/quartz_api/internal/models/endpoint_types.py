@@ -83,7 +83,7 @@ class LocationPropertiesBase(BaseModelPascalCase):
     )
     capacity_kw: float = Field(
         ...,
-        json_schema_extra={"description": "The location's total capacity in kW"},
+        json_schema_extra={"description": "The location's total capacity in kw"},
         ge=0,
     )
     metadata: dict[str, str|int|dict] = Field(
