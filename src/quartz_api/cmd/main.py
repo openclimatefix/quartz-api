@@ -15,8 +15,8 @@ from apitally.fastapi import ApitallyMiddleware
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
@@ -128,7 +128,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     ### CHANGE 2: Add the custom Swagger UI route
     @server.get("/swagger", include_in_schema=False)
-    async def custom_swagger_ui_html():
+    async def custom_swagger_ui_html()-> Any:
         return get_swagger_ui_html(
             openapi_url=server.openapi_url,
             title=server.title + " - Swagger UI",
