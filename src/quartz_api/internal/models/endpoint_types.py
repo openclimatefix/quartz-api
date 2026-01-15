@@ -27,16 +27,16 @@ class ForecastHorizon(str, Enum):
 class PredictedPower(BaseModel):
     """Defines the data structure for a predicted power value returned by the API."""
 
-    PowerKW: float
-    Time: dt.datetime
-    CreatedTime: dt.datetime = Field(exclude=True)
+    power_kW: float
+    time: dt.datetime
+    created_time: dt.datetime = Field(exclude=True)
 
     def to_timezone(self, tz: str) -> "PredictedPower":
         """Converts the time of this predicted power value to the given timezone."""
         return PredictedPower(
-            PowerKW=self.PowerKW,
-            Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
-            CreatedTime=self.CreatedTime.astimezone(tz=ZoneInfo(key=tz)),
+            power_kW=self.power_kW,
+            time=self.time.astimezone(tz=ZoneInfo(key=tz)),
+            Created_time=self.Created_time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
 
@@ -68,7 +68,7 @@ class LocationPropertiesBase(BaseModel):
         ge=-180,
         le=180,
     )
-    capacity_kw: float = Field(
+    capacity_kW: float = Field(
         ...,
         json_schema_extra={"description": "The location's total capacity in kw"},
         ge=0,
@@ -130,11 +130,12 @@ class OneDatetimeManyForecastValues(BaseModel):
     """One datetime with many forecast values."""
 
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the forecast")
-    forecast_values_kw: dict[int|str, float] = Field(
+    forecast_values_kW: dict[int|str, float] = Field(
         ...,
         description="List of forecasts by ids. Key is forecast id, value is generation_kw. "
         "We keep this as a dictionary to keep the size of the file small.",
     )
+
 
 class Region(BaseModel):
     """Region metadata."""
