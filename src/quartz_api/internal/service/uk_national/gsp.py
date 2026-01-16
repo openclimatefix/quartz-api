@@ -205,8 +205,8 @@ async def get_all_available_forecasts(
 
     # format gsp_ids
     if isinstance(gsp_ids, str):
-        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",")]
-        if gsp_ids == "":
+        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
+        if len(gsp_ids) == 0:
             gsp_ids = None
 
     # get locations uuids
@@ -286,7 +286,7 @@ async def get_truths_for_all_gsps(
     - **end_datetime_utc**: optional end datetime for the query.
     """
     if isinstance(gsp_ids, str):
-        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",")]
+        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
 
     gsps = await db.get_solar_regions(type="gsp")
 
