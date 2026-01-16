@@ -123,7 +123,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Add the default routes
     # This line already mounts your static folder!
-    server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static") 
+    server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
     @server.get("/health", tags=["API Information"], status_code=status.HTTP_200_OK)
     def get_health_route() -> GetHealthResponse:
         """Health endpoint for the API."""
