@@ -15,12 +15,11 @@ from apitally.fastapi import ApitallyMiddleware
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
-from starlette.responses import FileResponse, HTMLResponse
+from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
@@ -124,9 +123,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Add the default routes
     # This line already mounts your static folder!
-    server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
-
-        
+    server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static") 
     @server.get("/health", tags=["API Information"], status_code=status.HTTP_200_OK)
     def get_health_route() -> GetHealthResponse:
         """Health endpoint for the API."""
