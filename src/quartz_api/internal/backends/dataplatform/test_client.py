@@ -354,5 +354,5 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         location_uuid=tc.substation_uuid,
                         authdata=tc.authdata,
                     )
-                    actual_values = [v.PowerKW for v in resp]
+                    actual_values = [v.power_kW for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)

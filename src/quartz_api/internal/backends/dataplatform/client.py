@@ -162,7 +162,7 @@ class Client(models.DatabaseInterface):
                 tilt=loc.metadata.fields["tilt"].number_value
                 if "tilt" in loc.metadata.fields
                 else None,
-                capacity_kw=loc.effective_capacity_watts // 1000.0,
+                capacity_kW=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
             )
@@ -239,7 +239,7 @@ class Client(models.DatabaseInterface):
                 substation_type="primary"
                 if loc.location_type == dp.LocationType.PRIMARY_SUBSTATION
                 else "secondary",
-                capacity_kw=loc.effective_capacity_watts // 1000.0,
+                capacity_kW=loc.effective_capacity_watts // 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
                 metadata = struct_to_dict(loc.metadata),
@@ -294,7 +294,7 @@ class Client(models.DatabaseInterface):
         # Scale the forecast to the substation capacity
         scale_factor: float = substation.effective_capacity_watts / gsp.effective_capacity_watts
         for value in forecast:
-            value.PowerKW = value.PowerKW * scale_factor
+            value.power_kW = value.power_kW * scale_factor
 
         log.debug(
             "gsp=%s, substation=%s, scalefactor=%s, scaling GSP to substation",
@@ -329,7 +329,7 @@ class Client(models.DatabaseInterface):
         return models.SubstationProperties(
             substation_name=loc.location_name,
             substation_type="primary",
-            capacity_kw=loc.effective_capacity_watts // 1000.0,
+            capacity_kW=loc.effective_capacity_watts // 1000.0,
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
         )
@@ -485,10 +485,10 @@ class Client(models.DatabaseInterface):
 
         out: list[models.PredictedPower] = [
             models.PredictedPower(
-                Time=value.target_timestamp_utc,
-                PowerKW=int(value.effective_capacity_watts * value.p50_value_fraction / 1000.0),
-                CreatedTime=value.created_timestamp_utc,
-                PlevelKW={
+                time=value.target_timestamp_utc,
+                power_kW=int(value.effective_capacity_watts * value.p50_value_fraction / 1000.0),
+                created_time=value.created_timestamp_utc,
+                plevel_kW={
                     "p10": int(value.effective_capacity_watts \
                                * value.other_statistics_fractions["p10"] / 1000.0),
                     "p90": int(value.effective_capacity_watts \
@@ -562,15 +562,15 @@ class Client(models.DatabaseInterface):
 
         forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
             datetime_utc=resp.timestamp_utc,
-            forecast_values_kw={
+            forecast_values_kW={
                 forecast.location_uuid: round(
                     forecast.value_fraction * forecast.effective_capacity_watts / 10**3, 2)
                 for forecast in resp.values
             })
 
         # sort by dictionary by keys
-        forecasts_one_timestamp.forecast_values_kw =\
-            dict(sorted(forecasts_one_timestamp.forecast_values_kw.items()))
+        forecasts_one_timestamp.forecast_values_kW =\
+            dict(sorted(forecasts_one_timestamp.forecast_values_kW.items()))
 
 
         return forecasts_one_timestamp

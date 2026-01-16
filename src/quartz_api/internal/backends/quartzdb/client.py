@@ -118,11 +118,11 @@ class Client(models.DatabaseInterface):
         # convert ForecastValueSQL to PredictedPower
         out = [
             models.PredictedPower(
-                PowerKW=int(value.forecast_power_kw)
+                power_kW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
-                Time=value.start_utc.replace(tzinfo=dt.UTC),
-                CreatedTime=value.created_utc.replace(tzinfo=dt.UTC),
+                time=value.start_utc.replace(tzinfo=dt.UTC),
+                created_time=value.created_utc.replace(tzinfo=dt.UTC),
             )
             for value in forecast_values
         ]
@@ -250,7 +250,7 @@ class Client(models.DatabaseInterface):
                     client_site_name=site_sql.client_location_name,
                     orientation=site_sql.orientation,
                     tilt=site_sql.tilt,
-                    capacity_kw=site_sql.capacity_kw,
+                    capacity_kW=site_sql.capacity_kw,
                     latitude=site_sql.latitude,
                     longitude=site_sql.longitude,
                 )
@@ -322,11 +322,11 @@ class Client(models.DatabaseInterface):
             # convert ForecastValueSQL to PredictedPower
         out = [
             models.PredictedPower(
-                PowerKW=int(value.forecast_power_kw)
+                power_kW=int(value.forecast_power_kw)
                 if value.forecast_power_kw >= 0
                 else 0,  # Set negative values of PowerKW up to 0
-                Time=value.start_utc.replace(tzinfo=dt.UTC),
-                CreatedTime=value.created_utc.replace(tzinfo=dt.UTC),
+                time=value.start_utc.replace(tzinfo=dt.UTC),
+                created_time=value.created_utc.replace(tzinfo=dt.UTC),
             )
             for value in forecast_values
         ]
