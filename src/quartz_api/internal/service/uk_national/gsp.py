@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi_cache.decorator import cache
 from starlette import status
 
@@ -205,7 +205,15 @@ async def get_all_available_forecasts(
 
     # format gsp_ids
     if isinstance(gsp_ids, str):
-        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
+        try:
+            gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
+        except ValueError as e:
+            # this can happen if gsp_ids is not a valid integer
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid GSP IDs format. \
+                    Tried to convert '{gsp_ids}' into list of integers") from e
+
         if len(gsp_ids) == 0:
             gsp_ids = None
 
@@ -285,8 +293,15 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
-    if isinstance(gsp_ids, str):
-        gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
+    try:
+        if isinstance(gsp_ids, str):
+            gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
+    except ValueError as e:
+        # this can happen if gsp_ids is not a valid integer
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid GSP IDs format. Tried to convert {gsp_ids} into list of integers",
+                          ) from e
 
     gsps = await db.get_solar_regions(type="gsp")
 
