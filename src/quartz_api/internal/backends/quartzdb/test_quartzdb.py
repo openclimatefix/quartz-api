@@ -121,7 +121,7 @@ class TestQuartzDBClient:
                 client_site_name="test_zzz",
                 latitude=12.34,
                 longitude=56.78,
-                capacity_kw=100.0,
+                capacity_kW=100.0,
                 orientation=180.0,
                 tilt=30.0,
             ),
