@@ -115,7 +115,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             },
         ],
         ### CHANGE 1: Disable the default docs_url (was "/swagger")
-        docs_url=None,
+        docs_url="/swagger",
         redoc_url=None,
         swagger_ui_init_oauth={
             "usePkceWithAuthorizationCodeGrant": True,
@@ -126,19 +126,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # This line already mounts your static folder!
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
 
-    ### CHANGE 2: Add the custom Swagger UI route
-    @server.get("/swagger", include_in_schema=False)
-    async def custom_swagger_ui_html()-> HTMLResponse:
-        return get_swagger_ui_html(
-            openapi_url=server.openapi_url,
-            title=server.title + " - Swagger UI",
-            oauth2_redirect_url=server.swagger_ui_oauth2_redirect_url,
-            swagger_favicon_url="/static/favicon.ico",  # <--- Pointing to your icon
-            init_oauth={
-                "usePkceWithAuthorizationCodeGrant": True,
-            },
-        )
-
+        
     @server.get("/health", tags=["API Information"], status_code=status.HTTP_200_OK)
     def get_health_route() -> GetHealthResponse:
         """Health endpoint for the API."""
