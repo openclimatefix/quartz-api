@@ -63,7 +63,7 @@ class PredictedPower(BaseModel):
         return PredictedPower(
             power_kW=self.power_kW,
             time=self.time.astimezone(tz=ZoneInfo(key=tz)),
-            Created_time=self.Created_time.astimezone(tz=ZoneInfo(key=tz)),
+            created_time=self.created_time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
 class ForecastMetadata(BaseModel):
