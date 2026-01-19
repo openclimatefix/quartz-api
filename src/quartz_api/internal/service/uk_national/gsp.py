@@ -83,16 +83,16 @@ async def get_forecasts_for_a_specific_gsp(
         forecast_horizon=forecast_horizon,
         forecast_horizon_minutes=forecast_horizon_minutes,
         smooth_flag=False,
-        model_name="blend",
+        forecaster_name="blend",
         start_datetime=start_datetime_utc,
         end_datetime=end_datetime_utc,
-        created_utc_upper_limit=creation_utc_limit,
+        created_before_datetime=creation_utc_limit,
     )
 
     national_forecasts = [
         ForecastValue(
-            target_time=pp.Time,
-            expected_power_generation_megawatts=pp.PowerKW / 1000,
+            target_time=pp.time,
+            expected_power_generation_megawatts=pp.power_kW / 1000,
         )
         for pp in predicted_powers
     ]

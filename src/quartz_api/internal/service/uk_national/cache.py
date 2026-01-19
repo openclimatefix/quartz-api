@@ -23,6 +23,8 @@ async def key_builder(
     but I thought it was too much of a risk to be used accidentally
     on private user routes
     """
+    # TODO add permission from read:intraday users
+
     params = request.query_params.items()
     # remove UI tag
     params = [(k, v) for k, v in params if k != "UI"]

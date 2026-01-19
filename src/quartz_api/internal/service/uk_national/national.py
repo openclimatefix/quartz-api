@@ -137,20 +137,20 @@ async def get_national_forecast(
         forecast_horizon=forecast_horizon,
         forecast_horizon_minutes=forecast_horizon_minutes,
         smooth_flag=False,
-        model_name=model_name,
+        forecaster_name=model_name,
         start_datetime=start_datetime_utc,
         end_datetime=end_datetime_utc,
-        created_utc_upper_limit=creation_limit_utc,
+        created_before_datetime=creation_limit_utc,
     )
 
 
     national_forecast_values = [
             NationalForecastValue(
-                target_time=pp.Time,
-                expected_power_generation_megawatts=pp.PowerKW / 1000,
+                target_time=pp.time,
+                expected_power_generation_megawatts=pp.power_kW / 1000,
                 plevels={
-                    "plevel_10": pp.PlevelKW["p10"] / 1000,
-                    "plevel_90": pp.PlevelKW["p90"] / 1000,
+                    "plevel_10": pp.plevel_kW["p10"] / 1000,
+                    "plevel_90": pp.plevel_kW["p90"] / 1000,
                 },
             )
             for pp in predicted_powers

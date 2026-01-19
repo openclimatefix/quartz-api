@@ -33,10 +33,10 @@ class DatabaseInterface(abc.ABC):
         forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-        model_name: str | None = None,
+        forecaster_name: str | None = None,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
-        created_utc_upper_limit: datetime | None = None,
+        created_before_datetime: datetime | None = None,
     ) -> list[PredictedPower]:
         """Returns a list of predicted solar power production for a given location.
 
@@ -45,10 +45,10 @@ class DatabaseInterface(abc.ABC):
             forecast_horizon: The forecast horizon to use.
             forecast_horizon_minutes: The forecast horizon in minutes to use.
             smooth_flag: Whether to smooth the forecast data.
-            model_name: The name of the model to use for predictions.
+            forecaster_name: The name of the model to use for predictions.
             start_datetime: The start datetime for the prediction window. Default is None.
             end_datetime: The end datetime for the prediction window. Default is None.
-            created_utc_upper_limit: The upper limit for the creation datetime. Default is None.
+            created_before_datetime: The upper limit for the creation datetime. Default is None.
         """
         pass
 

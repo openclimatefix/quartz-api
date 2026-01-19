@@ -38,10 +38,10 @@ class Client(models.DatabaseInterface):
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
-        model_name: str | None = None,
+        forecaster_name: str | None = None,
         start_datetime: dt.datetime | None = None,
         end_datetime: dt.datetime | None = None,
-        created_utc_upper_limit: dt.datetime | None = None,
+        created_before_datetime: dt.datetime | None = None,
     ) -> list[models.PredictedPower]:
         values = await self._get_predicted_power_production_for_location(
             location_uuid=location,
@@ -50,10 +50,10 @@ class Client(models.DatabaseInterface):
             forecast_horizon_minutes=forecast_horizon_minutes,
             smooth_flag=smooth_flag,
             oauth_id=None,
-            model_name=model_name,
+            forecaster_name=forecaster_name,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
-            created_utc_upper_limit=created_utc_upper_limit,
+            created_before_datetime=created_before_datetime,
         )
         return values
 
@@ -421,10 +421,10 @@ class Client(models.DatabaseInterface):
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,  # noqa: ARG002
-        model_name: str | None = None,
+        forecaster_name: str | None = None,
         start_datetime: dt.datetime | None = None,
         end_datetime: dt.datetime | None = None,
-        created_utc_upper_limit: dt.datetime | None = None,
+        created_before_datetime: dt.datetime | None = None,
         traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
         """Local function to retrieve predicted values regardless of energy type."""
@@ -447,7 +447,7 @@ class Client(models.DatabaseInterface):
             # from my asking around at least
             forecast_horizon_minutes = 9 * 60
 
-        if model_name is None:
+        if forecaster_name is None:
             # Use the forecaster that produced the most recent forecast for the location by default,
             # taking into account the desired horizon.
             # * At some point, we may want to allow the user to specify a particular forecaster.
@@ -465,7 +465,7 @@ class Client(models.DatabaseInterface):
             )
             forecaster = resp.forecasts[0].forecaster
         else:
-            req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
+            req = dp.ListForecastersRequest(forecaster_names_filter=[forecaster_name],
                                       latest_versions_only=True)
             resp = await self.dp_client.list_forecasters(req, metadata={"traceid": traceid})
             forecaster = resp.forecasters[0]
@@ -479,7 +479,7 @@ class Client(models.DatabaseInterface):
                 end_timestamp_utc=end,
             ),
             forecaster=forecaster,
-            pivot_timestamp_utc=created_utc_upper_limit,
+            pivot_timestamp_utc=created_before_datetime,
         )
         resp = await self.dp_client.get_forecast_as_timeseries(req, metadata={"traceid": traceid})
 
