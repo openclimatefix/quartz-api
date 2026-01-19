@@ -115,19 +115,19 @@ async def get_all_substation_forecast_at_one_timestamp(
 
         # get forecast value
         gsp_location_uuid = gsp_region.region_metadata["location_uuid"]
-        gsp_forecast_value = forecasts.forecast_values_kw.get(gsp_location_uuid, 0.0)
-        if substation.capacity_kw == 0:
+        gsp_forecast_value = forecasts.forecast_values_kW.get(gsp_location_uuid, 0.0)
+        if substation.capacity_kW == 0:
             continue
-        scale_factor = substation.capacity_kw / \
+        scale_factor = substation.capacity_kW / \
             (gsp_region.region_metadata["effective_capacity_watts"] / 1000)
         substation_forecast_value = round(gsp_forecast_value * scale_factor,3)
 
         # assign to substation
-        forecasts.forecast_values_kw[str(substation.substation_uuid)] = substation_forecast_value
+        forecasts.forecast_values_kW[str(substation.substation_uuid)] = substation_forecast_value
 
     # 5. remove GSP forecasts
     for gsp in gsp_regions:
         gsp_location_uuid = gsp.region_metadata["location_uuid"]
-        forecasts.forecast_values_kw.pop(gsp_location_uuid, None)
+        forecasts.forecast_values_kW.pop(gsp_location_uuid, None)
 
     return forecasts
