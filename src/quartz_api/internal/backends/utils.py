@@ -3,7 +3,8 @@
 import datetime as dt
 
 
-def get_window(start: dt.datetime | None = None, end: dt.datetime | None = None) -> tuple[dt.datetime, dt.datetime]:
+def get_window(start: dt.datetime | None = None, end: dt.datetime | None = None) \
+    -> tuple[dt.datetime, dt.datetime]:
     """Returns the start and end of the window for timeseries data."""
     # Window start is the beginning of the day two days ago
     if start is None:

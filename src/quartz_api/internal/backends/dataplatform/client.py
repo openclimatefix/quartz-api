@@ -14,8 +14,6 @@ from typing_extensions import override
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
-from ..utils import get_window
-
 log = logging.getLogger("dataplatform.client")
 
 
@@ -561,10 +559,11 @@ class Client(models.DatabaseInterface):
         Returns:
             A list of OneDatetimeManyForecastValuesMW objects.
         """
-
         # timestamps 30 mins apart from start to end
-        n_half_hours = int((((end_datetime_utc - start_datetime_utc).total_seconds() // 60) // 30) + 1)
-        timestamps = [start_datetime_utc + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
+        diff = (end_datetime_utc - start_datetime_utc).total_seconds()
+        n_half_hours = int((diff // 60 // 30) + 1)
+        timestamps = [start_datetime_utc \
+                      + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
 
         # get forecasters
         req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
@@ -619,7 +618,6 @@ class Client(models.DatabaseInterface):
         observer_name: str = "ruvnl",
     ) -> list[models.GSPYieldGroupByDatetime]:
         """Get a forecast for multiple sites."""
-
         # TODO move to gsp.py route
 
         tasks = []
