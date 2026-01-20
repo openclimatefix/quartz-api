@@ -354,14 +354,13 @@ class Client(models.DatabaseInterface):
                 traceid,
             )
 
-        start, end = get_window(start=start_datetime, end=end_datetime)
         req = dp.GetObservationsAsTimeseriesRequest(
             location_uuid=location_uuid,
             observer_name=observer_name,
             energy_source=energy_source,
             time_window=dp.TimeWindow(
-                start_timestamp_utc=start,
-                end_timestamp_utc=end,
+                start_timestamp_utc=start_datetime,
+                end_timestamp_utc=end_datetime,
             ),
         )
         resp = await self.dp_client.get_observations_as_timeseries(
@@ -402,8 +401,6 @@ class Client(models.DatabaseInterface):
                 traceid,
             )
 
-        start, end = get_window(start=start_datetime, end=end_datetime)
-
         if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
         elif forecast_horizon == models.ForecastHorizon.day_ahead:
@@ -419,7 +416,7 @@ class Client(models.DatabaseInterface):
             req = dp.GetLatestForecastsRequest(
                 location_uuid=location_uuid,
                 energy_source=energy_source,
-                pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=start_datetime - dt.timedelta(minutes=forecast_horizon_minutes),
             )
             resp = await self.dp_client.get_latest_forecasts(req, metadata={"traceid": traceid})
             if len(resp.forecasts) == 0:
@@ -440,8 +437,8 @@ class Client(models.DatabaseInterface):
             energy_source=energy_source,
             horizon_mins=forecast_horizon_minutes,
             time_window=dp.TimeWindow(
-                start_timestamp_utc=start,
-                end_timestamp_utc=end,
+                start_timestamp_utc=start_datetime,
+                end_timestamp_utc=end_datetime,
             ),
             forecaster=forecaster,
             pivot_timestamp_utc=created_before_datetime,
@@ -564,11 +561,10 @@ class Client(models.DatabaseInterface):
         Returns:
             A list of OneDatetimeManyForecastValuesMW objects.
         """
-        start, end = get_window(start=start_datetime_utc, end=end_datetime_utc)
 
         # timestamps 30 mins apart from start to end
-        n_half_hours = int((((end - start).total_seconds() // 60) // 30) + 1)
-        timestamps = [start + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
+        n_half_hours = int((((end_datetime_utc - start_datetime_utc).total_seconds() // 60) // 30) + 1)
+        timestamps = [start_datetime_utc + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
 
         # get forecasters
         req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
@@ -623,7 +619,8 @@ class Client(models.DatabaseInterface):
         observer_name: str = "ruvnl",
     ) -> list[models.GSPYieldGroupByDatetime]:
         """Get a forecast for multiple sites."""
-        start, end = get_window(start=start_datetime, end=end_datetime)
+
+        # TODO move to gsp.py route
 
         tasks = []
         for location_uuid in location_uuids_to_location_ids:
@@ -632,8 +629,8 @@ class Client(models.DatabaseInterface):
                 observer_name=observer_name,
                 energy_source=dp.EnergySource.SOLAR,
                 time_window=dp.TimeWindow(
-                    start_timestamp_utc=start,
-                    end_timestamp_utc=end,
+                    start_timestamp_utc=start_datetime,
+                    end_timestamp_utc=end_datetime,
                 ),
             )
             task = asyncio.create_task(self.dp_client.get_observations_as_timeseries(req))

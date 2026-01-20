@@ -1,6 +1,6 @@
 """The 'gsp' FastAPI router object."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from fastapi_cache.decorator import cache
@@ -20,6 +20,7 @@ from .time_utils import (
     ceil_30_minutes_dt,
     floor_30_minutes_dt,
     format_datetime,
+    get_window,
     limit_end_datetime_by_permissions,
 )
 
@@ -67,6 +68,9 @@ async def get_forecasts_for_a_specific_gsp(
 
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
+
+    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
+                                                      end=end_datetime_utc)
 
     gsps = await db.get_solar_regions(type="gsp")
     gsp_location = [
@@ -136,6 +140,9 @@ async def get_truths_for_a_specific_gsp(
     start_datetime_utc = format_datetime(start_datetime_utc)
     end_datetime_utc = format_datetime(end_datetime_utc)
 
+    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
+                                                      end=end_datetime_utc)
+
     gsps = await db.get_solar_regions(type="gsp")
 
     gsp_location = [
@@ -200,6 +207,7 @@ async def get_all_available_forecasts(
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     - **end_datetime_utc**: optional end datetime for the query. e.g '2023-08-12 14:00:00+00:00'
     """
+
     gsps = await db.get_solar_regions(type="gsp")
     # might need to add nation location in here too
 
@@ -247,6 +255,12 @@ async def get_all_available_forecasts(
 
     if start_datetime_utc is not None:
         start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
+
+    if end_datetime_utc is None:
+        end_datetime_utc = get_window(start=start_datetime_utc)[1]
+
+
+    print(start_datetime_utc, end_datetime_utc)
 
     forecast_values = await db.get_forecast_for_multiple_locations(
         location_uuids_to_location_ids=location_uuids_to_gsp_id,
@@ -307,6 +321,8 @@ async def get_truths_for_all_gsps(
 
     start_datetime_utc = format_datetime(start_datetime_utc)
     end_datetime_utc = format_datetime(end_datetime_utc)
+    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
+                                                       end=end_datetime_utc)
 
     # get locations uuids
     location_uuids_to_gsp_id = {

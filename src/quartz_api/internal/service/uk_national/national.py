@@ -22,7 +22,7 @@ from .pydantic_models import (
     NationalForecastValue,
     NationalYield,
 )
-from .time_utils import format_datetime, limit_end_datetime_by_permissions
+from .time_utils import format_datetime, get_window, limit_end_datetime_by_permissions
 
 router = APIRouter(tags=["National"])
 
@@ -98,6 +98,9 @@ async def get_national_forecast(
 
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
+
+    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
+                                                      end=end_datetime_utc)
 
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
@@ -191,9 +194,13 @@ async def get_national_pvlive(
 
     regime = regime.replace("-", "_")
 
+    start_datetime_utc, end_datetime_utc = get_window()
+
     solar_production = await db.get_actual_solar_power_production_for_location(
         location=national_location_uuid,
         observer_name=f"pvlive_{regime}",
+        start_datetime=start_datetime_utc,
+        end_datetime=end_datetime_utc,
     )
 
     national_yields = [
