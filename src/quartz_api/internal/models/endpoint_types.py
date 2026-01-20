@@ -135,17 +135,6 @@ class Site(SiteProperties):
         json_schema_extra={"description": "The unique identifier for the site."},
     )
 
-
-class Region(BaseModel):
-    """Region metadata."""
-
-    region_name: str = Field(..., json_schema_extra={"description": "The name of the region."})
-    region_metadata: dict | None = Field(
-        None,
-        json_schema_extra={"description": "Additional metadata about the region."},
-    )
-
-
 class SubstationProperties(LocationPropertiesBase):
     """Properties specific to a substation."""
 
@@ -176,6 +165,14 @@ class OneDatetimeManyForecastValues(BaseModel):
         "We keep this as a dictionary to keep the size of the file small.",
     )
 
+class Region(BaseModel):
+    """Region metadata."""
+
+    region_name: str = Field(..., json_schema_extra={"description": "The name of the region."})
+    region_metadata: dict | None = Field(
+        None,
+        json_schema_extra={"description": "Additional metadata about the region."},
+    )
 
 def get_timezone() -> str:
     """Stub function for timezone dependency.
