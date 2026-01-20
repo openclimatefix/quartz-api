@@ -220,10 +220,6 @@ class Client(models.DatabaseInterface):
         return values
 
     @override
-    async def get_generation_for_multiple_locations() -> list[models.GSPYieldGroupByDatetime]:
-        raise NotImplementedError()
-
-    @override
     async def get_forecast_for_multiple_locations() -> list[models.OneDatetimeManyForecastValues]:
         raise NotImplementedError()
 

@@ -10,7 +10,6 @@ from fastapi import Depends, HTTPException
 from .endpoint_types import (
     ActualPower,
     ForecastHorizon,
-    GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValues,
     OneDatetimeManyForecastValuesMW,
     PredictedPower,
@@ -142,19 +141,6 @@ class DatabaseInterface(abc.ABC):
         self, site_uuid: UUID, authdata: dict[str, str], observer_name: str | None = None,
     ) -> list[ActualPower]:
         """Get the generation for a site."""
-        pass
-
-    # This is a legacy method that is being phased out in favor of get_site_generation
-    @abc.abstractmethod
-    async def get_generation_for_multiple_locations(
-        self,
-        location_uuids_to_location_ids: dict[str, int],
-        authdata: dict[str, str],
-        start_datetime: datetime | None = None,
-        end_datetime: datetime | None = None,
-        observer_name: str | None = None,
-    ) -> list[GSPYieldGroupByDatetime]:
-        """Get a forecast for multiple sites."""
         pass
 
     @abc.abstractmethod

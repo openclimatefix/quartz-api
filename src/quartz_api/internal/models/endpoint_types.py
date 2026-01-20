@@ -73,6 +73,7 @@ class ActualPower(BaseModel):
 
     PowerKW: float
     Time: dt.datetime
+    location_uuid: str = Field("not-set", exclude=True)
 
     def to_timezone(self, tz: str) -> "ActualPower":
         """Converts the time of this predicted power value to the given timezone."""

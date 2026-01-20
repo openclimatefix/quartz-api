@@ -14,6 +14,8 @@ from typing_extensions import override
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
+from ..utils import get_window
+
 log = logging.getLogger("dataplatform.client")
 
 
@@ -369,6 +371,7 @@ class Client(models.DatabaseInterface):
             models.ActualPower(
                 Time=value.timestamp_utc,
                 PowerKW=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
+                location_uuid=str(location_uuid),
             )
             for value in resp.values
         ]
@@ -399,6 +402,8 @@ class Client(models.DatabaseInterface):
                 traceid,
             )
 
+        start, end = get_window(start=start_datetime, end=end_datetime)
+
         if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
         elif forecast_horizon == models.ForecastHorizon.day_ahead:
@@ -414,7 +419,7 @@ class Client(models.DatabaseInterface):
             req = dp.GetLatestForecastsRequest(
                 location_uuid=location_uuid,
                 energy_source=energy_source,
-                pivot_timestamp_utc=start_datetime - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
             )
             resp = await self.dp_client.get_latest_forecasts(req, metadata={"traceid": traceid})
             if len(resp.forecasts) == 0:
@@ -435,8 +440,8 @@ class Client(models.DatabaseInterface):
             energy_source=energy_source,
             horizon_mins=forecast_horizon_minutes,
             time_window=dp.TimeWindow(
-                start_timestamp_utc=start_datetime,
-                end_timestamp_utc=end_datetime,
+                start_timestamp_utc=start,
+                end_timestamp_utc=end,
             ),
             forecaster=forecaster,
             pivot_timestamp_utc=created_before_datetime,
@@ -607,63 +612,6 @@ class Client(models.DatabaseInterface):
             forecasts_per_timestamp.append(forecasts_one_timestamp)
 
         return forecasts_per_timestamp
-
-    @override
-    async def get_generation_for_multiple_locations(
-        self,
-        location_uuids_to_location_ids: dict[str, int],
-        authdata: dict[str, str],
-        start_datetime: dt.datetime | None = None,
-        end_datetime: dt.datetime | None = None,
-        observer_name: str = "ruvnl",
-    ) -> list[models.GSPYieldGroupByDatetime]:
-        """Get a forecast for multiple sites."""
-        # TODO move to gsp.py route
-
-        tasks = []
-        for location_uuid in location_uuids_to_location_ids:
-            req = dp.GetObservationsAsTimeseriesRequest(
-                location_uuid=location_uuid,
-                observer_name=observer_name,
-                energy_source=dp.EnergySource.SOLAR,
-                time_window=dp.TimeWindow(
-                    start_timestamp_utc=start_datetime,
-                    end_timestamp_utc=end_datetime,
-                ),
-            )
-            task = asyncio.create_task(self.dp_client.get_observations_as_timeseries(req))
-            tasks.append(task)
-            # observation = await self.dp_client.get_observations_as_timeseries(req)
-            # observations.append(observation)
-
-        list_results = await asyncio.gather(*tasks, return_exceptions=True)
-        for exc in filter(lambda x: isinstance(x, Exception), list_results):
-            raise exc
-
-        # Combine results into GSPYieldGroupByDatetime
-        observations_by_datetime = {}
-        for observation in list_results:
-
-            location_id = location_uuids_to_location_ids[observation.location_uuid]
-
-            for value in observation.values:
-                timestamp = value.timestamp_utc
-                if timestamp not in observations_by_datetime:
-                    # make a dictionary generation_kw_by_gsp_id
-                    observations_by_datetime[timestamp] = {}
-
-                generation_kw = int(value.effective_capacity_watts * value.value_fraction / 1000.0)
-                observations_by_datetime[timestamp][location_id] = generation_kw
-
-        # format to list of GSPYieldGroupByDatetime
-        observations_by_datetime_formated = [
-            models.GSPYieldGroupByDatetime(
-                datetime_utc=timestamp,
-                generation_kw_by_gsp_id=dict(sorted(generation_kw_by_gsp_id.items())),
-            )
-            for timestamp, generation_kw_by_gsp_id in observations_by_datetime.items()
-        ]
-        return observations_by_datetime_formated
 
 def struct_to_dict(values:Struct) -> dict:
     """Converts a Struct to a dictionary."""

@@ -1,5 +1,6 @@
 """The 'gsp' FastAPI router object."""
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
@@ -280,7 +281,7 @@ async def get_all_available_forecasts(
 @cache(key_builder=key_builder, expire=60*30)
 async def get_truths_for_all_gsps(
     db: DBClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency,  # noqa
     regime: str = "in-day",
     start_datetime_utc: str | None = None,
     end_datetime_utc: str | None = None,
@@ -333,12 +334,46 @@ async def get_truths_for_all_gsps(
             if gsp_id in gsp_ids
         }
 
-    observations = await db.get_generation_for_multiple_locations(
-        location_uuids_to_location_ids=location_uuids_to_gsp_id,
-        observer_name=f"pvlive_{regime.replace('-', '_')}",
-        start_datetime=start_datetime_utc,
-        end_datetime=end_datetime_utc,
-        authdata=auth,
-    )
 
-    return observations
+    tasks = []
+    for location_uuid in location_uuids_to_gsp_id:
+        req = db.get_actual_solar_power_production_for_location(
+            location=location_uuid,
+            observer_name=f"pvlive_{regime.replace('-', '_')}",
+            start_datetime=start_datetime_utc,
+            end_datetime=end_datetime_utc,
+        )
+        task = asyncio.create_task(req)
+        tasks.append(task)
+        # observation = await self.dp_client.get_observations_as_timeseries(req)
+        # observations.append(observation)
+
+    list_results = await asyncio.gather(*tasks, return_exceptions=True)
+    for exc in filter(lambda x: isinstance(x, Exception), list_results):
+        raise exc
+
+    # Combine results into GSPYieldGroupByDatetime
+    observations_by_datetime = {}
+    for observation in list_results:
+
+        for index, value in enumerate(observation):
+            if index == 0:
+                location_id = location_uuids_to_gsp_id[value.location_uuid]
+
+            timestamp = value.Time
+            if timestamp not in observations_by_datetime:
+                # make a dictionary generation_kw_by_gsp_id
+                observations_by_datetime[timestamp] = {}
+
+            generation_kw = value.PowerKW
+            observations_by_datetime[timestamp][location_id] = int(generation_kw)
+
+    # format to list of GSPYieldGroupByDatetime
+    observations_by_datetime_formated = [
+        GSPYieldGroupByDatetime(
+            datetime_utc=timestamp,
+            generation_kw_by_gsp_id=dict(sorted(generation_kw_by_gsp_id.items())),
+        )
+        for timestamp, generation_kw_by_gsp_id in observations_by_datetime.items()
+    ]
+    return observations_by_datetime_formated
