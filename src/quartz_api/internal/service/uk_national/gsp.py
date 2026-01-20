@@ -89,7 +89,7 @@ async def get_forecasts_for_a_specific_gsp(
         created_before_datetime=creation_utc_limit,
     )
 
-    national_forecasts = [
+    gsp_forecasts = [
         ForecastValue(
             target_time=pp.time,
             expected_power_generation_megawatts=pp.power_kW / 1000,
@@ -97,7 +97,7 @@ async def get_forecasts_for_a_specific_gsp(
         for pp in predicted_powers
     ]
 
-    return national_forecasts
+    return gsp_forecasts
 
 
 @router.get(

@@ -11,7 +11,6 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.models import (
     DBClientDependency,
     ForecastHorizon,
-    ForecastMetadata,
 )
 
 from .cache import key_builder
@@ -107,27 +106,6 @@ async def get_national_forecast(
     sites = await db.get_solar_regions(type="nation")
     national_location_uuid = sites[0].region_metadata["location_uuid"]
 
-    if include_metadata:
-        forecast_metadata: ForecastMetadata \
-            = await db.get_forecast_metadata(location_uuid=national_location_uuid,
-                                             model_name=model_name,
-                                             authdata=auth)
-
-        # Legacy inputdata,
-        # In nowcasting_datamodel, we get this from the database
-        old = datetime(1970, 1, 1, tzinfo=UTC)
-        input = InputDataLastUpdated(gsp=old, nwp=old, pv=old, satellite=old)
-
-        national_forecast = NationalForecast(
-            location=Location.from_region(sites[0]),
-            model=MLModel(name=forecast_metadata.forecaster_name,
-                          version=forecast_metadata.forecaster_version),
-            forecast_creation_time=forecast_metadata.created_timestamp_utc,
-            initialization_datetime_utc=forecast_metadata.initialization_timestamp_utc,
-            forecast_values=[],
-            input_data_last_updated=input,
-        )
-
     forecast_horizon = ForecastHorizon.latest
     if forecast_horizon_minutes is not None:
         forecast_horizon = ForecastHorizon.horizon
@@ -159,7 +137,21 @@ async def get_national_forecast(
     if not include_metadata:
         return national_forecast_values
     else:
-        national_forecast.forecast_values = national_forecast_values
+
+        #  Legacy inputdata,
+        # In nowcasting_datamodel, we get this from the database
+        old = datetime(1970, 1, 1, tzinfo=UTC)
+        input = InputDataLastUpdated(gsp=old, nwp=old, pv=old, satellite=old)
+
+        national_forecast = NationalForecast(
+            location=Location.from_region(sites[0]),
+            model=MLModel(name=predicted_powers[0].forecaster_name,
+                          version=predicted_powers[0].forecaster_version),
+            forecast_creation_time=predicted_powers[0].created_time,
+            initialization_datetime_utc=predicted_powers[0].created_time,
+            forecast_values=national_forecast_values,
+            input_data_last_updated=input)
+
         return national_forecast
 
 
