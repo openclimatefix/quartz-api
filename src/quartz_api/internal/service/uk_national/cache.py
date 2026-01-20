@@ -6,6 +6,9 @@ from fastapi import Request, Response
 
 log = logging.getLogger(__name__)
 
+cache_dependent_scopes = ["read:intraday"]
+legacy_query_params = ["compact", "historic"]
+
 
 async def key_builder(
     func: Callable, # noqa
@@ -23,13 +26,15 @@ async def key_builder(
     but I thought it was too much of a risk to be used accidentally
     on private user routes
     """
-    # TODO add permission from read:intraday users
+    # only include cache dependent scopes
+    # TODO fix for permissions of user, not scope of route
+    scopes = request.scope.get("scopes", [])
+    scopes = [scope for scope in scopes if scope in cache_dependent_scopes]
 
     params = request.query_params.items()
     # remove UI tag
     params = [(k, v) for k, v in params if k != "UI"]
     # remove some legacy query params that arent needed anymore
-    legacy_query_params = ["compact", "historic"]
     params = [(k, v) for k, v in params if k not in legacy_query_params]
 
     key = ":".join([
@@ -37,6 +42,7 @@ async def key_builder(
         request.method.lower(),
         request.url.path,
         repr(sorted(params)),
+        repr(sorted(scopes)),
     ])
 
     log.info(f"Cache key generated: {key}")
