@@ -10,7 +10,6 @@ from .endpoint_types import (
     ForecastHorizon,
     PredictedPower,
     Region,
-    ForecastMetadata,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValues,
     OneDatetimeManyForecastValuesMW,
