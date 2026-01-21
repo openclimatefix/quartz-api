@@ -27,9 +27,9 @@ async def key_builder(
     on private user routes
     """
     # only include cache dependent scopes
-    # TODO fix for permissions of user, not scope of route
-    scopes = request.scope.get("scopes", [])
-    scopes = [scope for scope in scopes if scope in cache_dependent_scopes]
+    auth = kwargs.get("auth", {})
+    permissions = auth.get("permissions", [])
+    permissions = [p for p in permissions if p in cache_dependent_scopes]
 
     params = request.query_params.items()
     params = [(k, v) for k, v in params if k not in [*legacy_query_params, "UI"]]
@@ -39,7 +39,7 @@ async def key_builder(
         request.method.lower(),
         request.url.path,
         repr(sorted(params)),
-        repr(sorted(scopes)),
+        repr(sorted(permissions)),
     ])
 
     log.info(f"Cache key generated: {key}")
