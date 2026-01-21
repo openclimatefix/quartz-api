@@ -31,7 +31,6 @@ from quartz_api.internal.middleware import audit, auth, sentry, trace
 from ._logging import setup_json_logging
 
 log = logging.getLogger(__name__)
-# set hpack to warning log level
 logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
