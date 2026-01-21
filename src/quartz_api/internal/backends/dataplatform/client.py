@@ -13,8 +13,6 @@ from typing_extensions import override
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
-from ..utils import get_window
-
 log = logging.getLogger("dataplatform.client")
 
 
@@ -33,7 +31,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_predicted_solar_power_production_for_location(
         self,
-        location: str,
+        location: UUID,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
@@ -59,7 +57,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_predicted_wind_power_production_for_location(
         self,
-        location: str,
+        location: UUID,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,
@@ -77,10 +75,10 @@ class Client(models.DatabaseInterface):
     @override
     async def get_actual_solar_power_production_for_location(
         self,
-        location: str,
+        location: UUID,
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime ,
         observer_name: str | None = None,
-        start_datetime: dt.datetime | None = None,
-        end_datetime: dt.datetime | None = None,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
@@ -95,7 +93,7 @@ class Client(models.DatabaseInterface):
     @override
     async def get_actual_wind_power_production_for_location(
         self,
-        location: str,
+        location: UUID,
     ) -> list[models.ActualPower]:
         values = await self._get_actual_power_production_for_location(
             location,
@@ -338,9 +336,9 @@ class Client(models.DatabaseInterface):
         location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime,
         observer_name: str = "ruvnl",
-        start_datetime: dt.datetime | None = None,
-        end_datetime: dt.datetime | None = None,
         traceid: str = "unknown",
     ) -> list[models.ActualPower]:
         """Local function to retrieve actual values regardless of energy type."""
@@ -354,7 +352,7 @@ class Client(models.DatabaseInterface):
             )
 
         req = dp.GetObservationsAsTimeseriesRequest(
-            location_uuid=location_uuid,
+            location_uuid=str(location_uuid),
             observer_name=observer_name,
             energy_source=energy_source,
             time_window=dp.TimeWindow(
@@ -382,12 +380,12 @@ class Client(models.DatabaseInterface):
         location_uuid: UUID,
         energy_source: dp.EnergySource,
         oauth_id: str | None,
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime,
         forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
         forecast_horizon_minutes: int | None = None,
         smooth_flag: bool = True,  # noqa: ARG002
         forecaster_name: str | None = None,
-        start_datetime: dt.datetime | None = None,
-        end_datetime: dt.datetime | None = None,
         created_before_datetime: dt.datetime | None = None,
         traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
@@ -401,7 +399,7 @@ class Client(models.DatabaseInterface):
                 traceid,
             )
 
-        start, end = get_window(start=start_datetime, end=end_datetime)
+        # start, end = get_window(start=start_datetime, end=end_datetime)
 
         if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0
@@ -416,9 +414,9 @@ class Client(models.DatabaseInterface):
             # taking into account the desired horizon.
             # * At some point, we may want to allow the user to specify a particular forecaster.
             req = dp.GetLatestForecastsRequest(
-                location_uuid=location_uuid,
+                location_uuid=str(location_uuid),
                 energy_source=energy_source,
-                pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=start_datetime - dt.timedelta(minutes=forecast_horizon_minutes),
             )
             resp = await self.dp_client.get_latest_forecasts(req, metadata={"traceid": traceid})
             if len(resp.forecasts) == 0:
@@ -435,12 +433,12 @@ class Client(models.DatabaseInterface):
             forecaster = resp.forecasters[0]
 
         req = dp.GetForecastAsTimeseriesRequest(
-            location_uuid=location_uuid,
+            location_uuid=str(location_uuid),
             energy_source=energy_source,
             horizon_mins=forecast_horizon_minutes,
             time_window=dp.TimeWindow(
-                start_timestamp_utc=start,
-                end_timestamp_utc=end,
+                start_timestamp_utc=start_datetime,
+                end_timestamp_utc=end_datetime,
             ),
             forecaster=forecaster,
             pivot_timestamp_utc=created_before_datetime,
@@ -546,8 +544,8 @@ class Client(models.DatabaseInterface):
         self,
         location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
-        start_datetime_utc: dt.datetime | None = None,
-        end_datetime_utc: dt.datetime | None = None,
+        start_datetime_utc: dt.datetime,
+        end_datetime_utc: dt.datetime,
         model_name: str | None = None,
     ) -> list[models.OneDatetimeManyForecastValuesMW,
 ]:
