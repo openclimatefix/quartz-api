@@ -16,21 +16,6 @@ def convert_to_camelcase(snake_str: str) -> str:
     return "".join([first.lower(), *map(str.title, others)])
 
 
-class EnhancedBaseModel(BaseModel):
-    """Ensures that attribute names are returned in camelCase."""
-
-    # Automatically creates camelcase alias for field names
-    # See https://pydantic-docs.helpmanual.io/usage/model_config/#alias-generator
-    class Config:  # noqa: D106
-        alias_generator = convert_to_camelcase
-        # allow_population_by_field_name = True
-        # orm_mode = True
-        # underscore_attrs_are_private = True
-        from_attributes = True
-        populate_by_name = True
-
-
-
 class ForecastHorizon(str, Enum):
     """Defines the forecast horizon options.
 
@@ -182,7 +167,7 @@ def get_timezone() -> str:
     return "UTC"
 
 
-class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
+class OneDatetimeManyForecastValuesMW(BaseModel):
     """One datetime with many forecast values.
 
     This is a legacy route that is being phased out.
@@ -195,7 +180,7 @@ class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
         "We keep this as a dictionary to keep the size of the file small ",
     )
 
-class GSPYieldGroupByDatetime(EnhancedBaseModel):
+class GSPYieldGroupByDatetime(BaseModel):
     """gsp yields for one a singel datetime.
 
     This is a legacy route that is being phased out.
