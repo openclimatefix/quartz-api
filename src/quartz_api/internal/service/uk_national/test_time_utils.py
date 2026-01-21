@@ -3,7 +3,7 @@ import datetime as dt
 from .time_utils import add_timezone, ceil_30_minutes_dt, floor_30_minutes_dt, get_window
 
 
-def test_format_datetime():
+def test_add_timezone():
 
 
     format_datetime_none = add_timezone(None)
@@ -14,24 +14,24 @@ def test_format_datetime():
 
 
 def test_floor_30_minutes_dt():
-    dt1 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 15, 45, tzinfo=dt.UTC)))
+    dt1 = floor_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 15, 45, tzinfo=dt.UTC))
     assert dt1.isoformat() == "2024-01-01T12:00:00+00:00"
 
-    dt2 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 45, 30, tzinfo=dt.UTC)))
+    dt2 = floor_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 45, 30, tzinfo=dt.UTC))
     assert dt2.isoformat() == "2024-01-01T12:30:00+00:00"
 
-    dt3 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 30, 0, tzinfo=dt.UTC)))
+    dt3 = floor_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 30, 0, tzinfo=dt.UTC))
     assert dt3.isoformat() == "2024-01-01T12:30:00+00:00"
 
 
 def test_ceil_30_minutes_dt():
-    dt1 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 15, 45, tzinfo=dt.UTC)))
+    dt1 = ceil_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 15, 45, tzinfo=dt.UTC))
     assert dt1.isoformat() == "2024-01-01T12:30:00+00:00"
 
-    dt2 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 45, 30, tzinfo=dt.UTC)))
+    dt2 = ceil_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 45, 30, tzinfo=dt.UTC))
     assert dt2.isoformat() == "2024-01-01T13:00:00+00:00"
 
-    dt3 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 30, 0, tzinfo=dt.UTC)))
+    dt3 = ceil_30_minutes_dt(dt.datetime(2024, 1, 1, 12, 30, 0, tzinfo=dt.UTC))
     assert dt3.isoformat() == "2024-01-01T12:30:00+00:00"
 
 
