@@ -10,7 +10,6 @@ from dp_sdk.ocf import dp
 from fastapi import HTTPException
 from typing_extensions import override
 
-# from quartz_api.internal.models import ForecastHorizon, Region
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 

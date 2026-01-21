@@ -463,7 +463,6 @@ class Client(models.DatabaseInterface):
         raise NotImplementedError("QuartzDB client does not support multi-location forecasts.")
 
 
-
 def check_user_has_access_to_site(
     session: Session,
     email: str,
