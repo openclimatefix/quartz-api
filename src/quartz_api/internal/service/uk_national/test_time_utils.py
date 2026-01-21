@@ -9,29 +9,29 @@ def test_format_datetime():
     format_datetime_none = add_timezone(None)
     assert format_datetime_none is None
 
-    format_datetime_no_tz = add_timezone("2024-01-01T12:00:00")
+    format_datetime_no_tz = add_timezone(dt.datetime(2024, 1, 1, 12, 0, 0))
     assert format_datetime_no_tz.isoformat() == "2024-01-01T12:00:00+00:00"
 
 
 def test_floor_30_minutes_dt():
-    dt1 = floor_30_minutes_dt(add_timezone("2024-01-01T12:15:45+00:00"))
+    dt1 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 15, 45)))
     assert dt1.isoformat() == "2024-01-01T12:00:00+00:00"
 
-    dt2 = floor_30_minutes_dt(add_timezone("2024-01-01T12:45:30+00:00"))
+    dt2 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 45, 30)))
     assert dt2.isoformat() == "2024-01-01T12:30:00+00:00"
 
-    dt3 = floor_30_minutes_dt(add_timezone("2024-01-01T12:30:00+00:00"))
+    dt3 = floor_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 30, 0)))
     assert dt3.isoformat() == "2024-01-01T12:30:00+00:00"
 
 
 def test_ceil_30_minutes_dt():
-    dt1 = ceil_30_minutes_dt(add_timezone("2024-01-01T12:15:45+00:00"))
+    dt1 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 15, 45)))
     assert dt1.isoformat() == "2024-01-01T12:30:00+00:00"
 
-    dt2 = ceil_30_minutes_dt(add_timezone("2024-01-01T12:45:30+00:00"))
+    dt2 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 45, 30)))
     assert dt2.isoformat() == "2024-01-01T13:00:00+00:00"
 
-    dt3 = ceil_30_minutes_dt(add_timezone("2024-01-01T12:30:00+00:00"))
+    dt3 = ceil_30_minutes_dt(add_timezone(dt.datetime(2024, 1, 1, 12, 30, 0)))
     assert dt3.isoformat() == "2024-01-01T12:30:00+00:00"
 
 
