@@ -1,8 +1,9 @@
 """The 'gsp' FastAPI router object."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi_cache.decorator import cache
 from starlette import status
@@ -180,7 +181,7 @@ async def get_truths_for_a_specific_gsp(
 @router.get(
     "/forecast/all/",
     response_model=list[OneDatetimeManyForecastValuesMW],
-    include_in_schema=False,
+    include_in_schema=True,
 )
 @cache(key_builder=key_builder, expire=60*30)
 async def get_all_available_forecasts(
@@ -263,16 +264,47 @@ async def get_all_available_forecasts(
         end_datetime_utc = get_window(start=start_datetime_utc)[1]
 
 
-    forecast_values = await db.get_forecast_for_multiple_locations(
-        location_uuids_to_location_ids=location_uuids_to_gsp_id,
-        start_datetime_utc=start_datetime_utc,
-        end_datetime_utc=end_datetime_utc,
-        model_name="blend",
-        authdata=auth,
-    )
+    #now get the data
+    diff = (end_datetime_utc - start_datetime_utc).total_seconds()
+    n_half_hours = int((diff // 60 // 30) + 1)
+    timestamps = [start_datetime_utc \
+                    + timedelta(minutes=30 * x) for x in range(n_half_hours)]
 
-    return forecast_values
+    # get forecasters
+    forecaster = await db.get_latest_forecast(authdata=auth,
+                                              forecaster_name="blend",
+                                              location_uuid=next(iter(location_uuids_to_gsp_id.keys())))
 
+    forecasts_per_timestamp = []
+    tasks = []
+    for timestamp in timestamps:
+        task = asyncio.create_task(db.get_forecast_for_multiple_locations_one_timestamp(
+            location_uuids=list(location_uuids_to_gsp_id.keys()),
+            authdata=auth,
+            datetime_utc=timestamp,
+            forecaster_name=forecaster.name,
+            forecaster_version=forecaster.version,
+        ))
+        tasks.append(task)
+    list_results = await asyncio.gather(*tasks, return_exceptions=True)
+    for exc in filter(lambda x: isinstance(x, Exception), list_results):
+        raise exc
+
+    for resp in list_results:
+
+        if len(resp.forecast_values_kW) == 0:
+            continue
+
+        forecasts = OneDatetimeManyForecastValuesMW(datetime_utc=resp.datetime_utc,
+                                                    forecast_values={
+            location_uuids_to_gsp_id[location_uuid]: np.round(value/1000.0,2)
+            for location_uuid, value in resp.forecast_values_kW.items()
+        })
+
+
+        forecasts_per_timestamp.append(forecasts)
+
+    return forecasts_per_timestamp
 
 # corresponds to API route /v0/solar/GB/gsp/pvlive/all
 # TODO currently takes 2 seconds to load, so probably needs optimization

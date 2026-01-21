@@ -1,7 +1,7 @@
 """The 'status' FastAPI router object."""
 
 import os
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
@@ -14,7 +14,6 @@ from quartz_api.internal.models import (
 
 from .cache import key_builder
 from .pydantic_models import Status
-from .time_utils import floor_30_minutes_dt
 
 router = APIRouter()
 
@@ -59,20 +58,15 @@ async def check_last_forecast_run(
     sites = await db.get_solar_regions(type="nation")
     national_location_uuid = sites[0].region_metadata["location_uuid"]
 
-    datetime_now_utc = datetime.now(tz=datetime.now(tz=UTC))
-    start_datetime = floor_30_minutes_dt(datetime_now_utc)
-
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
-    predict_powers = await db.get_predicted_solar_power_production_for_location(
+    forecast = await db.get_latest_forecast(
         location_uuid=national_location_uuid,
         authdata={},
         model_name=model_name,
-        start_datetime=start_datetime,
-        end_datetime=start_datetime,
     )
 
-    return predict_powers[0].created_time
+    return forecast.created_time
 
 
 

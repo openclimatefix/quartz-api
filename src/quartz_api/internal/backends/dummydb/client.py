@@ -220,10 +220,6 @@ class Client(models.DatabaseInterface):
         return values
 
     @override
-    async def get_forecast_for_multiple_locations() -> list[models.OneDatetimeManyForecastValues]:
-        raise NotImplementedError()
-
-    @override
     async def get_forecast_for_multiple_locations_one_timestamp(
         self,
         location_uuids: list[UUID],
@@ -232,6 +228,15 @@ class Client(models.DatabaseInterface):
     ) -> list[models.PredictedPower]:
         raise NotImplementedError("DummyDB client does not support multi-location forecasts.")
 
+    @override
+    async def get_latest_forecast(
+        self,
+        location_uuid: UUID,
+        authdata: dict[str, str],
+        model_name: str | None = None,
+    ) -> models.Forecast:
+        """Get the latest forecast for a site."""
+        raise NotImplementedError("QuartzDB client does not support multi-location forecasts.")
 
 
 def _basicSolarPowerProductionFunc(

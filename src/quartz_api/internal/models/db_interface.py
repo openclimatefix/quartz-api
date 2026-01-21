@@ -9,9 +9,9 @@ from fastapi import Depends, HTTPException
 
 from .endpoint_types import (
     ActualPower,
+    Forecast,
     ForecastHorizon,
     OneDatetimeManyForecastValues,
-    OneDatetimeManyForecastValuesMW,
     PredictedPower,
     Region,
     Site,
@@ -122,18 +122,14 @@ class DatabaseInterface(abc.ABC):
         """Get a forecast for a site."""
         pass
 
-    # This is a legacy method that is being phased out in favor of get_site_forecast
     @abc.abstractmethod
-    async def get_forecast_for_multiple_locations(
+    async def get_latest_forecast(
         self,
-        location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
-        model_name: str | None = None,
-        start_datetime: datetime | None = None,
-        end_datetime: datetime | None = None,
-
-    ) -> list[OneDatetimeManyForecastValuesMW]:
-        """Get a forecast for multiple sites."""
+        forecaster_name: str | None = None,
+        location_uuid: UUID | None = None,
+    ) -> Forecast:
+        """Get the latest forecast for a site."""
         pass
 
     @abc.abstractmethod
@@ -179,6 +175,8 @@ class DatabaseInterface(abc.ABC):
         location_uuids_to_location_ids: dict[str, int],
         authdata: dict[str, str],
         datetime_utc: datetime | None = None,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
 
     ) -> OneDatetimeManyForecastValues:
         """Get a forecast for multiple sites."""

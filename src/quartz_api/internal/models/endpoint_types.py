@@ -167,19 +167,6 @@ def get_timezone() -> str:
     return "UTC"
 
 
-class OneDatetimeManyForecastValuesMW(BaseModel):
-    """One datetime with many forecast values.
-
-    This is a legacy route that is being phased out.
-    """
-
-    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
-    forecast_values: dict[int|str, float] = Field(
-        ...,
-        description="List of forecasts by ids. Key is gsp_id, value is generation_mw. "
-        "We keep this as a dictionary to keep the size of the file small ",
-    )
-
 class GSPYieldGroupByDatetime(BaseModel):
     """gsp yields for one a singel datetime.
 
@@ -195,3 +182,12 @@ class GSPYieldGroupByDatetime(BaseModel):
 
 
 TZDependency = Annotated[str, Depends(get_timezone)]
+
+
+class Forecast(BaseModel):
+    """Forecast model, this does not provide forecast values."""
+
+    created_time: dt.datetime \
+        = Field(..., description="The timestamp when the forecast was created")
+    name: str = Field(..., description="The name of the forecast model")
+    version: str = Field(..., description="The version of the forecast model")

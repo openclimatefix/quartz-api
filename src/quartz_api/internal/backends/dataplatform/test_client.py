@@ -356,3 +356,6 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     actual_values = [v.power_kW for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)
+
+
+# TODO add test for get_latest_forecasts
