@@ -1,7 +1,7 @@
 """The 'status' FastAPI router object."""
 
+import datetime as dt
 import os
-from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
@@ -50,7 +50,7 @@ async def get_status() -> Status:
 @cache(key_builder=key_builder)
 async def check_last_forecast_run(
     db: DBClientDependency,
-    model_name: str | None = None) -> datetime:
+    model_name: str | None = None) -> dt.datetime:
     """### Check the last forecast run status.
 
     This route is used to check the status of the last forecast run.

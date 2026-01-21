@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+import datetime as dt
 
 from .time_utils import ceil_30_minutes_dt, floor_30_minutes_dt, format_datetime, get_window
 
@@ -36,16 +36,16 @@ def test_ceil_30_minutes_dt():
 
 
 def test_get_window_with_params() -> None:
-    custom_start = datetime(2023, 2, 1, 12, tzinfo=UTC)
-    custom_end = datetime(2023, 2, 5, 12, tzinfo=UTC)
+    custom_start = dt.datetime(2023, 2, 1, 12, tzinfo=dt.UTC)
+    custom_end = dt.datetime(2023, 2, 5, 12, tzinfo=dt.UTC)
     start, end = get_window(start=custom_start, end=custom_end)
     assert start == custom_start
     assert end == custom_end
 
 
 def test_get_window_with_partial_params() -> None:
-    custom_start = datetime(2023, 3, 1, 8, tzinfo=UTC)
+    custom_start = dt.datetime(2023, 3, 1, 8, tzinfo=dt.UTC)
     start, end = get_window(start=custom_start)
     assert start == custom_start
-    assert end == custom_start + timedelta(days=4)
+    assert end == custom_start + dt.timedelta(days=4)
 

@@ -1,7 +1,7 @@
 """Utility functions for handling datetime objects in UK National context."""
 
+import datetime as dt
 import os
-from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import sentry_sdk
@@ -14,7 +14,7 @@ utc = timezone("UTC")
 INTRADAY_LIMIT_HOURS = float(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 
 
-def format_datetime(datetime_str: str | None = None) -> datetime | None:
+def format_datetime(datetime_str: str | None = None) -> dt.datetime | None:
     """Format datetime string to datetime object.
 
     If None return None, if not timezone, add UTC
@@ -25,13 +25,13 @@ def format_datetime(datetime_str: str | None = None) -> datetime | None:
         return None
 
     else:
-        datetime_output = datetime.fromisoformat(datetime_str)
+        datetime_output = dt.datetime.fromisoformat(datetime_str)
         if datetime_output.tzinfo is None:
             datetime_output = utc.localize(datetime_output)
         return datetime_output
 
 
-def floor_30_minutes_dt(dt: datetime) -> datetime:
+def floor_30_minutes_dt(ts: dt.datetime) -> dt.datetime:
     """Floor a datetime by 30 mins.
 
     For example:
@@ -41,16 +41,16 @@ def floor_30_minutes_dt(dt: datetime) -> datetime:
     :param dt:
     :return:
     """
-    approx = np.floor(dt.minute / 30.0) * 30
-    dt = dt.replace(minute=0)
-    dt = dt.replace(second=0)
-    dt = dt.replace(microsecond=0)
-    dt += timedelta(minutes=approx)
+    approx = np.floor(ts.minute / 30.0) * 30
+    ts = ts.replace(minute=0)
+    ts = ts.replace(second=0)
+    ts = ts.replace(microsecond=0)
+    ts += dt.timedelta(minutes=approx)
 
-    return dt
+    return ts
 
 
-def ceil_30_minutes_dt(dt: datetime) -> datetime:
+def ceil_30_minutes_dt(ts: dt.datetime) -> dt.datetime:
     """Ceil a datetime by 30 mins.
 
     For example:
@@ -58,18 +58,18 @@ def ceil_30_minutes_dt(dt: datetime) -> datetime:
     2021-01-01 17:35:01 --> 2021-01-01 18:00:00
     2021-01-01 17:30:00 --> 2021-01-01 17:30:00
     """
-    dt_floor = floor_30_minutes_dt(dt)
-    if dt == dt_floor:
-        return dt_floor
-    dt_ceil = dt_floor + timedelta(minutes=30)
-    return dt_ceil
+    ts_floor = floor_30_minutes_dt(ts)
+    if ts == ts_floor:
+        return ts_floor
+    ts_ceil = ts_floor + dt.timedelta(minutes=30)
+    return ts_ceil
 
 
 def limit_end_datetime_by_permissions(
     permissions: list[str],
-    end_datetime_utc: datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
     intraday_limit_hours: int = INTRADAY_LIMIT_HOURS,
-) -> datetime:
+) -> dt.datetime:
     """Limit end datetime so that intraday users can receive forecast values max.
 
     Check if end_datetime_utc is set; if set, check it's not more than 8 hours from now,
@@ -89,7 +89,7 @@ def limit_end_datetime_by_permissions(
 
     is_intraday_only_user = "read:uk-intraday" in permissions
 
-    intraday_max_allowed = datetime.now(UTC) + timedelta(hours=intraday_limit_hours)
+    intraday_max_allowed = dt.datetime.now(dt.UTC) + dt.timedelta(hours=intraday_limit_hours)
     if is_intraday_only_user:
         if end_datetime_utc is None:
             return intraday_max_allowed
@@ -100,7 +100,7 @@ def limit_end_datetime_by_permissions(
 
 
 
-def floor_6_hours_dt(ts: datetime) -> datetime:
+def floor_6_hours_dt(ts: dt.datetime) -> dt.datetime:
     """Floor a datetime by 6 hours.
 
     For example:
@@ -115,21 +115,21 @@ def floor_6_hours_dt(ts: datetime) -> datetime:
     ts = ts.replace(minute=0)
     ts = ts.replace(second=0)
     ts = ts.replace(microsecond=0)
-    ts += timedelta(hours=approx)
+    ts += dt.timedelta(hours=approx)
 
     return ts
 
 def get_window(
-    start: datetime | None = None, end: datetime | None = None,
-) -> tuple[datetime, datetime]:
+    start: dt.datetime | None = None, end: dt.datetime | None = None,
+) -> tuple[dt.datetime, dt.datetime]:
     """Returns the start and end of the window for timeseries data."""
     # Window start is the beginning of the day two days ago
     if start is None:
-        start = (datetime.now(tz=UTC) - timedelta(days=2))
+        start = (dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2))
         start = floor_6_hours_dt(start)
 
     # Window end is the beginning of the day two days ahead
     if end is None:
-        end = start + timedelta(days=4)
+        end = start + dt.timedelta(days=4)
 
     return (start, end)

@@ -1,7 +1,7 @@
 """The 'gsp' FastAPI router object."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+import datetime as dt
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -252,7 +252,7 @@ async def get_all_available_forecasts(
 
     # by default, don't get any data in the past if more than one gsp
     if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
-        start_datetime_utc = floor_30_minutes_dt(datetime.now(tz=UTC))
+        start_datetime_utc = floor_30_minutes_dt(dt.datetime.now(tz=dt.UTC))
 
     if start_datetime_utc is not None:
         start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
@@ -269,7 +269,7 @@ async def get_all_available_forecasts(
     diff = (end_datetime_utc - start_datetime_utc).total_seconds()
     n_half_hours = int((diff // 60 // 30) + 1)
     timestamps = [start_datetime_utc \
-                    + timedelta(minutes=30 * x) for x in range(n_half_hours)]
+                    + dt.timedelta(minutes=30 * x) for x in range(n_half_hours)]
 
     # get forecasters
     forecaster = await db.get_latest_forecast(authdata=auth,

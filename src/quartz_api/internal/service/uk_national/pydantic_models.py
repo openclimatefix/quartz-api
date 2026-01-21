@@ -17,8 +17,8 @@ The models are
 
 """
 
+import datetime as dt
 import logging
-from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,7 +55,7 @@ class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
     This is a legacy route that is being phased out.
     """
 
-    datetime_utc: datetime = Field(..., description="The timestamp of the gsp yield")
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
     forecast_values: dict[int|str, float] = Field(
         ...,
         description="List of forecasts by ids. Key is gsp_id, value is generation_mw. "
@@ -113,7 +113,7 @@ class MLModel(EnhancedBaseModel):
 class ForecastValue(EnhancedBaseModel):
     """One Forecast of generation at one timestamp."""
 
-    target_time: datetime = Field(
+    target_time: dt.datetime = Field(
         ...,
         description=(
             "The target time for which the forecast is produced, indicating the period end time "
@@ -136,10 +136,10 @@ class ForecastValue(EnhancedBaseModel):
 class InputDataLastUpdated(EnhancedBaseModel):
     """Information about the input data that was used to create the forecast."""
 
-    gsp: datetime = Field(..., description="The time when the input GSP data was last updated")
-    nwp: datetime = Field(..., description="The time when the input NWP data was last updated")
-    pv: datetime = Field(..., description="The time when the input PV data was last updated")
-    satellite: datetime = Field(
+    gsp: dt.datetime = Field(..., description="The time when the input GSP data was last updated")
+    nwp: dt.datetime = Field(..., description="The time when the input NWP data was last updated")
+    pv: dt.datetime = Field(..., description="The time when the input PV data was last updated")
+    satellite: dt.datetime = Field(
         ...,
         description="The time when the input satellite data was last updated",
     )
@@ -150,7 +150,7 @@ class Forecast(EnhancedBaseModel):
 
     location: Location = Field(..., description="The location object for this forecaster")
     model: MLModel = Field(..., description="The name of the model that made this forecast")
-    forecast_creation_time: datetime = Field(
+    forecast_creation_time: dt.datetime = Field(
         ...,
         description="The time when the forecaster was made",
     )
@@ -168,7 +168,7 @@ class Forecast(EnhancedBaseModel):
         description="Information about the input data that was used to create the forecast",
     )
 
-    initialization_datetime_utc: datetime | None = Field(
+    initialization_datetime_utc: dt.datetime | None = Field(
         None,
         description="The time when the forecast should be initialized",
         exclude=True,
@@ -178,7 +178,7 @@ class Forecast(EnhancedBaseModel):
 class GSPYield(EnhancedBaseModel):
     """GSP Yield data."""
 
-    datetime_utc: datetime = Field(..., description="The timestamp of the gsp yield")
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
     solar_generation_kw: float = Field(..., description="The amount of solar generation")
 
     @field_validator("solar_generation_kw")

@@ -1,6 +1,6 @@
 """The 'national' FastAPI router object."""
 
-from datetime import UTC, datetime
+import datetime as dt
 from enum import Enum
 
 from fastapi import APIRouter
@@ -143,7 +143,7 @@ async def get_national_forecast(
 
         #  Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
-        old = datetime(1970, 1, 1, tzinfo=UTC)
+        old = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
         input = InputDataLastUpdated(gsp=old, nwp=old, pv=old, satellite=old)
 
         national_forecast = NationalForecast(
