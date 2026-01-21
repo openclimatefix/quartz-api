@@ -1,7 +1,7 @@
 """The 'gsp' FastAPI router object."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi_cache.decorator import cache
@@ -14,7 +14,12 @@ from quartz_api.internal.models import (
 )
 
 from .cache import key_builder
-from .pydantic_models import ForecastValue, GSPYield, GSPYieldGroupByDatetime, OneDatetimeManyForecastValuesMW
+from .pydantic_models import (
+    ForecastValue,
+    GSPYield,
+    GSPYieldGroupByDatetime,
+    OneDatetimeManyForecastValuesMW,
+)
 from .time_utils import (
     ceil_30_minutes_dt,
     floor_30_minutes_dt,

@@ -32,7 +32,7 @@ async def key_builder(
     scopes = [scope for scope in scopes if scope in cache_dependent_scopes]
 
     params = request.query_params.items()
-    params = [(k, v) for k, v in params if k not in legacy_query_params + ["UI"]]
+    params = [(k, v) for k, v in params if k not in [*legacy_query_params, "UI"]]
 
     key = ":".join([
         namespace,

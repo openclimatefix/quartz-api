@@ -22,11 +22,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from quartz_api.internal.models import GSPYieldGroupByDatetime as GSPYieldGroupByDatetimeDefault
 from quartz_api.internal.models import (
-    Region, 
-    GSPYieldGroupByDatetime as GSPYieldGroupByDatetimeDefault, 
-    OneDatetimeManyForecastValuesMW as OneDatetimeManyForecastValuesMWDefault
+    OneDatetimeManyForecastValuesMW as OneDatetimeManyForecastValuesMWDefault,
 )
+from quartz_api.internal.models import Region
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,10 @@ class EnhancedBaseModel(BaseModel):
 
 
 class GSPYieldGroupByDatetime(GSPYieldGroupByDatetimeDefault, EnhancedBaseModel):
-    """ gsp yields for one a singel datetime, using CamelCase"""
+    """gsp yields for one a singel datetime, using CamelCase."""
 
 class OneDatetimeManyForecastValuesMW(OneDatetimeManyForecastValuesMWDefault, EnhancedBaseModel):
-    """ One datetime with many forecast values, using CamelCase"""  
+    """One datetime with many forecast values, using CamelCase."""
 
 class Location(EnhancedBaseModel):
     """Location that the forecast is for."""
