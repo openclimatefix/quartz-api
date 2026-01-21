@@ -469,6 +469,7 @@ class Client(models.DatabaseInterface):
                 and "p90" in value.other_statistics_fractions else {},
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
+                initialization_timestamp_utc=value.initialization_timestamp_utc,
             )
             for value in resp.values
         ]

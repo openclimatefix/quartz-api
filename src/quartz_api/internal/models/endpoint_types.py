@@ -35,7 +35,11 @@ class PredictedPower(BaseModel):
 
     power_kW: float
     time: dt.datetime
-    created_time: dt.datetime = Field(exclude=True)
+    created_time: dt.datetime | None = Field(None, exclude=True)
+    initialization_timestamp_utc: dt.datetime | None = Field(
+        None,
+        description="The timestamp (UTC) when the forecast was initialized.",
+    )
     forecaster_version: str = Field(exclude=True, default="not-set")
     forecaster_name: str = Field(exclude=True, default="not-set")
     plevel_kW: dict[str, float]  = Field(

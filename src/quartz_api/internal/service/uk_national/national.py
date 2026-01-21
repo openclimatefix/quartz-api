@@ -154,16 +154,11 @@ async def get_national_forecast(
             model=MLModel(name=predicted_powers[0].forecaster_name,
                           version=predicted_powers[0].forecaster_version),
             forecast_creation_time=predicted_powers[0].created_time,
-            initialization_datetime_utc=predicted_powers[0].created_time,
+            initialization_datetime_utc=predicted_powers[0].initialization_timestamp_utc,
             forecast_values=national_forecast_values,
             input_data_last_updated=input)
 
         return national_forecast
-
-
-
-
-
 
 @router.get(
     "/pvlive",
