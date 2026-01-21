@@ -57,9 +57,9 @@ async def get_national_forecast(
     auth: AuthDependency,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
-    start_datetime_utc: str | None = None,
-    end_datetime_utc: str | None = None,
-    creation_limit_utc: str | None = None,
+    start_datetime_utc: dt.datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
+    creation_limit_utc: dt.datetime | None = None,
     model_name: ModelName = ModelName.blend,
     trend_adjuster_on: bool | None = True,
 ) -> NationalForecast | list[NationalForecastValue]:

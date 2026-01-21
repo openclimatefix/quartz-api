@@ -42,9 +42,9 @@ async def get_forecasts_for_a_specific_gsp(
     auth: AuthDependency,
     gsp_id: int,
     forecast_horizon_minutes: int | None = None,
-    start_datetime_utc: str | None = None,
-    end_datetime_utc: str | None = None,
-    creation_utc_limit: str | None = None,
+    start_datetime_utc: dt.datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
+    creation_utc_limit: dt.datetime | None = None,
 ) -> list[ForecastValue]:
     """### Get recent forecast values for a specific GSP.
 
@@ -119,8 +119,8 @@ async def get_truths_for_a_specific_gsp(
     auth: AuthDependency,  # noqa FBT001
     gsp_id: int,
     regime: str = "in-day",
-    start_datetime_utc: str | None = None,
-    end_datetime_utc: str | None = None,
+    start_datetime_utc: dt.datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
 ) -> list[GSPYield]:
     """### Get PV_Live values for a specific GSP for yesterday and today.
 
@@ -187,10 +187,10 @@ async def get_truths_for_a_specific_gsp(
 async def get_all_available_forecasts(
     db: DBClientDependency,
     auth: AuthDependency,
-    start_datetime_utc: str | None = None,
-    end_datetime_utc: str | None = None,
+    start_datetime_utc: dt.datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
     gsp_ids: str | None = None,
-    creation_limit_utc: str | None = None,
+    creation_limit_utc: dt.datetime | None = None,
 ) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
 
@@ -319,8 +319,8 @@ async def get_truths_for_all_gsps(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa
     regime: str = "in-day",
-    start_datetime_utc: str | None = None,
-    end_datetime_utc: str | None = None,
+    start_datetime_utc: dt.datetime | None = None,
+    end_datetime_utc: dt.datetime | None = None,
     gsp_ids: str | None = None,
 ) -> list[GSPYieldGroupByDatetime]:
     """### Get PV_Live values for all GSPs for yesterday and today.

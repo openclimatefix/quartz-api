@@ -14,21 +14,23 @@ utc = timezone("UTC")
 INTRADAY_LIMIT_HOURS = float(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 
 
-def format_datetime(datetime_str: str | None = None) -> dt.datetime | None:
+def format_datetime(datetime: str | dt.datetime | None = None) -> dt.datetime | None:
     """Format datetime string to datetime object.
 
     If None return None, if not timezone, add UTC
-    :param datetime_str: The datetime string to be formatted.
+    :param datetime: The datetime string to be formatted.
     :return: The formatted datetime object or None.
     """
-    if datetime_str is None:
+    if datetime is None:
         return None
 
     else:
-        datetime_output = dt.datetime.fromisoformat(datetime_str)
-        if datetime_output.tzinfo is None:
-            datetime_output = utc.localize(datetime_output)
-        return datetime_output
+        if isinstance(datetime, str):
+            datetime_output = dt.datetime.fromisoformat(datetime)
+        
+        if datetime.tzinfo is None:
+            datetime = utc.localize(datetime)
+        return datetime
 
 
 def floor_30_minutes_dt(ts: dt.datetime) -> dt.datetime:
