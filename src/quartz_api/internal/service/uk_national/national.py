@@ -169,7 +169,7 @@ async def get_national_forecast(
 @cache(key_builder=key_builder)
 async def get_national_pvlive(
     db: DBClientDependency,
-    auth: AuthDependency,  # noqa FBT001 # TODO
+    auth: AuthDependency,  # noqa FBT001
     regime: str | None = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.

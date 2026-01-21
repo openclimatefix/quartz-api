@@ -115,7 +115,7 @@ async def get_forecasts_for_a_specific_gsp(
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
     db: DBClientDependency,
-    auth: AuthDependency,  # noqa FBT001 # TODO
+    auth: AuthDependency,  # noqa FBT001
     gsp_id: int,
     regime: str = "in-day",
     start_datetime_utc: str | None = None,
