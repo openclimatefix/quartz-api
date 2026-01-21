@@ -250,9 +250,6 @@ async def get_all_available_forecasts(
     if end_datetime_utc is not None:
         end_datetime_utc = floor_30_minutes_dt(end_datetime_utc)
 
-    # TODO
-    # end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
-
     # by default, don't get any data in the past if more than one gsp
     if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
         start_datetime_utc = floor_30_minutes_dt(datetime.now(tz=UTC))
@@ -262,6 +259,10 @@ async def get_all_available_forecasts(
 
     if end_datetime_utc is None:
         end_datetime_utc = get_window(start=start_datetime_utc)[1]
+
+    # limit end datetime by permissions
+    permissions = getattr(auth, "permissions", [])
+    end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
 
 
     #now get the data
