@@ -67,6 +67,7 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
+    # set up start and end datetimes
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
     creation_utc_limit = add_timezone(creation_utc_limit)
@@ -77,6 +78,7 @@ async def get_forecasts_for_a_specific_gsp(
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
                                                       end=end_datetime_utc)
 
+    # get gsps
     gsps = await db.get_solar_regions(type="gsp")
     gsp_location = [
         site for site in gsps if int(site.region_metadata["gsp_id"]) == gsp_id
@@ -87,6 +89,7 @@ async def get_forecasts_for_a_specific_gsp(
     if forecast_horizon_minutes is None:
         forecast_horizon = ForecastHorizon.horizon
 
+    # get data
     predicted_powers = await db.get_predicted_solar_power_production_for_location(
         location=gsp_location_uuid,
         forecast_horizon=forecast_horizon,
@@ -98,6 +101,7 @@ async def get_forecasts_for_a_specific_gsp(
         created_before_datetime=creation_utc_limit,
     )
 
+    # format data
     gsp_forecasts = [
         ForecastValue(
             target_time=pp.time,
@@ -142,22 +146,23 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
+    # set up start and end datetimes
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
-
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
                                                       end=end_datetime_utc)
 
+    # get gsps
     gsps = await db.get_solar_regions(type="gsp")
-
     gsp_location = [
         site for site in gsps if int(site.region_metadata["gsp_id"]) == gsp_id
     ]
-
     gsp_location_uuid = str(gsp_location[0].region_metadata["location_uuid"])
 
+    # format regime
     regime = regime.replace("-", "_")
 
+    # get data
     solar_production = await db.get_actual_solar_power_production_for_location(
         location=gsp_location_uuid,
         observer_name=f"pvlive_{regime}",
@@ -165,6 +170,7 @@ async def get_truths_for_a_specific_gsp(
         end_datetime=end_datetime_utc,
     )
 
+    # format data
     gsp_yields = [
         GSPYield(
             datetime_utc=sp.Time,
@@ -177,7 +183,6 @@ async def get_truths_for_a_specific_gsp(
 
 
 # corresponds to route /v0/solar/GB/gsp/forecast/all/
-# TODO currently takes 9 seconds to load, so probably needs optimization
 @router.get(
     "/forecast/all/",
     response_model=list[OneDatetimeManyForecastValuesMW],
@@ -212,8 +217,8 @@ async def get_all_available_forecasts(
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     - **end_datetime_utc**: optional end datetime for the query. e.g '2023-08-12 14:00:00+00:00'
     """
+    # get all gsp regions
     gsps = await db.get_solar_regions(type="gsp")
-    # might need to add nation location in here too
 
     # format gsp_ids
     if isinstance(gsp_ids, str):
@@ -229,7 +234,7 @@ async def get_all_available_forecasts(
         if len(gsp_ids) == 0:
             gsp_ids = None
 
-    # get locations uuids
+    # get locations uuids and mapping from location uuids -> gsp_ids
     location_uuids_to_gsp_id = {
         str(gsp.region_metadata["location_uuid"]): int(gsp.region_metadata["gsp_id"])
         for gsp in gsps
@@ -241,22 +246,22 @@ async def get_all_available_forecasts(
             if gsp_id in gsp_ids
         }
 
+    # format start, end and creation limit, make sure values are rounded to 30 minutes
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
     creation_limit_utc = add_timezone(creation_limit_utc)
 
+    # make sure values are rounded to 30 minutes
     if start_datetime_utc is not None:
         start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
     if end_datetime_utc is not None:
         end_datetime_utc = floor_30_minutes_dt(end_datetime_utc)
 
-    # by default, don't get any data in the past if more than one gsp
+    # Default start and end times don't get any data in the past if more than one gsp
     if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
         start_datetime_utc = floor_30_minutes_dt(dt.datetime.now(tz=dt.UTC))
-
-    if start_datetime_utc is not None:
+    elif start_datetime_utc is not None:
         start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
-
     if end_datetime_utc is None:
         end_datetime_utc = get_window(start=start_datetime_utc)[1]
 
@@ -264,8 +269,7 @@ async def get_all_available_forecasts(
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
 
-
-    #now get the data
+    # get a list of timestamps to loop over
     diff = (end_datetime_utc - start_datetime_utc).total_seconds()
     n_half_hours = int((diff // 60 // 30) + 1)
     timestamps = [start_datetime_utc \
@@ -276,6 +280,7 @@ async def get_all_available_forecasts(
                                               forecaster_name="blend",
                                               location_uuid=next(iter(location_uuids_to_gsp_id.keys())))
 
+    # get the data (async tasks)
     forecasts_per_timestamp = []
     tasks = []
     for timestamp in timestamps:
@@ -291,6 +296,7 @@ async def get_all_available_forecasts(
     for exc in filter(lambda x: isinstance(x, Exception), list_results):
         raise exc
 
+    # format rhe results
     for resp in list_results:
 
         if len(resp.forecast_values_kW) == 0:
@@ -308,7 +314,6 @@ async def get_all_available_forecasts(
     return forecasts_per_timestamp
 
 # corresponds to API route /v0/solar/GB/gsp/pvlive/all
-# TODO currently takes 2 seconds to load, so probably needs optimization
 @router.get(
     "/pvlive/all",
     response_model=list[GSPYieldGroupByDatetime],
@@ -341,6 +346,7 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
+    # format gsp_ids
     try:
         if isinstance(gsp_ids, str):
             gsp_ids = [int(gsp_id) for gsp_id in gsp_ids.split(",") if gsp_id != ""]
@@ -351,8 +357,10 @@ async def get_truths_for_all_gsps(
             detail=f"Invalid GSP IDs format. Tried to convert {gsp_ids} into list of integers",
                           ) from e
 
+    # get gsps regions
     gsps = await db.get_solar_regions(type="gsp")
 
+    # format start and end datetimes
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
@@ -370,7 +378,7 @@ async def get_truths_for_all_gsps(
             if gsp_id in gsp_ids
         }
 
-
+    # get the data (async tasks)
     tasks = []
     for location_uuid in location_uuids_to_gsp_id:
         req = db.get_actual_solar_power_production_for_location(
@@ -381,8 +389,6 @@ async def get_truths_for_all_gsps(
         )
         task = asyncio.create_task(req)
         tasks.append(task)
-        # observation = await self.dp_client.get_observations_as_timeseries(req)
-        # observations.append(observation)
 
     list_results = await asyncio.gather(*tasks, return_exceptions=True)
     for exc in filter(lambda x: isinstance(x, Exception), list_results):

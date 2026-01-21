@@ -92,6 +92,7 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
+    # set up start and end datetimes
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
     creation_limit_utc = add_timezone(creation_limit_utc)
@@ -102,17 +103,19 @@ async def get_national_forecast(
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
                                                       end=end_datetime_utc)
 
+    # get model name
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
         model_name = model_name + "_adjust"
 
+    # get national location UUID and and set forecast horizon
     sites = await db.get_solar_regions(type="nation")
     national_location_uuid = sites[0].region_metadata["location_uuid"]
-
     forecast_horizon = ForecastHorizon.latest
     if forecast_horizon_minutes is not None:
         forecast_horizon = ForecastHorizon.horizon
 
+    # get data
     predicted_powers = await db.get_predicted_solar_power_production_for_location(
         location=national_location_uuid,
         forecast_horizon=forecast_horizon,
@@ -124,7 +127,7 @@ async def get_national_forecast(
         created_before_datetime=creation_limit_utc,
     )
 
-
+    # format data
     national_forecast_values = [
             NationalForecastValue(
                 target_time=pp.time,
@@ -189,13 +192,15 @@ async def get_national_pvlive(
     - **regime**: can choose __in-day__ or __day-after__
 
     """
+    # get national location UUID
     sites = await db.get_solar_regions(type="nation")
     national_location_uuid = sites[0].region_metadata["location_uuid"]
 
+    # format regime and get start/end datetimes
     regime = regime.replace("-", "_")
-
     start_datetime_utc, end_datetime_utc = get_window()
 
+    # get data
     solar_production = await db.get_actual_solar_power_production_for_location(
         location=national_location_uuid,
         observer_name=f"pvlive_{regime}",
@@ -203,6 +208,7 @@ async def get_national_pvlive(
         end_datetime=end_datetime_utc,
     )
 
+    # format data
     national_yields = [
         NationalYield(
             datetime_utc=sp.Time,
