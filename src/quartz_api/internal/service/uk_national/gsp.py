@@ -22,9 +22,9 @@ from .pydantic_models import (
     OneDatetimeManyForecastValuesMW,
 )
 from .time_utils import (
+    add_timezone,
     ceil_30_minutes_dt,
     floor_30_minutes_dt,
-    format_datetime,
     get_window,
     limit_end_datetime_by_permissions,
 )
@@ -67,9 +67,9 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
-    start_datetime_utc = format_datetime(start_datetime_utc)
-    end_datetime_utc = format_datetime(end_datetime_utc)
-    creation_utc_limit = format_datetime(creation_utc_limit)
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
+    creation_utc_limit = add_timezone(creation_utc_limit)
 
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
@@ -142,8 +142,8 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
-    start_datetime_utc = format_datetime(start_datetime_utc)
-    end_datetime_utc = format_datetime(end_datetime_utc)
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
 
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
                                                       end=end_datetime_utc)
@@ -241,9 +241,9 @@ async def get_all_available_forecasts(
             if gsp_id in gsp_ids
         }
 
-    start_datetime_utc = format_datetime(start_datetime_utc)
-    end_datetime_utc = format_datetime(end_datetime_utc)
-    creation_limit_utc = format_datetime(creation_limit_utc)
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
+    creation_limit_utc = add_timezone(creation_limit_utc)
 
     if start_datetime_utc is not None:
         start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
@@ -353,8 +353,8 @@ async def get_truths_for_all_gsps(
 
     gsps = await db.get_solar_regions(type="gsp")
 
-    start_datetime_utc = format_datetime(start_datetime_utc)
-    end_datetime_utc = format_datetime(end_datetime_utc)
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
     start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
                                                        end=end_datetime_utc)
 

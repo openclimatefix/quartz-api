@@ -22,7 +22,7 @@ from .pydantic_models import (
     NationalForecastValue,
     NationalYield,
 )
-from .time_utils import format_datetime, get_window, limit_end_datetime_by_permissions
+from .time_utils import add_timezone, get_window, limit_end_datetime_by_permissions
 
 router = APIRouter(tags=["National"])
 
@@ -92,9 +92,9 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    start_datetime_utc = format_datetime(start_datetime_utc)
-    end_datetime_utc = format_datetime(end_datetime_utc)
-    creation_limit_utc = format_datetime(creation_limit_utc)
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
+    creation_limit_utc = add_timezone(creation_limit_utc)
 
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
