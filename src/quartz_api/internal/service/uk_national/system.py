@@ -21,7 +21,7 @@ router = APIRouter(tags=["System"])
 @cache(key_builder=key_builder)
 async def get_system_details(
     db: DBClientDependency,
-    auth: AuthDependency,  # noqa TODO use auth
+    auth: AuthDependency,  # noqa 
     gsp_id: int | None = None,
 ) -> list[Location]:
     """### Get system details for a single GSP or all GSPs.
