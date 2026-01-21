@@ -121,7 +121,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         },
     )
 
-    # set up cache
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
 
     # Add the default routes
