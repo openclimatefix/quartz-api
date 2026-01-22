@@ -2,8 +2,9 @@
 
 import datetime as dt
 from enum import Enum
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi_cache.decorator import cache
 from starlette import status
 
@@ -22,7 +23,12 @@ from .pydantic_models import (
     NationalForecastValue,
     NationalYield,
 )
-from .time_utils import add_timezone, get_window, limit_end_datetime_by_permissions
+from .time_utils import (
+    add_timezone,
+    get_end_window,
+    get_start_window,
+    limit_end_datetime_by_permissions,
+)
 
 router = APIRouter(tags=["National"])
 
@@ -55,11 +61,11 @@ class ModelName(str, Enum):
 async def get_national_forecast(
     db: DBClientDependency,
     auth: AuthDependency,
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_start_window)],
+    end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
+    creation_limit_utc: dt.datetime | None = None,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
-    start_datetime_utc: dt.datetime | None = None,
-    end_datetime_utc: dt.datetime | None = None,
-    creation_limit_utc: dt.datetime | None = None,
     model_name: ModelName = ModelName.blend,
     trend_adjuster_on: bool | None = True,
 ) -> NationalForecast | list[NationalForecastValue]:
@@ -92,16 +98,13 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    # set up start and end datetimes
+    # add timezones
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
-    creation_limit_utc = add_timezone(creation_limit_utc)
 
+    # limit end datetime by permissions
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
-
-    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
-                                                      end=end_datetime_utc)
 
     # get model name
     model_name = model_names_external_to_internal[model_name]
@@ -193,7 +196,8 @@ async def get_national_pvlive(
 
     # format regime and get start/end datetimes
     regime = regime.replace("-", "_")
-    start_datetime_utc, end_datetime_utc = get_window()
+    start_datetime_utc = get_start_window()
+    end_datetime_utc = get_end_window()
 
     # get data
     solar_production = await db.get_actual_solar_power_production_for_location(

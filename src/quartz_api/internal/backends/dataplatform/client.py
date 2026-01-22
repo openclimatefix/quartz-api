@@ -12,8 +12,6 @@ from typing_extensions import override
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
-from ..utils import get_window
-
 log = logging.getLogger("dataplatform.client")
 
 
@@ -180,15 +178,17 @@ class Client(models.DatabaseInterface):
     async def get_site_forecast(
         self,
         site_uuid: UUID,
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime,
         authdata: dict[str, str],
     ) -> list[models.PredictedPower]:
-        start, end = get_window()
+
         forecast = await self._get_predicted_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
             authdata["sub"],
-            start_datetime=start,
-            end_datetime=end,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         return forecast
 
@@ -196,15 +196,16 @@ class Client(models.DatabaseInterface):
     async def get_site_generation(
         self,
         site_uuid: UUID,
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime,
         authdata: dict[str, str],
     ) -> list[models.ActualPower]:
-        start, end = get_window()
         generation = await self._get_actual_power_production_for_location(
             site_uuid,
             dp.EnergySource.SOLAR,
             authdata["sub"],
-            start_datetime=start,
-            end_datetime=end,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         return generation
 
@@ -256,6 +257,8 @@ class Client(models.DatabaseInterface):
         self,
         location_uuid: UUID,
         authdata: dict[str, str],
+        start_datetime: dt.datetime,
+        end_datetime: dt.datetime,
         traceid: str = "unknown",
     ) -> list[models.PredictedPower]:
         # Get the substation
@@ -287,15 +290,14 @@ class Client(models.DatabaseInterface):
                 status_code=404,
                 detail=f"No GSP found for substation UUID '{location_uuid}'",
             )
-        start, end = get_window()
         gsp = gsps.locations[0]
         forecast = await self._get_predicted_power_production_for_location(
             location_uuid=gsp.location_uuid,
             energy_source=dp.EnergySource.SOLAR,
             oauth_id=oauth_id,
             traceid=traceid,
-            start_datetime=start,
-            end_datetime=end,
+            start_datetime=start_datetime,
+            end_datetime=start_datetime,
         )
 
         # Scale the forecast to the substation capacity
@@ -408,8 +410,6 @@ class Client(models.DatabaseInterface):
                 oauth_id,
                 traceid,
             )
-
-        # start, end = get_window(start=start_datetime, end=end_datetime)
 
         if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
             forecast_horizon_minutes = 0

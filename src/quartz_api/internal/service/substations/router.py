@@ -1,16 +1,16 @@
 """The 'substations' FastAPI router object and associated routes logic."""
 
+import datetime as dt
 import pathlib
-from datetime import UTC, datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Query, Request, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .time_utils import floor_30_minutes_dt
+from .time_utils import get_end_window, get_now_floor_30_mins, get_start_window
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
@@ -62,10 +62,14 @@ async def get_substation_forecast(
     tz: models.TZDependency,
 ) -> list[models.PredictedPower]:
     """Get forecasted generation values of a substation."""
+    start_datetime = get_start_window()
+    end_datetime = get_end_window()
     forecast = await db.get_substation_forecast(
         location_uuid=substation_uuid,
         authdata={},
         traceid=request.state.trace_id,
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
     )
     forecast = [
         value.to_timezone(tz=tz)
@@ -82,11 +86,9 @@ async def get_all_substation_forecast_at_one_timestamp(
     request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
-    datetime_utc: datetime | None = None) -> models.OneDatetimeManyForecastValues:
+    datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
+    ) -> models.OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
-    if datetime_utc is None:
-        datetime_utc = floor_30_minutes_dt(datetime.now(UTC))
-
     # 1. Get all substation locations
     substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
     gsp_ids = [substation.metadata["gsp_id"] for substation in substations]

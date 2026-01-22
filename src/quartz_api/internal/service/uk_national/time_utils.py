@@ -3,7 +3,7 @@
 import datetime as dt
 import os
 
-import numpy as np
+import pandas as pd
 import sentry_sdk
 from pytz import timezone
 
@@ -28,40 +28,6 @@ def add_timezone(datetime: str | dt.datetime | None = None) -> dt.datetime | Non
         if datetime.tzinfo is None:
             datetime = utc.localize(datetime)
         return datetime
-
-
-def floor_30_minutes_dt(ts: dt.datetime) -> dt.datetime:
-    """Floor a datetime by 30 mins.
-
-    For example:
-    2021-01-01 17:01:01 --> 2021-01-01 17:00:00
-    2021-01-01 17:35:01 --> 2021-01-01 17:30:00
-
-    :param dt:
-    :return:
-    """
-    approx = np.floor(ts.minute / 30.0) * 30
-    ts = ts.replace(minute=0)
-    ts = ts.replace(second=0)
-    ts = ts.replace(microsecond=0)
-    ts += dt.timedelta(minutes=approx)
-
-    return ts
-
-
-def ceil_30_minutes_dt(ts: dt.datetime) -> dt.datetime:
-    """Ceil a datetime by 30 mins.
-
-    For example:
-    2021-01-01 17:01:01 --> 2021-01-01 17:30:00
-    2021-01-01 17:35:01 --> 2021-01-01 18:00:00
-    2021-01-01 17:30:00 --> 2021-01-01 17:30:00
-    """
-    ts_floor = floor_30_minutes_dt(ts)
-    if ts == ts_floor:
-        return ts_floor
-    ts_ceil = ts_floor + dt.timedelta(minutes=30)
-    return ts_ceil
 
 
 def limit_end_datetime_by_permissions(
@@ -97,38 +63,17 @@ def limit_end_datetime_by_permissions(
 
     return end_datetime_utc
 
+def get_start_window() ->  dt.datetime:
+    """Returns the start of the window for timeseries data."""
+    return pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
+
+def get_end_window() ->  dt.datetime:
+    """Returns the end of the window for timeseries data."""
+    return pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
+
+def get_now_floor_30_mins() ->  dt.datetime:
+    """Returns the current time rounded down to the nearest 30 minutes."""
+    return pd.Timestamp.utcnow().floor("30T").to_pydatetime()
 
 
-def floor_6_hours_dt(ts: dt.datetime) -> dt.datetime:
-    """Floor a datetime by 6 hours.
 
-    For example:
-    2021-01-01 17:01:01 --> 2021-01-01 12:00:00
-    2021-01-01 19:35:01 --> 2021-01-01 18:00:00
-
-    :param dt: datetime
-    :return: datetime rounded to lowest 6 hours
-    """
-    approx = np.floor(ts.hour / 6.0) * 6.0
-    ts = ts.replace(hour=0)
-    ts = ts.replace(minute=0)
-    ts = ts.replace(second=0)
-    ts = ts.replace(microsecond=0)
-    ts += dt.timedelta(hours=approx)
-
-    return ts
-
-def get_window(
-    start: dt.datetime | None = None, end: dt.datetime | None = None,
-) -> tuple[dt.datetime, dt.datetime]:
-    """Returns the start and end of the window for timeseries data."""
-    # Window start is the beginning of the day two days ago
-    if start is None:
-        start = (dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2))
-        start = floor_6_hours_dt(start)
-
-    # Window end is the beginning of the day two days ahead
-    if end is None:
-        end = start + dt.timedelta(days=4)
-
-    return (start, end)

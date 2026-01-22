@@ -170,11 +170,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         resp = await client.get_site_forecast(
                             site_uuid=tc.site_uuid,
                             authdata=tc.authdata,
+                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                         )
                 else:
                     resp = await client.get_site_forecast(
                         site_uuid=tc.site_uuid,
                         authdata=tc.authdata,
+                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                     )
                     self.assertEqual(len(resp), 5)
 
@@ -218,11 +222,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         await client.get_site_generation(
                             site_uuid=tc.site_uuid,
                             authdata=tc.authdata,
+                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                         )
                 else:
                     resp = await client.get_site_generation(
                         site_uuid=tc.site_uuid,
                         authdata=tc.authdata,
+                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                     )
                     self.assertEqual(len(resp), 5)
 
@@ -348,11 +356,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         resp = await client.get_substation_forecast(
                             location_uuid=tc.substation_uuid,
                             authdata=tc.authdata,
+                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                         )
                 else:
                     resp = await client.get_substation_forecast(
                         location_uuid=tc.substation_uuid,
                         authdata=tc.authdata,
+                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
+                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
                     )
                     actual_values = [v.power_kW for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)

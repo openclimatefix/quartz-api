@@ -1,23 +1,20 @@
 """Utility functions for handling datetime objects."""
-from datetime import datetime, timedelta
+import datetime as dt
 
-import numpy as np
+import pandas as pd
 
 
-def floor_30_minutes_dt(dt: datetime) -> datetime:
-    """Floor a datetime by 30 mins.
+def get_start_window() ->  dt.datetime:
+    """Returns the start of the window for timeseries data."""
+    return pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
 
-    For example:
-    2021-01-01 17:01:01 --> 2021-01-01 17:00:00
-    2021-01-01 17:35:01 --> 2021-01-01 17:30:00
+def get_end_window() ->  dt.datetime:
+    """Returns the end of the window for timeseries data."""
+    return pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
 
-    :param dt:
-    :return:
-    """
-    approx = np.floor(dt.minute / 30.0) * 30
-    dt = dt.replace(minute=0)
-    dt = dt.replace(second=0)
-    dt = dt.replace(microsecond=0)
-    dt += timedelta(minutes=approx)
+def get_now_floor_30_mins() ->  dt.datetime:
+    """Returns the current time rounded down to the nearest 30 minutes."""
+    return pd.Timestamp.utcnow().floor("30T").to_pydatetime()
 
-    return dt
+
+

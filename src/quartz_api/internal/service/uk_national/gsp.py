@@ -2,9 +2,11 @@
 
 import asyncio
 import datetime as dt
+from typing import Annotated
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+import pandas as pd
+from fastapi import APIRouter, HTTPException, Query
 from fastapi_cache.decorator import cache
 from starlette import status
 
@@ -23,9 +25,9 @@ from .pydantic_models import (
 )
 from .time_utils import (
     add_timezone,
-    ceil_30_minutes_dt,
-    floor_30_minutes_dt,
-    get_window,
+    get_end_window,
+    get_now_floor_30_mins,
+    get_start_window,
     limit_end_datetime_by_permissions,
 )
 
@@ -41,10 +43,10 @@ async def get_forecasts_for_a_specific_gsp(
     db: DBClientDependency,
     auth: AuthDependency,
     gsp_id: int,
-    forecast_horizon_minutes: int | None = None,
-    start_datetime_utc: dt.datetime | None = None,
-    end_datetime_utc: dt.datetime | None = None,
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_start_window)],
+    end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
     creation_utc_limit: dt.datetime | None = None,
+    forecast_horizon_minutes: int | None = None,
 ) -> list[ForecastValue]:
     """### Get recent forecast values for a specific GSP.
 
@@ -67,16 +69,14 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
-    # set up start and end datetimes
+    # add timezones
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
     creation_utc_limit = add_timezone(creation_utc_limit)
 
+    # reduce end datetimes due to permission
     permissions = getattr(auth, "permissions", [])
     end_datetime_utc = limit_end_datetime_by_permissions(permissions, end_datetime_utc)
-
-    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
-                                                      end=end_datetime_utc)
 
     # get gsps
     gsps = await db.get_solar_regions(type="gsp")
@@ -122,9 +122,9 @@ async def get_truths_for_a_specific_gsp(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa FBT001
     gsp_id: int,
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_start_window)],
+    end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
     regime: str = "in-day",
-    start_datetime_utc: dt.datetime | None = None,
-    end_datetime_utc: dt.datetime | None = None,
 ) -> list[GSPYield]:
     """### Get PV_Live values for a specific GSP for yesterday and today.
 
@@ -146,11 +146,9 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
-    # set up start and end datetimes
+    # add timezones
     start_datetime_utc = add_timezone(start_datetime_utc)
     end_datetime_utc = add_timezone(end_datetime_utc)
-    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
-                                                      end=end_datetime_utc)
 
     # get gsps
     gsps = await db.get_solar_regions(type="gsp")
@@ -192,10 +190,10 @@ async def get_truths_for_a_specific_gsp(
 async def get_all_available_forecasts(
     db: DBClientDependency,
     auth: AuthDependency,
-    start_datetime_utc: dt.datetime | None = None,
-    end_datetime_utc: dt.datetime | None = None,
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
+    end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
+    creation_utc_limit: dt.datetime | None = None,
     gsp_ids: str | None = None,
-    creation_limit_utc: dt.datetime | None = None,
 ) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
 
@@ -217,6 +215,16 @@ async def get_all_available_forecasts(
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     - **end_datetime_utc**: optional end datetime for the query. e.g '2023-08-12 14:00:00+00:00'
     """
+    if creation_utc_limit is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Creation limit UTC is not implemented")
+    # add timezones
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
+
+    # round start_datetime_utc to nearest 30 minutes
+    start_datetime_utc = pd.Timestamp(start_datetime_utc).ceil("30min").to_pydatetime()
+
     # get all gsp regions
     gsps = await db.get_solar_regions(type="gsp")
 
@@ -245,25 +253,6 @@ async def get_all_available_forecasts(
             for location_uuid, gsp_id in location_uuids_to_gsp_id.items()
             if gsp_id in gsp_ids
         }
-
-    # format start, end and creation limit, make sure values are rounded to 30 minutes
-    start_datetime_utc = add_timezone(start_datetime_utc)
-    end_datetime_utc = add_timezone(end_datetime_utc)
-    creation_limit_utc = add_timezone(creation_limit_utc)
-
-    # make sure values are rounded to 30 minutes
-    if start_datetime_utc is not None:
-        start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
-    if end_datetime_utc is not None:
-        end_datetime_utc = floor_30_minutes_dt(end_datetime_utc)
-
-    # Default start and end times don't get any data in the past if more than one gsp
-    if start_datetime_utc is None and (gsp_ids is None or len(gsp_ids) > 1):
-        start_datetime_utc = floor_30_minutes_dt(dt.datetime.now(tz=dt.UTC))
-    elif start_datetime_utc is not None:
-        start_datetime_utc = ceil_30_minutes_dt(start_datetime_utc)
-    if end_datetime_utc is None:
-        end_datetime_utc = get_window(start=start_datetime_utc)[1]
 
     # limit end datetime by permissions
     permissions = getattr(auth, "permissions", [])
@@ -323,9 +312,9 @@ async def get_all_available_forecasts(
 async def get_truths_for_all_gsps(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
+    end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
     regime: str = "in-day",
-    start_datetime_utc: dt.datetime | None = None,
-    end_datetime_utc: dt.datetime | None = None,
     gsp_ids: str | None = None,
 ) -> list[GSPYieldGroupByDatetime]:
     """### Get PV_Live values for all GSPs for yesterday and today.
@@ -346,6 +335,10 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
+    # add timezones
+    start_datetime_utc = add_timezone(start_datetime_utc)
+    end_datetime_utc = add_timezone(end_datetime_utc)
+
     # format gsp_ids
     try:
         if isinstance(gsp_ids, str):
@@ -359,12 +352,6 @@ async def get_truths_for_all_gsps(
 
     # get gsps regions
     gsps = await db.get_solar_regions(type="gsp")
-
-    # format start and end datetimes
-    start_datetime_utc = add_timezone(start_datetime_utc)
-    end_datetime_utc = add_timezone(end_datetime_utc)
-    start_datetime_utc, end_datetime_utc = get_window(start=start_datetime_utc,
-                                                       end=end_datetime_utc)
 
     # get locations uuids
     location_uuids_to_gsp_id = {
