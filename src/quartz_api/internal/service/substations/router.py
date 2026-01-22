@@ -120,7 +120,7 @@ async def get_all_substation_forecast_at_one_timestamp(
             continue
         scale_factor = substation.capacity_kW / \
             (gsp_region.region_metadata["effective_capacity_watts"] / 1000)
-        substation_forecast_value = round(gsp_forecast_value * scale_factor,3)
+        substation_forecast_value = gsp_forecast_value * scale_factor
 
         # assign to substation
         forecasts.forecast_values_kW[str(substation.substation_uuid)] = substation_forecast_value
