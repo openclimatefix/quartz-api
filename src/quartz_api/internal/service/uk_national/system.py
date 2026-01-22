@@ -66,7 +66,6 @@ async def get_system_details(
 
         locations.append(location)
 
-    # sort by gsp_id
     locations.sort(key=lambda x: x.gsp_id)
 
     return locations
