@@ -277,7 +277,7 @@ class Client(models.DatabaseInterface):
         # Scale the forecast to the substation capacity
         scale_factor: float = substation.effective_capacity_watts / gsp.effective_capacity_watts
         for value in forecast:
-            value.power_kW = round(value.power_kW * scale_factor, 2)
+            value.power_kW = round(value.power_kW * scale_factor, 3)
 
         log.debug(
             "gsp=%s, substation=%s, scalefactor=%s, scaling GSP to substation",
