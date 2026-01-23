@@ -312,7 +312,7 @@ async def get_all_available_forecasts(
 async def get_truths_for_all_gsps(
     db: DBClientDependency,
     auth: AuthDependency,  # noqa
-    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
+    start_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_start_window)],
     end_datetime_utc: Annotated[dt.datetime, Query(default_factory=get_end_window)],
     regime: str = "in-day",
     gsp_ids: str | None = None,
