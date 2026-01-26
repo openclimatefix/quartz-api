@@ -45,7 +45,10 @@ class TracerMiddleware(BaseHTTPMiddleware):
         set_trace_id(trace_id)
 
         # Log the start of the request processing and enrich request state
-        logging.info(f"Started request {request.url}", extra={"trace_id": trace_id})
+        logging.info(
+            f"Started request {request.url}",
+            extra={"trace_id": trace_id},
+        )
         request.state.trace_id = trace_id
 
         # Process the request

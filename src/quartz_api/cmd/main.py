@@ -7,7 +7,7 @@ import logging
 import pathlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 import uvicorn
@@ -16,42 +16,29 @@ from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
-from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
+from quartz_api.internal.backends import (
+    DataPlatformClient,
+    DummyClient,
+    EnrichedChannel,
+    QuartzClient,
+)
 from quartz_api.internal.middleware import audit, auth, sentry, trace
 
 from ._logging import setup_json_logging
+
+if TYPE_CHECKING:
+    from grpclib.client import Channel
 
 log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
-
-
-class EnrichedChannel(Channel):
-    def __init__(self, host: str, port: int):
-        super().__init__(host, port)
-
-    def request(
-        self,
-        name: str,
-        cardinality: Any,
-        request_type: Any,
-        reply_type: Any,
-        **kwargs,
-    ):
-        from quartz_api.internal.middleware.trace import get_trace_id
-        trace_id = get_trace_id()
-        metadata = kwargs.get("metadata", {}) or {}
-        metadata["traceid"] = trace_id
-        kwargs["metadata"] = metadata
-        return super().request(name, cardinality, request_type, reply_type, **kwargs)
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""

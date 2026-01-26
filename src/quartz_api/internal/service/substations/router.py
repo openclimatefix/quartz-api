@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -19,7 +19,6 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
     status_code=status.HTTP_200_OK,
 )
 async def get_substations(
-    request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
     substation_type: Literal["primary"] = "primary", # noqa: ARG001
@@ -37,7 +36,6 @@ async def get_substations(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation(
-    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -54,7 +52,6 @@ async def get_substation(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation_forecast(
-    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -77,7 +74,6 @@ async def get_substation_forecast(
     status_code=status.HTTP_200_OK,
 )
 async def get_all_substation_forecast_at_one_timestamp(
-    request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
     datetime_utc: datetime | None = None) -> models.OneDatetimeManyForecastValues:
