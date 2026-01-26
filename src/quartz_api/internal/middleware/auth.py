@@ -20,7 +20,7 @@ class DummyBackend:
 
     def __init__(self) -> None:
         """Initialize the dummy backend."""
-        log.warning("Using DummyBackend for authentication. This should not be used in production!")
+        pass
 
     def require_auth(
         self,
