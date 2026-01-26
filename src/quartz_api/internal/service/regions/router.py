@@ -239,3 +239,99 @@ async def get_forecast_csv(
         headers={"Content-Disposition": f"attachment;filename={csv_file_path}"},
     )
 
+
+class GetForecastVsActualResponse(BaseModel):
+    """Response model for forecast vs actual."""
+
+    comparisons: list[models.ForecastActualComparison]
+    summary: dict[str, float] | None = None
+
+
+@router.get(
+    "/{source}/{region}/forecast/vs-actual",
+    status_code=status.HTTP_200_OK,
+)
+async def get_forecast_vs_actual(
+    source: ValidSource,
+    region: str,
+    db: models.DBClientDependency,
+    auth: AuthDependency,
+    tz: models.TZDependency,
+    forecast_horizon_minutes: int | None = None,
+    include_summary: bool = False,
+) -> GetForecastVsActualResponse:
+    """Get forecast and actual values at once."""
+    forecast_response = await get_forecast_timeseries_route(
+        source=source,
+        region=region,
+        db=db,
+        auth=auth,
+        tz=tz,
+        forecast_horizon=(
+            models.ForecastHorizon.horizon
+            if forecast_horizon_minutes
+            else models.ForecastHorizon.latest
+        ),
+        forecast_horizon_minutes=forecast_horizon_minutes,
+        smooth_flag=False,
+    )
+
+    generation_response = await get_historic_timeseries_route(
+        source=source,
+        region=region,
+        db=db,
+        auth=auth,
+        tz=tz,
+    )
+
+    now = dt.datetime.now(tz=dt.UTC)
+    forecast_values = [f for f in forecast_response.values if f.Time < now]
+    actuals_by_time = {
+        a.Time.replace(second=0, microsecond=0): a
+        for a in generation_response.values
+    }
+
+    comparisons: list[models.ForecastActualComparison] = []
+    for forecast in forecast_values:
+        rounded_time = forecast.Time.replace(second=0, microsecond=0)
+        actual = actuals_by_time.get(rounded_time)
+
+        error_kw = None
+        if actual is not None:
+            error_kw = forecast.PowerKW - actual.PowerKW
+
+        comparisons.append(
+            models.ForecastActualComparison(
+                time=forecast.Time,
+                forecast_power_kw=forecast.PowerKW,
+                actual_power_kw=actual.PowerKW if actual else None,
+                error_kw=error_kw,
+                absolute_error_kw=abs(error_kw) if error_kw is not None else None,
+                percent_error=(
+                    (error_kw / actual.PowerKW * 100)
+                    if actual and actual.PowerKW > 0
+                    else None
+                ),
+                forecast_created_time=forecast.CreatedTime,
+            ).to_timezone(tz=tz),
+        )
+
+    comparisons.sort(key=lambda x: x.time)
+
+    summary = None
+    if include_summary:
+        valid = [c for c in comparisons if c.error_kw is not None]
+        if valid:
+            errors = [c.error_kw for c in valid]
+            abs_errors = [abs(e) for e in errors]
+            n = len(errors)
+            summary = {
+                "mae_kw": sum(abs_errors) / n,
+                "me_kw": sum(errors) / n,
+                "rmse_kw": (sum(e**2 for e in errors) / n)**0.5,
+                "max_error_kw": max(abs_errors),
+                "min_error_kw": min(abs_errors),
+                "sample_count": n,
+            }
+
+    return GetForecastVsActualResponse(comparisons=comparisons, summary=summary)

@@ -7,6 +7,7 @@ from .db_interface import (
 )
 from .endpoint_types import (
     ActualPower,
+    ForecastActualComparison,
     ForecastHorizon,
     PredictedPower,
     OneDatetimeManyForecastValues,

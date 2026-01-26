@@ -53,6 +53,34 @@ class ActualPower(BaseModel):
             Time=self.Time.astimezone(tz=ZoneInfo(key=tz)),
         )
 
+
+class ForecastActualComparison(BaseModel):
+    """Comparison of forecast vs actual power values."""
+
+    time: dt.datetime
+    forecast_power_kw: float
+    actual_power_kw: float | None = None
+    error_kw: float | None = None
+    absolute_error_kw: float | None = None
+    percent_error: float | None = None
+    forecast_created_time: dt.datetime | None = None
+
+    def to_timezone(self, tz: str) -> "ForecastActualComparison":
+        """Convert time to specific timezone."""
+        return ForecastActualComparison(
+            time=self.time.astimezone(tz=ZoneInfo(key=tz)),
+            forecast_power_kw=self.forecast_power_kw,
+            actual_power_kw=self.actual_power_kw,
+            error_kw=self.error_kw,
+            absolute_error_kw=self.absolute_error_kw,
+            percent_error=self.percent_error,
+            forecast_created_time=(
+                self.forecast_created_time.astimezone(tz=ZoneInfo(key=tz))
+                if self.forecast_created_time
+                else None
+            ),
+        )
+
 class LocationPropertiesBase(BaseModel):
     """Properties common to all locations."""
 
