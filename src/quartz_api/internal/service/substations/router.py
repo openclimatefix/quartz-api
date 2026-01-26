@@ -28,7 +28,7 @@ async def get_substations(
 
     Note that currently only 'primary' substations are supported.
     """
-    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
+    substations = await db.get_substations(authdata={})
     return substations
 
 
@@ -46,7 +46,6 @@ async def get_substation(
     substation = await db.get_substation(
         location_uuid=substation_uuid,
         authdata={},
-        traceid=request.state.trace_id,
     )
     return substation
 
@@ -65,7 +64,6 @@ async def get_substation_forecast(
     forecast = await db.get_substation_forecast(
         location_uuid=substation_uuid,
         authdata={},
-        traceid=request.state.trace_id,
     )
     forecast = [
         value.to_timezone(tz=tz)
@@ -88,7 +86,7 @@ async def get_all_substation_forecast_at_one_timestamp(
         datetime_utc = floor_30_minutes_dt(datetime.now(UTC))
 
     # 1. Get all substation locations
-    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
+    substations = await db.get_substations(authdata={})
     gsp_ids = [substation.metadata["gsp_id"] for substation in substations]
     gsp_ids = sorted(set(gsp_ids))
 

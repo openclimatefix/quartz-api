@@ -5,7 +5,7 @@ import importlib
 import importlib.metadata
 import logging
 import pathlib
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -33,6 +33,25 @@ logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
+
+class EnrichedChannel(Channel):
+    def __init__(self, host: str, port: int):
+        super().__init__(host, port)
+
+    def request(
+        self,
+        name: str,
+        cardinality: Any,
+        request_type: Any,
+        reply_type: Any,
+        **kwargs,
+    ):
+        from quartz_api.internal.middleware.trace import get_trace_id
+        trace_id = get_trace_id()
+        metadata = kwargs.get("metadata", {}) or {}
+        metadata["traceid"] = trace_id
+        kwargs["metadata"] = metadata
+        return super().request(name, cardinality, request_type, reply_type, **kwargs)
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -69,7 +88,7 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
 
 
 @asynccontextmanager
-async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
+async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     """Configure FastAPI app instance with startup and shutdown events."""
     db_instance: models.DatabaseInterface | None = None
     grpc_channel: Channel | None = None
@@ -83,7 +102,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
             db_instance = DummyClient()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            grpc_channel = Channel(
+            grpc_channel = EnrichedChannel(
                 host=conf.get_string("backend.dataplatform.host"),
                 port=conf.get_int("backend.dataplatform.port"),
             )
