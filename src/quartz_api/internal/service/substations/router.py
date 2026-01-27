@@ -5,7 +5,7 @@ import pathlib
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
@@ -19,7 +19,6 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
     status_code=status.HTTP_200_OK,
 )
 async def get_substations(
-    request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
     substation_type: Literal["primary"] = "primary", # noqa: ARG001
@@ -28,7 +27,7 @@ async def get_substations(
 
     Note that currently only 'primary' substations are supported.
     """
-    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
+    substations = await db.get_substations(authdata={})
     return substations
 
 
@@ -37,7 +36,6 @@ async def get_substations(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation(
-    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -46,7 +44,6 @@ async def get_substation(
     substation = await db.get_substation(
         location_uuid=substation_uuid,
         authdata={},
-        traceid=request.state.trace_id,
     )
     return substation
 
@@ -55,7 +52,6 @@ async def get_substation(
     status_code=status.HTTP_200_OK,
 )
 async def get_substation_forecast(
-    request: Request,
     substation_uuid: UUID,
     db: models.DBClientDependency,
     _: AuthDependency,
@@ -67,7 +63,6 @@ async def get_substation_forecast(
     forecast = await db.get_substation_forecast(
         location_uuid=substation_uuid,
         authdata={},
-        traceid=request.state.trace_id,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
     )
@@ -83,14 +78,13 @@ async def get_substation_forecast(
     status_code=status.HTTP_200_OK,
 )
 async def get_all_substation_forecast_at_one_timestamp(
-    request: Request,
     db: models.DBClientDependency,
     _: AuthDependency,
     datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
     ) -> models.OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
     # 1. Get all substation locations
-    substations = await db.get_substations(authdata={}, traceid=request.state.trace_id)
+    substations = await db.get_substations(authdata={})
     gsp_ids = [substation.metadata["gsp_id"] for substation in substations]
     gsp_ids = sorted(set(gsp_ids))
 
