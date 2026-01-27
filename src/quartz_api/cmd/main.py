@@ -5,9 +5,9 @@ import importlib
 import importlib.metadata
 import logging
 import pathlib
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 import uvicorn
@@ -16,23 +16,29 @@ from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
-from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
+from quartz_api.internal.backends import (
+    DataPlatformClient,
+    DummyClient,
+    EnrichedChannel,
+    QuartzClient,
+)
 from quartz_api.internal.middleware import audit, auth, sentry, trace
 
 from ._logging import setup_json_logging
+
+if TYPE_CHECKING:
+    from grpclib.client import Channel
 
 log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
-
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -69,7 +75,7 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
 
 
 @asynccontextmanager
-async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
+async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     """Configure FastAPI app instance with startup and shutdown events."""
     db_instance: models.DatabaseInterface | None = None
     grpc_channel: Channel | None = None
@@ -83,7 +89,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
             db_instance = DummyClient()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            grpc_channel = Channel(
+            grpc_channel = EnrichedChannel(
                 host=conf.get_string("backend.dataplatform.host"),
                 port=conf.get_int("backend.dataplatform.port"),
             )
