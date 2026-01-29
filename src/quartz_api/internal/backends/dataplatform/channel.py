@@ -33,7 +33,7 @@ class EnrichedChannel(Channel):
         return super().request(
             name=name,
             cardinality=cardinality,
-            request_type=request_type,,
+            request_type=request_type,
             reply_type=reply_type,
             timeout=timeout,
             deadline=deadline,
