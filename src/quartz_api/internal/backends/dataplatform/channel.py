@@ -30,6 +30,13 @@ class EnrichedChannel(Channel):
         trace_id = get_trace_id()
         if metadata is not None:
             metadata["traceid"] = trace_id
-        return super().request(name, cardinality, request_type, reply_type, timeout, deadline,
-                               metadata)
+        return super().request(
+            name=name,
+            cardinality=cardinality,
+            request_type=request_type,,
+            reply_type=reply_type,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
 
