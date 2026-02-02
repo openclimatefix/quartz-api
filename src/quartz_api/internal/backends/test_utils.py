@@ -10,4 +10,3 @@ def test_get_window_defaults() -> None:
         start, end = get_window()
         assert start == dt.datetime(2022, 12, 30, tzinfo=dt.UTC)
         assert end == dt.datetime(2023, 1, 3, tzinfo=dt.UTC)
-

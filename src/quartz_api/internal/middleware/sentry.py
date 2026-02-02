@@ -30,21 +30,23 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """Add user details to a context before processing request."""
         if self.auth_instance is not None and not isinstance(
-            self.auth_instance, auth.DummyBackend,
+            self.auth_instance,
+            auth.DummyBackend,
         ):
             try:
                 payload = await self.auth_instance.require_auth()(request)
                 if payload:
                     import sentry_sdk
 
-                    sentry_sdk.set_user({
-                        "id": payload.get("sub"),
-                        "email": payload.get(auth.EMAIL_KEY),
-                    })
+                    sentry_sdk.set_user(
+                        {
+                            "id": payload.get("sub"),
+                            "email": payload.get(auth.EMAIL_KEY),
+                        },
+                    )
             except Exception:
                 # silently fail to not break requests
                 log.debug("Could not extract user for Sentry")
 
         response = await call_next(request)
         return response
-

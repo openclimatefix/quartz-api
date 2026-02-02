@@ -14,6 +14,7 @@ class TraceIdFilter(logging.Filter):
         record.trace_id = get_trace_id()
         return True
 
+
 class JsonFormatter(logging.Formatter):
     """Custom JSON formatter for log records."""
 
@@ -32,6 +33,7 @@ class JsonFormatter(logging.Formatter):
 
         return json.dumps(base, ensure_ascii=False)
 
+
 def setup_json_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
@@ -39,4 +41,3 @@ def setup_json_logging(level: int = logging.INFO) -> None:
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers[:] = [handler]
-

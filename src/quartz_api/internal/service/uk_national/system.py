@@ -14,6 +14,7 @@ from .pydantic_models import Location
 
 router = APIRouter(tags=["System"])
 
+
 @router.get(
     "/gsp/",
     status_code=status.HTTP_200_OK,
@@ -21,7 +22,7 @@ router = APIRouter(tags=["System"])
 @cache(key_builder=key_builder)
 async def get_system_details(
     db: DBClientDependency,
-    auth: AuthDependency,  # noqa 
+    auth: AuthDependency,  # noqa
     gsp_id: int | None = None,
 ) -> list[Location]:
     """### Get system details for a single GSP or all GSPs.
@@ -55,7 +56,6 @@ async def get_system_details(
 
     locations = [location]
     for region in regions:
-
         location = Location.from_region(region)
 
         if gsp_id is not None and gsp_id != location.gsp_id:

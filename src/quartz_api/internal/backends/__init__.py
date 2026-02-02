@@ -1,4 +1,4 @@
-from .dummydb.client import Client as DummyClient
-from .quartzdb.client import Client as QuartzClient
-from .dataplatform.client import Client as DataPlatformClient
+from .dummydb.client import StorageClient as DummyStorage
+from .quartzdb.client import StorageClient as QuartzStorage
+from .dataplatform.client import StorageClient as DataPlatformStorage
 from .dataplatform.channel import EnrichedChannel

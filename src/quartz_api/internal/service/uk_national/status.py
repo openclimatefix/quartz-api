@@ -49,8 +49,8 @@ async def get_status() -> Status:
 @router.get("/check_last_forecast_run", include_in_schema=False)
 @cache(key_builder=key_builder)
 async def check_last_forecast_run(
-    db: DBClientDependency,
-    model_name: str | None = None) -> dt.datetime:
+    db: DBClientDependency, model_name: str | None = None,
+) -> dt.datetime:
     """### Check the last forecast run status.
 
     This route is used to check the status of the last forecast run.
@@ -67,7 +67,6 @@ async def check_last_forecast_run(
     )
 
     return forecast.created_time
-
 
 
 @router.get("/update_last_data", include_in_schema=False)

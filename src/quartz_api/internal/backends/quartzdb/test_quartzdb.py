@@ -10,20 +10,18 @@ from pvsite_datamodel.sqlmodels import GenerationSQL, LocationSQL
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import EMAIL_KEY
-from quartz_api.internal.models import ActualPower, PredictedPower, SiteProperties
 
-from .client import Client
+from .client import StorageClient
 
 log = logging.getLogger(__name__)
 
-# TODO add list of test that are here
-
 
 @pytest.fixture()
-def client(engine: Engine, db_session: Session) -> Client:
-    """Hooks Client into pytest db_session fixture"""
-    client = Client(database_url=str(engine.url))
+def client(engine: Engine, db_session: Session) -> StorageClient:
+    """Hooks StorageClient into pytest db_session fixture"""
+    client = StorageClient(database_url=str(engine.url))
     client.session = db_session
 
     return client
@@ -31,165 +29,270 @@ def client(engine: Engine, db_session: Session) -> Client:
 
 class TestQuartzDBClient:
     @pytest.mark.asyncio
-    async def test_get_predicted_wind_power_production_for_location(
+    async def test_get_predicted_wind_power_production_for_region(
         self,
-        client: Client,
+        client: StorageClient,
         forecast_values_wind: None,
     ) -> None:
         locID = "testID"
-        result = await client.get_predicted_wind_power_production_for_location(locID)
+        result = await client.get_predicted_generation(
+            location_uuid=locID,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.WIND,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
 
         assert len(result) == 110
-        for record in result:
-            assert isinstance(record, PredictedPower)
 
     @pytest.mark.asyncio
-    async def test_get_predicted_wind_power_production_for_location_raise_error(
+    async def test_get_predicted_wind_power_production_for_region_raise_error(
         self,
-        client: Client,
+        client: StorageClient,
         forecast_values_wind: None,
     ) -> None:
         with pytest.raises(HTTPException):
-            _ = await client.get_predicted_wind_power_production_for_location("testID2")
+            _ = await client.get_predicted_generation(
+                location_uuid="testID2",
+                window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+                window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+                energy_type=models.EnergyType.WIND,
+                location_type=models.LocationType.REGION,
+                authdata={},
+            )
 
     @pytest.mark.asyncio
-    async def test_get_predicted_solar_power_production_for_location(
+    async def test_get_predicted_solar_power_production_for_region(
         self,
-        client: Client,
+        client: StorageClient,
         forecast_values: None,
     ) -> None:
         locID = "testID"
-        result = await client.get_predicted_solar_power_production_for_location(locID)
+        result = await client.get_predicted_generation(
+            location_uuid=locID,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
 
         assert len(result) == 110
-        for record in result:
-            assert isinstance(record, PredictedPower)
 
     @pytest.mark.asyncio
-    async def test_get_actual_wind_power_production_for_location(
-        self, client: Client, generations: list[GenerationSQL],
-    ) -> None:
-        locID = "testID"
-        result = await client.get_actual_wind_power_production_for_location(locID)
-
-        assert len(result) == 10
-        for record in result:
-            assert isinstance(record, ActualPower)
-
-    @pytest.mark.asyncio
-    async def test_get_actual_solar_power_production_for_location(
+    async def test_get_actual_wind_power_production_for_region(
         self,
-        client: Client,
+        client: StorageClient,
         generations: list[GenerationSQL],
     ) -> None:
         locID = "testID"
-        result = await client.get_actual_solar_power_production_for_location(locID)
+        result = await client.get_actual_generation(
+            location_uuid=locID,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.WIND,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
 
         assert len(result) == 10
-        for record in result:
-            assert isinstance(record, ActualPower)
 
     @pytest.mark.asyncio
-    async def test_get_wind_regions(self, client: Client) -> None:
-        result = await client.get_wind_regions()
+    async def test_get_actual_solar_power_production_for_region(
+        self,
+        client: StorageClient,
+        generations: list[GenerationSQL],
+    ) -> None:
+        locID = "testID"
+        result = await client.get_actual_generation(
+            location_uuid=locID,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
+
+        assert len(result) == 10
+
+    @pytest.mark.asyncio
+    async def test_get_wind_regions(self, client: StorageClient) -> None:
+        result = await client.get_locations(
+            energy_type=models.EnergyType.WIND,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
         assert len(result) == 1
-        assert result[0] == "ruvnl"
+        assert result[0].name == "ruvnl"
 
     @pytest.mark.asyncio
-    async def test_get_solar_regions(self, client: Client) -> None:
-        result = await client.get_solar_regions()
+    async def test_get_solar_regions(self, client: StorageClient) -> None:
+        result = await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.REGION,
+            authdata={},
+        )
         assert len(result) == 1
-        assert result[0] == "ruvnl"
+        assert result[0].name == "ruvnl"
 
     @pytest.mark.asyncio
-    async def test_get_sites(self, client: Client, sites: list[LocationSQL]) -> None:
-        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
+    async def test_get_sites(self, client: StorageClient, sites: list[LocationSQL]) -> None:
+        sites_from_api = await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
+            authdata={EMAIL_KEY: "test@test.com"},
+        )
         assert len(sites_from_api) == 2
 
     @pytest.mark.asyncio
-    async def test_get_sites_no_sites(self, client: Client, sites: list[LocationSQL]) -> None:
-        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test2@test.com"})
+    async def test_get_sites_no_sites(
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
+    ) -> None:
+        sites_from_api = await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
+            authdata={EMAIL_KEY: "test2@test.com"},
+        )
         assert len(sites_from_api) == 0
 
     @pytest.mark.asyncio
-    async def test_get_put_site(self, client: Client, sites: list[LocationSQL]) -> None:
-        sites_from_api = await client.get_sites(authdata={EMAIL_KEY: "test@test.com"})
-        assert sites_from_api[0].client_site_name == "ruvnl_pv_testID1"
-        site = await client.put_site(
-            site_uuid=sites[0].location_uuid,
-            site_properties=SiteProperties(
-                client_site_name="test_zzz",
-                latitude=12.34,
-                longitude=56.78,
-                capacity_kW=100.0,
-                orientation=180.0,
-                tilt=30.0,
-            ),
+    async def test_get_put_site(self, client: StorageClient, sites: list[LocationSQL]) -> None:
+        sites_from_api = await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
         )
-        assert site.client_location_name == "test_zzz"
+        assert sites_from_api[0].metadata["client_site_name"] == "ruvnl_pv_testID1"
+        site = await client.put_location(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
+            authdata={EMAIL_KEY: "test@test.com"},
+            location=models.Location(
+                uuid=sites[0].location_uuid,
+                name="test_zzz",
+                latitude=12.34,
+                longitude=56.78,
+                capacity_kilowatts=100.0,
+                metadata={
+                    "orientation": 180.0,
+                    "tilt": 30.0,
+                    "client_site_name": "test_zzz",
+                },
+            ),
+        )
+        assert site.name == "test_zzz"
         assert site.latitude is not None
 
     @pytest.mark.asyncio
     async def test_get_site_forecast(
         self,
-        client: Client,
+        client: StorageClient,
         sites: list[LocationSQL],
         forecast_values_site: None,
     ) -> None:
-        out = await client.get_site_forecast(
-            site_uuid=sites[0].location_uuid,
+        out = await client.get_predicted_generation(
+            location_uuid=sites[0].location_uuid,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
         )
         assert len(out) > 0
 
     @pytest.mark.asyncio
     async def test_get_site_forecast_no_forecast_values(
-        self, client: Client, sites: list[LocationSQL],
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
     ) -> None:
-        out = await client.get_site_forecast(
-            site_uuid=sites[0].location_uuid,
+        out = await client.get_predicted_generation(
+            location_uuid=sites[0].location_uuid,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
         )
         assert len(out) == 0
 
     @pytest.mark.asyncio
     async def test_get_site_forecast_no_access(
-        self, client: Client, sites: list[LocationSQL],
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
     ) -> None:
         with pytest.raises(HTTPException):
-            _ = await client.get_site_forecast(
-                site_uuid=sites[0].location_uuid,
+            _ = await client.get_predicted_generation(
+                location_uuid=sites[0].location_uuid,
+                window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+                window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.SITE,
                 authdata={EMAIL_KEY: "test2@test.com"},
             )
 
     @pytest.mark.asyncio
     async def test_get_site_generation(
-        self, client: Client, sites: list[LocationSQL], generations: list[GenerationSQL],
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
+        generations: list[GenerationSQL],
     ) -> None:
-        out = await client.get_site_generation(
-            site_uuid=sites[0].location_uuid,
+        out = await client.get_actual_generation(
+            location_uuid=sites[0].location_uuid,
+            window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=2),
+            window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=2),
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
         )
         assert len(out) > 0
 
     @pytest.mark.asyncio
-    async def test_post_site_generation(self, client: Client, sites: list[LocationSQL]) -> None:
-        await client.post_site_generation(
-            site_uuid=sites[0].location_uuid,
-            generation=[ActualPower(Time=dt.datetime(2021, 1, 1, tzinfo=dt.UTC), PowerKW=1)],
+    async def test_post_site_generation(
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
+    ) -> None:
+        await client.put_actual_generation(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
+            generation_values=[
+                models.ActualGenerationValue(
+                    power_kilowatts=1.0,
+                    valid_timestamp=dt.datetime(2021, 1, 1, tzinfo=dt.UTC),
+                    location_uuid=sites[0].location_uuid,
+                    capacity_kilowatts=100.0,
+                    observer_name="unit_test",
+                ),
+            ],
         )
 
     @pytest.mark.asyncio
     async def test_post_site_generation_exceding_max_capacity(
-        self, client: Client, sites: list[LocationSQL],
+        self,
+        client: StorageClient,
+        sites: list[LocationSQL],
     ) -> None:
         try:
-            await client.post_site_generation(
-                site_uuid=sites[0].location_uuid,
-                generation=[ActualPower(Time=dt.datetime(2021, 1, 1, tzinfo=dt.UTC), PowerKW=1000)],
+            await client.put_actual_generation(
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.SITE,
                 authdata={EMAIL_KEY: "test@test.com"},
+                generation_values=[
+                    models.ActualGenerationValue(
+                        power_kilowatts=200.0,
+                        valid_timestamp=dt.datetime(2021, 1, 1, tzinfo=dt.UTC),
+                        location_uuid=sites[0].location_uuid,
+                        capacity_kilowatts=100.0,
+                        observer_name="unit_test",
+                    ),
+                ],
             )
         except HTTPException as e:
             assert e.status_code == 422

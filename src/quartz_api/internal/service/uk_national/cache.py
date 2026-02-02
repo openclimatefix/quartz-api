@@ -1,6 +1,8 @@
 """Cache key builder."""
+
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import Request, Response
 
@@ -11,13 +13,12 @@ legacy_query_params = ["compact", "historic"]
 
 
 async def key_builder(
-    func: Callable, # noqa
+    func: Callable[..., Any],  # noqa: ARG001
     namespace: str = "",
     *,
-    request: Request = None,
-    response: Response = None,   # noqa
-    args,  # noqa
-    kwargs,   # noqa
+    request: Request,
+    response: Response,  # noqa: ARG001
+    kwargs: Any,  # noqa: ANN401
 ) -> str:
     """This makes a general cache key for the request.
 
@@ -31,16 +32,19 @@ async def key_builder(
     permissions = auth.get("permissions", [])
     permissions = [p for p in permissions if p in cache_dependent_scopes]
 
-    params = request.query_params.items()
-    params = [(k, v) for k, v in params if k not in [*legacy_query_params, "UI"]]
+    params = [
+        (k, v) for k, v in request.query_params.items() if k not in [*legacy_query_params, "UI"]
+    ]
 
-    key = ":".join([
-        namespace,
-        request.method.lower(),
-        request.url.path,
-        repr(sorted(params)),
-        repr(sorted(permissions)),
-    ])
+    key = ":".join(
+        [
+            namespace,
+            request.method.lower(),
+            request.url.path,
+            repr(sorted(params)),
+            repr(sorted(permissions)),
+        ],
+    )
 
     log.info(f"Cache key generated: {key}")
 

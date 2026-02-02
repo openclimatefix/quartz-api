@@ -1,7 +1,9 @@
 """A dummy database that conforms to the DatabaseInterface."""
 # ruff: noqa: S311
 
+import dataclasses
 import datetime as dt
+import logging
 import math
 import random
 from uuid import UUID, uuid4
@@ -10,233 +12,255 @@ from typing_extensions import override
 
 from quartz_api.internal import models
 
-from ..utils import get_window
-from ._models import DummyDBPredictedPowerProduction
-
-# step defines the time interval between each data point
 step: dt.timedelta = dt.timedelta(minutes=15)
 
+log = logging.getLogger("dummydb")
 
-class Client(models.DatabaseInterface):
-    """Defines a dummy database that conforms to the DatabaseInterface."""
+
+class StorageClient(models.StorageInterface):
+    """Defines a dummy storage that conforms to the StorageInterface."""
 
     @override
-    async def get_predicted_solar_power_production_for_location(
+    async def get_predicted_generation(
         self,
-        location: str,
-        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-    ) -> list[models.PredictedPower]:
-        # Get the window
-        start, end = get_window()
-        numSteps = int((end - start) / step)
-        values: list[models.PredictedPower] = []
-
-        for i in range(numSteps):
-            time = start + i * step
-            _PowerProduction = _basicSolarPowerProductionFunc(int(time.timestamp()))
-            values.append(
-                models.PredictedPower(
-                    time=time,
-                    power_kW=int(_PowerProduction.PowerProductionKW),
-                    created_time=dt.datetime.now(tz=dt.UTC),
-                ),
-            )
-
-        return values
-
-    @override
-    async def get_predicted_wind_power_production_for_location(
-        self,
-        location: str,
-        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-    ) -> list[models.PredictedPower]:
-        # Get the window
-        start, end = get_window()
-        numSteps = int((end - start) / step)
-        values: list[models.PredictedPower] = []
-
-        for i in range(numSteps):
-            time = start + i * step
-            _PowerProduction = _basicWindPowerProductionFunc()
-            values.append(
-                models.PredictedPower(
-                    time=time,
-                    power_kW=int(_PowerProduction.PowerProductionKW),
-                    created_time=dt.datetime.now(tz=dt.UTC),
-                ),
-            )
-
-        return values
-
-    @override
-    async def get_actual_solar_power_production_for_location(
-        self,
-        location: str,
-    ) -> list[models.ActualPower]:
-        # Get the window
-        start, end = get_window()
-        numSteps = int((end - start) / step)
-        values: list[models.ActualPower] = []
-
-        for i in range(numSteps):
-            time = start + i * step
-            _PowerProduction = _basicSolarPowerProductionFunc(int(time.timestamp()))
-            values.append(
-                models.ActualPower(
-                    Time=time,
-                    PowerKW=int(_PowerProduction.PowerProductionKW),
-                ),
-            )
-
-        return values
-
-    @override
-    async def get_actual_wind_power_production_for_location(
-        self,
-        location: str,
-    ) -> list[models.ActualPower]:
-        # Get the window
-        start, end = get_window()
-        numSteps = int((end - start) / step)
-        values: list[models.ActualPower] = []
-
-        for i in range(numSteps):
-            time = start + i * step
-            _PowerProduction = _basicWindPowerProductionFunc()
-            values.append(
-                models.ActualPower(
-                    Time=time,
-                    PowerKW=int(_PowerProduction.PowerProductionKW),
-                ),
-            )
-
-        return values
-
-    @override
-    async def get_wind_regions(self) -> list[str]:
-        return ["dummy_wind_region1", "dummy_wind_region2"]
-
-    @override
-    async def get_solar_regions(self) -> list[str]:
-        return ["dummy_solar_region1", "dummy_solar_region2"]
-
-    @override
-    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
-        pass
-
-    @override
-    async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
-        site = models.Site(
-            site_uuid=uuid4(),
-            client_site_name="Dummy Site",
-            latitude=26,
-            longitude=76,
-            capacity_kW=76,
-            orientation=180,
-            tilt=30,
-        )
-
-        return [site]
-
-    @override
-    async def put_site(
-        self,
-        site_uuid: UUID,
-        site_properties: models.SiteProperties,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
         authdata: dict[str, str],
-    ) -> models.Site:
-        sites = await self.get_sites(authdata=authdata)
-        return sites[0]
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        numSteps = int((window_end - window_start) / step)
+        values: list[models.PredictedGenerationValue] = []
 
-    @override
-    async def get_site_forecast(
-        self,
-        site_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.PredictedPower]:
-        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
+        if isinstance(location_uuid, str):
+            location_uuid = uuid4()
+
+        for i in range(numSteps):
+            t = window_start + i * step
+            match energy_type:
+                case models.EnergyType.WIND:
+                    pf = _basicWindPowerProductionFunc()
+                case models.EnergyType.SOLAR:
+                    pf = _basicSolarPowerProductionFunc(int(t.timestamp()))
+
+            values.append(
+                models.PredictedGenerationValue(
+                    power_kilowatts=pf.PowerProductionKW,
+                    valid_timestamp=t,
+                    location_uuid=location_uuid,
+                    capacity_kilowatts=10000,
+                    created_timestamp=window_start - dt.timedelta(hours=1),
+                    init_timestamp=window_start,
+                    forecaster_name=forecaster_name or "DummyForecaster",
+                    forecaster_version=forecaster_version or "0.0.0",
+                    plevels_kilowatts={"p10": pf.UncertaintyLow, "p90": pf.UncertaintyHigh},
+                ),
+            )
+
         return values
 
     @override
-    async def get_site_generation(
+    async def put_predicted_generation(
         self,
-        site_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.ActualPower]:
-        values = await self.get_actual_solar_power_production_for_location(location="dummy")
-        return values
-
-    @override
-    async def post_site_generation(
-        self,
-        site_uuid: UUID,
-        generation: list[models.ActualPower],
+        generation_values: list[models.PredictedGenerationValue],
+        energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> None:
         pass
 
     @override
-    async def get_substations(
+    async def get_actual_generation(
         self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
         authdata: dict[str, str],
-    ) -> list[models.Substation]:
-        sub = models.Substation(
-            substation_uuid=uuid4(),
-            substation_name="Dummy Substation",
-            substation_type="primary",
-            latitude=26,
-            longitude=76,
-            capacity_kW=76,
-        )
+        created_cutoff: dt.datetime | None = None,
+        observer_name: str | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        numSteps = int((window_end - window_start) / step)
+        values: list[models.ActualGenerationValue] = []
 
-        return [sub]
+        if isinstance(location_uuid, str):
+            location_uuid = uuid4()
 
-    @override
-    async def get_substation(
-        self,
-        location_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> models.SubstationProperties:
-        return models.SubstationProperties(
-            substation_name="Dummy Substation",
-            substation_type="primary",
-            latitude=26,
-            longitude=76,
-            capacity_kw=76,
-        )
+        for i in range(numSteps):
+            t = window_start + i * step
+            match energy_type:
+                case models.EnergyType.WIND:
+                    pf = _basicWindPowerProductionFunc()
+                case models.EnergyType.SOLAR:
+                    pf = _basicSolarPowerProductionFunc(int(t.timestamp()))
 
-    @override
-    async def get_substation_forecast(
-        self,
-        location_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.PredictedPower]:
-        values = await self.get_predicted_solar_power_production_for_location(location="dummy")
+            values.append(
+                models.ActualGenerationValue(
+                    power_kilowatts=pf.PowerProductionKW,
+                    valid_timestamp=t,
+                    location_uuid=location_uuid,
+                    capacity_kilowatts=10000,
+                    observer_name=observer_name or "DummyObserver",
+                ),
+            )
 
         return values
 
     @override
-    async def get_forecast_for_multiple_locations_one_timestamp(
+    async def put_actual_generation(
         self,
-        location_uuids: list[UUID],
-        datetime_utc: dt.datetime,
+        generation_values: list[models.ActualGenerationValue],
+        location_uuid: UUID,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
         authdata: dict[str, str],
-    ) -> list[models.PredictedPower]:
-        raise NotImplementedError("DummyDB client does not support multi-location forecasts.")
+    ) -> None:
+        pass
 
     @override
-    async def get_latest_forecast(
+    async def get_locations(
         self,
-        location_uuid: UUID,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
         authdata: dict[str, str],
-        model_name: str | None = None,
-    ) -> models.Forecast:
-        """Get the latest forecast for a site."""
-        raise NotImplementedError("QuartzDB client does not support multi-location forecasts.")
+        location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        loc_uuid = location_uuid or uuid4()
+        match energy_type, location_type:
+            case models.EnergyType.SOLAR, models.LocationType.REGION:
+                return [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name=n,
+                        latitude=26,
+                        longitude=76,
+                        capacity_kilowatts=76000,
+                    )
+                    for n in ["dummy_solar_region1", "dummy_solar_region2"]
+                ]
+            case models.EnergyType.WIND, models.LocationType.REGION:
+                return [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name=n,
+                        latitude=36,
+                        longitude=86,
+                        capacity_kilowatts=86000,
+                    )
+                    for n in ["dummy_wind_region1", "dummy_wind_region2"]
+                ]
+            case _, models.LocationType.SITE:
+                return [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="Dummy Site",
+                        latitude=26,
+                        longitude=76,
+                        capacity_kilowatts=76000,
+                    ),
+                ]
+            case _, models.LocationType.GSP:
+                return [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="Dummy GSP",
+                        latitude=26,
+                        longitude=76,
+                        capacity_kilowatts=76000,
+                        metadata={"gsp_id": 12345},
+                    ),
+                ]
+            case _, models.LocationType.SUBSTATION:
+                return [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="Dummy Substation",
+                        latitude=26,
+                        longitude=76,
+                        capacity_kilowatts=76000,
+                        metadata={"gsp_id": 12345},
+                    ),
+                ]
+            case _:
+                raise NotImplementedError(
+                    f"DummyDB client does not support {location_type} locations"
+                    f"for {energy_type} energy type.",
+                )
+
+    @override
+    async def get_predicted_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        values: list[models.PredictedGenerationValue] = []
+        for location_uuid in location_uuids:
+            match energy_type:
+                case models.EnergyType.WIND:
+                    pf = _basicWindPowerProductionFunc()
+                case models.EnergyType.SOLAR:
+                    pf = _basicSolarPowerProductionFunc(int(snapshot_timestamp_utc.timestamp()))
+
+            values.append(
+                models.PredictedGenerationValue(
+                    power_kilowatts=pf.PowerProductionKW,
+                    valid_timestamp=snapshot_timestamp_utc,
+                    location_uuid=location_uuid,
+                    capacity_kilowatts=10000,
+                    created_timestamp=snapshot_timestamp_utc - dt.timedelta(hours=1),
+                    init_timestamp=snapshot_timestamp_utc,
+                    forecaster_name=forecaster_name or "DummyForecaster",
+                    forecaster_version=forecaster_version or "0.0.0",
+                    plevels_kilowatts={"p10": pf.UncertaintyLow, "p90": pf.UncertaintyHigh},
+                ),
+            )
+        return values
+
+    @override
+    async def put_location(
+        self,
+        location: models.Location,
+        location_type: models.LocationType,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+    ) -> models.Location:
+        """Store or update a location in the storage system."""
+        match energy_type, location_type:
+            case _, models.LocationType.SITE:
+                return location
+            case _:
+                raise NotImplementedError(
+                    f"DummyDB client does not support storing {location_type} locations"
+                    f"for {energy_type} energy type.",
+                )
+
+    @override
+    async def log_api_call(
+        self,
+        url: str,
+        authdata: dict[str, str],
+    ) -> None:
+        """Log an API call to the storage system."""
+        log.info(f"LOG: Call to '{url}'")
+        pass
+
+
+@dataclasses.dataclass
+class DummyDBPredictedPowerProduction:
+    """Structure of the predicted Power Production data from the dummy database."""
+
+    PowerProductionKW: float
+    UncertaintyLow: float
+    UncertaintyHigh: float
 
 
 def _basicSolarPowerProductionFunc(

@@ -8,14 +8,15 @@ from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
 
-from .client import Client
+from quartz_api.internal import models
+from .client import StorageClient
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
 
 def mock_list_locations(
     req: dp.ListLocationsRequest,
-    metadata: object | None = None, # noqa: ARG001
+    metadata: object | None = None,  # noqa: ARG001
 ) -> dp.ListLocationsResponse:
     if req.user_oauth_id_filter != "access_user":
         return dp.ListLocationsResponse(locations=[])
@@ -50,7 +51,7 @@ def mock_list_locations(
 
 def mock_get_forecast(
     req: dp.GetForecastAsTimeseriesRequest,
-    metadata: object | None = None, # noqa: ARG001
+    metadata: object | None = None,  # noqa: ARG001
 ) -> dp.GetForecastAsTimeseriesResponse:
     return dp.GetForecastAsTimeseriesResponse(
         values=[
@@ -72,7 +73,7 @@ def mock_get_forecast(
 
 def mock_get_observations(
     _: dp.GetObservationsAsTimeseriesRequest,
-    metadata: object | None = None, # noqa: ARG001
+    metadata: object | None = None,  # noqa: ARG001
 ) -> dp.GetObservationsAsTimeseriesResponse:
     return dp.GetObservationsAsTimeseriesResponse(
         values=[
@@ -88,7 +89,7 @@ def mock_get_observations(
 
 def mock_get_latest_forecasts(
     req: dp.GetLatestForecastsRequest,
-    metadata: object | None = None, # noqa: ARG001
+    metadata: object | None = None,  # noqa: ARG001
 ) -> dp.GetLatestForecastsResponse:
     t = req.pivot_timestamp_utc - dt.timedelta(hours=1)
     forecaster_name = f"mock_forecaster_{t.day}{t.hour}"
@@ -126,7 +127,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
@@ -158,7 +159,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
@@ -167,18 +168,22 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        resp = await client.get_site_forecast(
-                            site_uuid=tc.site_uuid,
+                        resp = await client.get_predicted_generation(
+                            location_uuid=tc.site_uuid,
                             authdata=tc.authdata,
-                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                            location_type=models.LocationType.SITE,
+                            window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                            energy_type=models.EnergyType.SOLAR,
+                            window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
                         )
                 else:
-                    resp = await client.get_site_forecast(
-                        site_uuid=tc.site_uuid,
+                    resp = await client.get_predicted_generation(
+                        location_uuid=tc.site_uuid,
                         authdata=tc.authdata,
-                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                        window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                        window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                        location_type=models.LocationType.SITE,
+                        energy_type=models.EnergyType.SOLAR,
                     )
                     self.assertEqual(len(resp), 5)
 
@@ -209,7 +214,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_observations_as_timeseries = AsyncMock(
@@ -222,15 +227,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         await client.get_site_generation(
                             site_uuid=tc.site_uuid,
                             authdata=tc.authdata,
-                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                            start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                            end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
                         )
                 else:
                     resp = await client.get_site_generation(
                         site_uuid=tc.site_uuid,
                         authdata=tc.authdata,
-                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                        start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                        end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
                     )
                     self.assertEqual(len(resp), 5)
 
@@ -258,7 +263,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
@@ -293,7 +298,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
@@ -344,7 +349,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        client = Client.from_dp(client_mock)
+        client = StorageClient.from_dp(client_mock)
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
@@ -356,15 +361,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         resp = await client.get_substation_forecast(
                             location_uuid=tc.substation_uuid,
                             authdata=tc.authdata,
-                            start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                            end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                            start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                            end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
                         )
                 else:
                     resp = await client.get_substation_forecast(
                         location_uuid=tc.substation_uuid,
                         authdata=tc.authdata,
-                        start_datetime=dt.datetime(2026,1,1, tzinfo=dt.UTC),
-                        end_datetime=dt.datetime(2026,1,2, tzinfo=dt.UTC),
+                        start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                        end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
                     )
                     actual_values = [v.power_kW for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)

@@ -23,4 +23,3 @@ router.include_router(gsp_router, prefix=f"{general_routes_prefix}/gsp", tags=["
 router.include_router(status_router, prefix=f"{general_routes_prefix}/status")
 
 router.include_router(system_router, prefix="/v0/system/GB", tags=["System"])
-

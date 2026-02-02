@@ -1,31 +1,22 @@
-"""pydantic models for API.
-
-The models are
-- ForecastValue: one forecast value at one timestamp
-- Forecast: a full forecast for a GSP including metadata
-- GSPYield: one truth value at one timestamp
-- GSPYieldGroupByDatetime: gsp yields for one a singel datetime
-- Location: information about the GSP
-- LocationWithGSPYields: Location with list of GSPYields
-- InputDataLastUpdated: information about when the input data was last updated
-- MLModel: information about the ML model used to create the forecast
-- NationalYield: GSPYield for national forecast
-- NationalForecastValue: ForecastValue for national forecast with properties
-- NationalForecast: Forecast for national forecast
-- OneDatetimeManyForecastValues: one datetime with many forecast values
-- Status: status message for the API
-
-"""
+"""Classes defining types for router endpoints."""
 
 import datetime as dt
-import logging
+from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
-from quartz_api.internal.models import GSPYieldGroupByDatetime as GSPYieldGroupByDatetimeDefault
-from quartz_api.internal.models import Region
+from quartz_api.internal import models
 
-logger = logging.getLogger(__name__)
+
+class ModelName(str, Enum):
+    """Available model options for national forecasts."""
+
+    blend = "blend"
+    pvnet_intraday = "pvnet_intraday"
+    pvnet_day_ahead = "pvnet_day_ahead"
+    pvnet_intraday_ecmwf_only = "pvnet_intraday_ecmwf_only"
+    pvnet_intraday_met_office_only = "pvnet_intraday_met_office_only"
+    pvnet_intraday_sat_only = "pvnet_intraday_sat_only"
 
 
 def convert_to_camelcase(snake_str: str) -> str:
@@ -44,9 +35,18 @@ class EnhancedBaseModel(BaseModel):
         from_attributes = True
         populate_by_name = True
 
+class GSPYieldGroupByDatetime(BaseModel):
+    """gsp yields for one a singel datetime.
 
-class GSPYieldGroupByDatetime(GSPYieldGroupByDatetimeDefault, EnhancedBaseModel):
-    """gsp yields for one a singel datetime, using CamelCase."""
+    This is a legacy route that is being phased out.
+    """
+
+    datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
+    generation_kw_by_gsp_id: dict[int | str, float] = Field(
+        ...,
+        description="List of generations by ids. Key is gsp_id, value is generation_kw. "
+        "We keep this as a dictionary to keep the size of the file small ",
+    )
 
 
 class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
@@ -56,11 +56,12 @@ class OneDatetimeManyForecastValuesMW(EnhancedBaseModel):
     """
 
     datetime_utc: dt.datetime = Field(..., description="The timestamp of the gsp yield")
-    forecast_values: dict[int|str, float] = Field(
+    forecast_values: dict[int | str, float] = Field(
         ...,
         description="List of forecasts by ids. Key is gsp_id, value is generation_mw. "
         "We keep this as a dictionary to keep the size of the file small ",
     )
+
 
 class Location(EnhancedBaseModel):
     """Location that the forecast is for."""
@@ -76,20 +77,16 @@ class Location(EnhancedBaseModel):
     )
 
     @classmethod
-    def from_region(cls, region: Region) -> "Location":
-        """Change RegionSQL to Location.
+    def from_location(cls, loc: models.Location) -> "Location":
+        """Change internal Location to endpoint Location.
 
         RegionSQL is defined in nowcasting_datamodel
         """
-        region_gsp_id = int(region.region_metadata["gsp_id"])
-        installed_capacity_mw = region.region_metadata["effective_capacity_watts"] / 10**6
-        if "full_name" in region.region_metadata:
-            full_name = region.region_metadata["full_name"]
-        else:
-            full_name = region.region_name
-
-        gsp_name = region.region_name
-        gsp_group = region.region_name
+        region_gsp_id = int(loc.metadata["gsp_id"])
+        installed_capacity_mw = loc.capacity_kilowatts / 10**3
+        full_name = loc.metadata.get("full_name", loc.name)
+        gsp_name = loc.name
+        gsp_group = loc.metadata.get("gsp_group", "UNKNOWN")
         region_name = full_name
 
         return Location(
@@ -100,7 +97,6 @@ class Location(EnhancedBaseModel):
             region_name=region_name,
             installed_capacity_mw=installed_capacity_mw,
         )
-
 
 
 class MLModel(EnhancedBaseModel):
@@ -190,7 +186,7 @@ class GSPYield(EnhancedBaseModel):
 class LocationWithGSPYields(Location):
     """Location object with GSPYields."""
 
-    gsp_yields: list[GSPYield] | None = Field([], description="List of gsp yields")
+    gsp_yields: list[GSPYield] = Field(default_factory=list, description="List of gsp yields")
 
     def from_location_sql(self) -> "LocationWithGSPYields":
         """Change LocationWithGSPYieldsSQL to LocationWithGSPYields.
@@ -221,7 +217,7 @@ class NationalForecastValue(ForecastValue):
     """One Forecast of generation at one timestamp include properties."""
 
     plevels: dict = Field(
-        None,
+        default_factory=dict,
         description="Dictionary to hold properties of the forecast, like p_levels. ",
     )
 
@@ -241,7 +237,10 @@ class NationalForecastValue(ForecastValue):
 class NationalForecast(Forecast):
     """One Forecast of generation at one timestamp."""
 
-    forecast_values: list[NationalForecastValue] = Field(..., description="List of forecast values")
+    forecast_values: list[NationalForecastValue] = Field(
+        default_factory=list,
+        description="List of forecast values",
+    )
 
 
 class Status(EnhancedBaseModel):

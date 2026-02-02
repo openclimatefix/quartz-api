@@ -5,30 +5,53 @@ import pathlib
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, status
+import pandas as pd
+from fastapi import APIRouter, HTTPException, Query, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .time_utils import get_end_window, get_now_floor_30_mins, get_start_window
+from .endpoint_types import (
+    OneDatetimeManyForecastValues,
+    PredictedPower,
+    Substation,
+    SubstationProperties,
+)
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
+
 
 @router.get(
     "/substations",
     status_code=status.HTTP_200_OK,
 )
 async def get_substations(
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     _: AuthDependency,
-    substation_type: Literal["primary"] = "primary", # noqa: ARG001
-) -> list[models.Substation]:
+    substation_type: Literal["primary"] = "primary",
+) -> list[Substation]:
     """Get all substations.
 
     Note that currently only 'primary' substations are supported.
     """
-    substations = await db.get_substations(authdata={})
-    return substations
+    locs = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SUBSTATION,
+        authdata={},
+    )
+    out: list[Substation] = [
+        Substation(
+            substation_uuid=loc.uuid,
+            substation_name=loc.name,
+            substation_type=str(substation_type),
+            latitude=loc.latitude,
+            longitude=loc.longitude,
+            capacity_kW=loc.capacity_kilowatts,
+            metadata=loc.metadata,
+        )
+        for loc in locs
+    ]
+    return out
 
 
 @router.get(
@@ -37,15 +60,31 @@ async def get_substations(
 )
 async def get_substation(
     substation_uuid: UUID,
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     _: AuthDependency,
-) -> models.SubstationProperties:
+) -> SubstationProperties:
     """Get a substation by UUID."""
-    substation = await db.get_substation(
+    locs = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
         location_uuid=substation_uuid,
+        location_type=models.LocationType.SUBSTATION,
         authdata={},
     )
-    return substation
+    if len(locs) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Substation with UUID {substation_uuid} not found.",
+        )
+    loc = locs[0]
+    return SubstationProperties(
+        substation_name=loc.name,
+        substation_type="primary",
+        latitude=loc.latitude,
+        longitude=loc.longitude,
+        capacity_kW=loc.capacity_kilowatts,
+        metadata=loc.metadata,
+    )
+
 
 @router.get(
     "/substations/{substation_uuid:uuid}/forecast",
@@ -53,24 +92,34 @@ async def get_substation(
 )
 async def get_substation_forecast(
     substation_uuid: UUID,
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     _: AuthDependency,
     tz: models.TZDependency,
-) -> list[models.PredictedPower]:
+) -> list[PredictedPower]:
     """Get forecasted generation values of a substation."""
-    start_datetime = get_start_window()
-    end_datetime = get_end_window()
-    forecast = await db.get_substation_forecast(
+    forecast = await db.get_predicted_generation(
         location_uuid=substation_uuid,
+        window_start=pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2),
+        window_end=pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2),
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SUBSTATION,
         authdata={},
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
     )
-    forecast = [
-        value.to_timezone(tz=tz)
-        for value in forecast
+
+    out: list[PredictedPower] = [
+        PredictedPower(
+            power_kW=v.power_kilowatts,
+            time=v.valid_timestamp.astimezone(tz=tz),
+            created_time=v.created_timestamp.astimezone(tz=tz),
+            initialization_timestamp_utc=v.init_timestamp.astimezone(tz=tz),
+            forecaster_name=v.forecaster_name,
+            forecaster_version=v.forecaster_version,
+            plevel_kW=v.plevels_kilowatts,
+        )
+        for v in forecast
     ]
-    return forecast
+
+    return out
 
 
 @router.get(
@@ -78,52 +127,65 @@ async def get_substation_forecast(
     status_code=status.HTTP_200_OK,
 )
 async def get_all_substation_forecast_at_one_timestamp(
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     _: AuthDependency,
-    datetime_utc: Annotated[dt.datetime, Query(default_factory=get_now_floor_30_mins)],
-    ) -> models.OneDatetimeManyForecastValues:
+    datetime_utc: Annotated[
+        dt.datetime,
+        Query(default_factory=lambda: pd.Timestamp.utcnow().floor("30T").to_pydatetime()),
+    ],
+) -> OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
-    # 1. Get all substation locations
-    substations = await db.get_substations(authdata={})
-    gsp_ids = [substation.metadata["gsp_id"] for substation in substations]
-    gsp_ids = sorted(set(gsp_ids))
-
-    # 2. get the relevant gsps locations
-    all_gsp_regions = await db.get_solar_regions(type="gsp")
-    gsp_regions = [region for region in all_gsp_regions
-                   if region.region_metadata["gsp_id"] in gsp_ids]
-
-    # 3. get gsp forecasts
-    forecasts = await db.get_forecast_for_multiple_locations_one_timestamp(
-        location_uuids=[gsp.region_metadata["location_uuid"] for gsp in gsp_regions],
+    # Fetch all the substations
+    substations = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SUBSTATION,
         authdata={},
+    )
+    gsp_ids = sorted({loc.metadata["gsp_id"] for loc in substations})
+
+    # Fetch all the GSPs and filter to those relevant to substations
+    gsps = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.GSP,
+        authdata={},
+    )
+    gsp_uuids = [loc.uuid for loc in gsps if loc.metadata["gsp_id"] in gsp_ids]
+    # Get a mapping of substations uuids to gsp uuids and capacities
+    substations_to_gsp_map: dict[UUID, dict[str, UUID | float]] = {
+        substation.uuid: {
+            "uuid": next(
+                gsp.uuid for gsp in gsps if gsp.metadata["gsp_id"] == substation.metadata["gsp_id"]
+            ),
+            "capacity_kilowatts": next(
+                gsp.capacity_kilowatts
+                for gsp in gsps
+                if gsp.metadata["gsp_id"] == substation.metadata["gsp_id"]
+            ),
+        }
+        for substation in substations
+    }
+
+    # Fetch the forecast snapshot for the gsps
+    snapshot = await db.get_predicted_generation_snapshot(
+        location_uuids=gsp_uuids,
+        snapshot_timestamp_utc=datetime_utc,
+        energy_type=models.EnergyType.SOLAR,
+        authdata={},
+    )
+    snapshot_dict: dict[UUID, models.PredictedGenerationValue] = {
+        pgv.location_uuid: pgv for pgv in snapshot
+    }
+
+    # Make substation output based on gsp values
+    out_dict: dict[str, float] = {
+        str(s.uuid): snapshot_dict[substations_to_gsp_map[s.uuid]["uuid"]].power_kilowatts
+        * (s.capacity_kilowatts / substations_to_gsp_map[s.uuid]["capacity_kilowatts"])
+        for s in substations
+    }
+
+    out = OneDatetimeManyForecastValues(
         datetime_utc=datetime_utc,
+        forecast_values_kW=out_dict,
     )
 
-    # 4. Add substation forecasts
-    for substation in substations:
-        # find gsp region
-        gsp_id = substation.metadata.get("gsp_id")
-        gsp_region = next((gsp for gsp in gsp_regions
-                        if gsp.region_metadata["gsp_id"] == gsp_id), None)
-        if gsp_region is None:
-            continue
-
-        # get forecast value
-        gsp_location_uuid = gsp_region.region_metadata["location_uuid"]
-        gsp_forecast_value = forecasts.forecast_values_kW.get(gsp_location_uuid, 0.0)
-        if substation.capacity_kW == 0:
-            continue
-        scale_factor = substation.capacity_kW / \
-            (gsp_region.region_metadata["effective_capacity_watts"] / 1000)
-        substation_forecast_value = round(gsp_forecast_value * scale_factor,3)
-
-        # assign to substation
-        forecasts.forecast_values_kW[str(substation.substation_uuid)] = substation_forecast_value
-
-    # 5. remove GSP forecasts
-    for gsp in gsp_regions:
-        gsp_location_uuid = gsp.region_metadata["location_uuid"]
-        forecasts.forecast_values_kW.pop(gsp_location_uuid, None)
-
-    return forecasts
+    return out

@@ -15,6 +15,7 @@ EMAIL_KEY = "https://openclimatefix.org/email"
 # Must be overwritten when configuring server.
 oauth2_scheme = HTTPBearer(auto_error=False)
 
+
 class DummyBackend:
     """Mock backend for testing without auth."""
 
@@ -24,16 +25,19 @@ class DummyBackend:
 
     def require_auth(
         self,
-        scopes: str | list[str] | None = None, # noqa: ARG002
+        scopes: str | list[str] | None = None,  # noqa: ARG002
     ) -> Callable[[Request], Awaitable[dict[str, str]]]:
         """Return a simulated authentication function."""
+
         async def _dummy_dependency(_: Request) -> dict[str, str]:
             return {
                 "sub": "dummy|123456",
                 EMAIL_KEY: "test@test.com",
                 "scope": "openid profile email",
             }
+
         return _dummy_dependency
+
 
 class AuthClient:
     """Generic client interface for authorization.
@@ -56,11 +60,14 @@ class AuthClient:
         """Instantiate the dummy backend."""
         self._backend = DummyBackend()
 
-    def require_auth(self, scopes: str | list[str] | None = None) -> Callable[[Request], Awaitable[dict[str, str]]]: # noqa
+    def require_auth(
+        self, scopes: str | list[str] | None = None,
+    ) -> Callable[[Request], Awaitable[dict[str, str]]]:
         """Authentication function to be used as a FastAPI dependency."""
+
         async def _proxy_dependency(
             request: Request,
-            token: str = Depends(oauth2_scheme), # noqa: ARG001
+            token: str = Depends(oauth2_scheme),  # noqa: ARG001
         ) -> dict[str, str]:
             if self._backend is None:
                 raise HTTPException(status_code=500, detail="Auth backend not configured")
@@ -78,9 +85,11 @@ class AuthClient:
 
         return _proxy_dependency
 
+
 auth_instance = AuthClient()
 
 AuthDependency = Annotated[dict[str, str], Depends(auth_instance.require_auth())]
+
 
 def get_oauth_id_from_sub(auth0_sub: str) -> str:
     """Extract the auth ID from a auth0 sub ID.
@@ -93,11 +102,7 @@ def get_oauth_id_from_sub(auth0_sub: str) -> str:
     return auth0_sub.split("|")[1]
 
 
-def make_api_auth_description(
-        domain:str,
-        audience:str,
-        host_url:str,
-        client_id:str) -> str:
+def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:
     """Generate API authentication description."""
     # note that the odd indentation here is needed for to make the f-string and markdown work
     t = f"""
