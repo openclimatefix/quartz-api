@@ -8,12 +8,10 @@ from fastapi_cache.decorator import cache
 from sqlalchemy import create_engine, text
 from starlette import status
 
-from quartz_api.internal.models import (
-    DBClientDependency,
-)
+from quartz_api.internal.models import EnergyType, LocationType, StorageClientDependency
 
 from .cache import key_builder
-from .pydantic_models import Status
+from .endpoint_types import Status
 
 router = APIRouter()
 
@@ -49,24 +47,30 @@ async def get_status() -> Status:
 @router.get("/check_last_forecast_run", include_in_schema=False)
 @cache(key_builder=key_builder)
 async def check_last_forecast_run(
-    db: DBClientDependency, model_name: str | None = None,
+    db: StorageClientDependency, model_name: str | None = "blend_adjust",
 ) -> dt.datetime:
     """### Check the last forecast run status.
 
     This route is used to check the status of the last forecast run.
     """
-    sites = await db.get_solar_regions(type="nation")
-    national_location_uuid = sites[0].region_metadata["location_uuid"]
+    sites = await db.get_locations(energy_type=EnergyType.SOLAR,
+                                   location_type=LocationType.NATION,
+                                   authdata={})
+    national_location_uuid = sites[0].uuid
 
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
-    forecast = await db.get_latest_forecast(
+    forecast = await db.get_predicted_generation(
         location_uuid=national_location_uuid,
+        location_type=LocationType.NATION,
+        energy_type=EnergyType.SOLAR,
+        window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=30),
+        window_end=dt.datetime.now(tz=dt.UTC),
         authdata={},
-        model_name=model_name,
+        forecaster_name=model_name,
     )
 
-    return forecast.created_time
+    return forecast[0].created_timestamp
 
 
 @router.get("/update_last_data", include_in_schema=False)

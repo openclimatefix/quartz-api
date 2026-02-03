@@ -40,6 +40,7 @@ dev = [
     "unittest-xml-reporting >= 3.2.0",
     "pytest >= 8.0.0",
     "pytest-cov >= 4.1.0",
+    "pytest-asyncio",
     "testcontainers >= 3.7.1",
     "ruff >= 0.1.7",
     "ruff-lsp >= 0.0.48",
@@ -51,6 +52,8 @@ dev = [
     "types-grpcio>=1.0.0.20251009",
     "sqlalchemy-stubs>=0.4",
     "psycopg2-binary>=2.9.11",
+    "freezegun>=1.5.5",
+
 ]
 
 [tool.uv.sources]

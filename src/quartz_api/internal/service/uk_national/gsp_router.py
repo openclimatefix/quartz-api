@@ -2,7 +2,7 @@
 
 import asyncio
 import datetime as dt
-from collections.abc import defaultdict
+from collections import defaultdict
 from typing import TYPE_CHECKING, Annotated
 
 import pandas as pd
@@ -20,6 +20,7 @@ from .endpoint_types import (
     GSPYield,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValuesMW,
+    convert_list_of_gsp_ids,
 )
 from .time_utils import (
     limit_end_datetime_by_permissions,
@@ -89,7 +90,7 @@ async def get_forecasts_for_a_specific_gsp(
         window_end=end_datetime_utc,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.GSP,
-        authdata=auth,
+        authdata={},
         created_cutoff=creation_utc_limit,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
         forecaster_name="blend",
@@ -119,7 +120,7 @@ async def get_truths_for_a_specific_gsp(
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
-    regime: Annotated[str, AfterValidator(lambda v: v.replace("_", "-"))] = "in-day",
+    regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[GSPYield]:
     """### Get PV_Live values for a specific GSP for yesterday and today.
 
@@ -160,7 +161,7 @@ async def get_truths_for_a_specific_gsp(
         window_end=end_datetime_utc,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.GSP,
-        authdata=auth,
+        authdata={},
         observer_name=f"pvlive_{regime}",
     )
 
@@ -178,14 +179,14 @@ async def get_truths_for_a_specific_gsp(
 @router.get(
     "/forecast/all/",
     response_model=list[OneDatetimeManyForecastValuesMW],
-    include_in_schema=True,
+    include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_all_available_forecasts(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: Annotated[
-        models.UTCDatetimeDefaultWindowStart,
+        models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
     ],
     end_datetime_utc: Annotated[
@@ -193,7 +194,7 @@ async def get_all_available_forecasts(
         Depends(limit_end_datetime_by_permissions),
     ],
     creation_utc_limit: models.UTCDatetime | None = None,
-    gsp_ids: list[int] | None = None,
+    gsp_ids: str | None = None,
 ) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
 
@@ -220,6 +221,7 @@ async def get_all_available_forecasts(
         location_type=models.LocationType.GSP,
         authdata=auth,
     )
+    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
@@ -235,7 +237,7 @@ async def get_all_available_forecasts(
                     window_end=end_datetime_utc,
                     energy_type=models.EnergyType.SOLAR,
                     location_type=models.LocationType.GSP,
-                    authdata=auth,
+                    authdata={},
                     created_cutoff=creation_utc_limit,
                     forecast_horizon_minutes=0,
                     forecaster_name="blend",
@@ -262,7 +264,7 @@ async def get_all_available_forecasts(
     out: list[OneDatetimeManyForecastValuesMW] = [
         OneDatetimeManyForecastValuesMW(
             datetime_utc=ts,
-            forecast_values=gsp_dict,
+            forecast_values=dict(sorted(gsp_dict.items())),
         )
         for ts, gsp_dict in grouped_data.items()
     ]
@@ -277,12 +279,12 @@ async def get_all_available_forecasts(
 )
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     auth: AuthDependency,
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
+    start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
-    regime: Annotated[str, AfterValidator(lambda v: v.replace("_", "-"))] = "in-day",
-    gsp_ids: list[int] | None = None,
+    regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
+    gsp_ids: str | None = None,
 ) -> list[GSPYieldGroupByDatetime]:
     """### Get PV_Live values for all GSPs for yesterday and today.
 
@@ -307,6 +309,8 @@ async def get_truths_for_all_gsps(
         location_type=models.LocationType.GSP,
         authdata=auth,
     )
+
+    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
@@ -322,7 +326,7 @@ async def get_truths_for_all_gsps(
                     window_end=end_datetime_utc,
                     energy_type=models.EnergyType.SOLAR,
                     location_type=models.LocationType.GSP,
-                    authdata=auth,
+                    authdata={},
                     observer_name=f"pvlive_{regime}",
                 ),
             ),
@@ -345,7 +349,7 @@ async def get_truths_for_all_gsps(
     out: list[GSPYieldGroupByDatetime] = [
         GSPYieldGroupByDatetime(
             datetime_utc=ts,
-            generation_kw_by_gsp_id=gsp_dict,
+            generation_kw_by_gsp_id=dict(sorted(gsp_dict.items())),
         )
         for ts, gsp_dict in grouped_data.items()
     ]

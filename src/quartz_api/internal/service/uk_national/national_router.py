@@ -109,7 +109,8 @@ async def get_national_forecast(
         created_cutoff=creation_limit_utc,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
         forecaster_name=model_name,
-        authdata=auth,
+        authdata={},
+        location_uuid=nation.uuid,
     )
 
     out: list[NationalForecastValue] = [
@@ -156,7 +157,7 @@ async def get_national_forecast(
 async def get_national_pvlive(
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    regime: Annotated[str, AfterValidator(lambda v: v.replace("_", "-"))] = "in-day",
+    regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
 
@@ -193,7 +194,7 @@ async def get_national_pvlive(
         window_start=pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2),
         window_end=pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2),
         observer_name=f"pvlive_{regime}",
-        authdata=auth,
+        authdata={},
     )
 
     out: list[NationalYield] = [

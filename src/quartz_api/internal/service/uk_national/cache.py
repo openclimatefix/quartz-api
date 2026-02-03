@@ -18,7 +18,8 @@ async def key_builder(
     *,
     request: Request,
     response: Response,  # noqa: ARG001
-    kwargs: Any,  # noqa: ANN401
+    args: Any,  # noqa: ARG001, ANN401
+    kwargs: Any, # noqa ANN401
 ) -> str:
     """This makes a general cache key for the request.
 

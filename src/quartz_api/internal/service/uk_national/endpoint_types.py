@@ -25,6 +25,13 @@ def convert_to_camelcase(snake_str: str) -> str:
     return "".join([first.lower(), *map(str.title, others)])
 
 
+def convert_list_of_gsp_ids(gsp_ids:str | None) -> list[int] | None:
+    """Convert a comma-separated string of GSP IDs to a list of integers."""
+    if gsp_ids is None:
+        return gsp_ids
+
+    return [int(gsp_id) for gsp_id in gsp_ids.split(",")]
+
 class EnhancedBaseModel(BaseModel):
     """Ensures that attribute names are returned in camelCase."""
 
@@ -35,7 +42,7 @@ class EnhancedBaseModel(BaseModel):
         from_attributes = True
         populate_by_name = True
 
-class GSPYieldGroupByDatetime(BaseModel):
+class GSPYieldGroupByDatetime(EnhancedBaseModel):
     """gsp yields for one a singel datetime.
 
     This is a legacy route that is being phased out.

@@ -4,8 +4,8 @@ from importlib.metadata import version
 
 from fastapi import APIRouter
 
-from .gsp import router as gsp_router
-from .national import router as national_router
+from .gsp_router import router as gsp_router
+from .national_router import router as national_router
 from .status import router as status_router
 from .system import router as system_router
 

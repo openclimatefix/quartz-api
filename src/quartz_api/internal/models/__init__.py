@@ -1,6 +1,8 @@
 """Domain models and interfaces for the application."""
 
 from .db_interface import (
+    EnergyType,
+    LocationType,
     StorageInterface,
     StorageClientDependency,
     get_storage_client,
@@ -15,6 +17,7 @@ from .endpoint_types import (
     get_timezone,
     UTCDatetime,
     UTCDatetimeDefaultWindowEnd,
+    UTCDatetimeDefaultNowWindowStart,
     UTCDatetimeDefaultWindowStart,
     ForecastHorizon,
 )

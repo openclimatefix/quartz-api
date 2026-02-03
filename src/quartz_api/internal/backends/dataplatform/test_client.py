@@ -9,6 +9,7 @@ from dp_sdk.ocf import dp
 from fastapi import HTTPException
 
 from quartz_api.internal import models
+
 from .client import StorageClient
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
@@ -107,23 +108,23 @@ def mock_get_latest_forecasts(
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_sites(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
+    async def test_get_locations(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
             authdata: dict[str, str]
-            expected_num_sites: int
+            expected_num_locations: int
 
         testcases: list[TestCase] = [
             TestCase(
-                name="Should return sites when user has access",
+                name="Should return locations when user has access",
                 authdata={"sub": "access_user"},
-                expected_num_sites=1,
+                expected_num_locations=1,
             ),
             TestCase(
-                name="Should return no sites when user has no access",
+                name="Should return no locations when user has no access",
                 authdata={"sub": "no_access_user"},
-                expected_num_sites=0,
+                expected_num_locations=0,
             ),
         ]
 
@@ -132,8 +133,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
             with self.subTest(tc.name):
-                resp = await client.get_sites(authdata=tc.authdata)
-                self.assertEqual(len(resp), tc.expected_num_sites)
+                resp = await client.get_locations(authdata=tc.authdata,
+                                                  location_type=models.LocationType.SITE,
+                                                  energy_type=models.EnergyType.SOLAR)
+                self.assertEqual(len(resp), tc.expected_num_locations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
     async def test_get_site_forecast(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
@@ -224,18 +227,24 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        await client.get_site_generation(
-                            site_uuid=tc.site_uuid,
+                        await client.get_actual_generation(
+                            location_uuid=tc.site_uuid,
                             authdata=tc.authdata,
-                            start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
-                            end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                            window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                            window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                            location_type=models.LocationType.SITE,
+                            energy_type=models.EnergyType.SOLAR,
+                            observer_name="test_observer",
                         )
                 else:
-                    resp = await client.get_site_generation(
-                        site_uuid=tc.site_uuid,
+                    resp = await client.get_actual_generation(
+                        location_uuid=tc.site_uuid,
                         authdata=tc.authdata,
-                        start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
-                        end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                        window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                        window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                        location_type=models.LocationType.SITE,
+                        energy_type=models.EnergyType.SOLAR,
+                        observer_name="test_observer",
                     )
                     self.assertEqual(len(resp), 5)
 
@@ -268,7 +277,9 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
 
             with self.subTest(tc.name):
-                resp = await client.get_substations(authdata=tc.authdata)
+                resp = await client.get_locations(authdata=tc.authdata,
+                                                  location_type=models.LocationType.SUBSTATION,
+                                                  energy_type=models.EnergyType.SOLAR)
                 self.assertEqual(len(resp), tc.expected_num_substations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
@@ -282,6 +293,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location_uuid: uuid.UUID
             authdata: dict[str, str]
             should_error: bool
+            number_of_locations: int
 
         testcases: list[TestCase] = [
             TestCase(
@@ -289,12 +301,14 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 location_uuid=uuid.uuid4(),
                 authdata={"sub": "access_user"},
                 should_error=False,
+                number_of_locations=1,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
                 location_uuid=uuid.uuid4(),
                 authdata={"sub": "no_access_user"},
-                should_error=True,
+                should_error=False,
+                number_of_locations=0,
             ),
         ]
 
@@ -305,16 +319,21 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        await client.get_substation(
+                        await client.get_locations(
                             location_uuid=tc.location_uuid,
                             authdata=tc.authdata,
+                            energy_type=models.EnergyType.SOLAR,
+                            location_type=models.LocationType.SUBSTATION,
                         )
                 else:
-                    resp = await client.get_substation(
+                    resp = await client.get_locations(
                         location_uuid=tc.location_uuid,
                         authdata=tc.authdata,
+                        energy_type=models.EnergyType.SOLAR,
+                        location_type=models.LocationType.SUBSTATION,
                     )
                     self.assertIsNotNone(resp)
+                    self.assertEqual(len(resp), tc.number_of_locations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
     async def test_get_substation_forecast(
@@ -358,20 +377,24 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             with self.subTest(tc.name):
                 if tc.should_error:
                     with self.assertRaises(HTTPException):
-                        resp = await client.get_substation_forecast(
+                        resp = await client.get_predicted_generation(
                             location_uuid=tc.substation_uuid,
                             authdata=tc.authdata,
-                            start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
-                            end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                            window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                            window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                            energy_type=models.EnergyType.SOLAR,
+                            location_type=models.LocationType.SUBSTATION,
                         )
                 else:
-                    resp = await client.get_substation_forecast(
+                    resp = await client.get_predicted_generation(
                         location_uuid=tc.substation_uuid,
                         authdata=tc.authdata,
-                        start_datetime=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
-                        end_datetime=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                        window_start=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                        window_end=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+                        energy_type=models.EnergyType.SOLAR,
+                        location_type=models.LocationType.SUBSTATION,
                     )
-                    actual_values = [v.power_kW for v in resp]
+                    actual_values = [v.power_kilowatts for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)
 
 

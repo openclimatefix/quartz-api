@@ -64,15 +64,16 @@ class StorageClient(models.StorageInterface):
         oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            oauth_id_filter=oauth_id,
+            energy_source_filter=energy_type_map[energy_type],
+            location_type_filter=location_type_map[location_type],
+            user_oauth_id_filter=oauth_id,
         )
         resp = await self.dpc.list_locations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No substation found for UUID '{location_uuid}'",
+                detail=f"No location found for UUID '{location_uuid}',\
+                      {location_type} and {energy_type}",
             )
         location = resp.locations[0]
 
@@ -96,7 +97,8 @@ class StorageClient(models.StorageInterface):
             forecaster = resp.forecasts[0].forecaster
         else:
             req = dp.ListForecastersRequest(
-                forecaster_names_filter=[forecaster_name], latest_versions_only=True,
+                forecaster_names_filter=[forecaster_name],
+                latest_versions_only=True,
             )
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
@@ -147,8 +149,8 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=int(v.effective_capacity_watts * 1000),
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
-                forecaster_name=v.forecaster_name,
-                forecaster_version=v.forecaster_version,
+                forecaster_name=forecaster.forecaster_name,
+                forecaster_version=forecaster.forecaster_version,
                 plevels_kilowatts={
                     "p10": int(
                         v.effective_capacity_watts * v.other_statistics_fractions["p10"] / 1000.0,
@@ -192,7 +194,7 @@ class StorageClient(models.StorageInterface):
         if authdata != {}:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
-                energy_type=energy_type_map[energy_type],
+                energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
                 oauth_id=get_oauth_id_from_sub(authdata["sub"]),
             )
@@ -207,11 +209,13 @@ class StorageClient(models.StorageInterface):
             ),
         )
         resp = await self.dpc.get_observations_as_timeseries(req)
-        out: list[models.ActualPower] = [
-            models.ActualPower(
-                Time=value.timestamp_utc,
-                PowerKW=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
+        out: list[models.ActualGenerationValue] = [
+            models.ActualGenerationValue(
+                valid_timestamp=value.timestamp_utc,
+                power_kilowatts=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
                 location_uuid=str(location_uuid),
+                capacity_kilowatts=int(value.effective_capacity_watts / 1000.0),
+                observer_name=observer_name,
             )
             for value in resp.values
         ]
@@ -296,10 +300,10 @@ class StorageClient(models.StorageInterface):
         # For the moment, recreate the auth behaviour of the old routes in here.
         # This should be delegated to the scoping on the API endpoints themselves later.
         match energy_type, location_type:
-            case models.EnergySource.WIND, models.LocationType.REGION:
+            case models.EnergyType.WIND, models.LocationType.REGION:
                 # get_wind_regions had no auth
                 oauth_id: str | None = None
-            case models.EnergySource.SOLAR, models.LocationType.NATION | models.LocationType.GSP:
+            case models.EnergyType.SOLAR, models.LocationType.NATION | models.LocationType.GSP:
                 # get_solar_regions had no auth
                 oauth_id = None
             case _, models.LocationType.SUBSTATION:
@@ -320,7 +324,7 @@ class StorageClient(models.StorageInterface):
         resp = await self.dpc.list_locations(req)
         out: list[models.Location] = [
             models.Location(
-                location_uuid=loc.location_uuid,
+                uuid=loc.location_uuid,
                 name=loc.location_name,
                 capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                 latitude=loc.latlng.latitude,
@@ -359,7 +363,7 @@ class StorageClient(models.StorageInterface):
     ) -> models.Location:
         """Check if a user has access to a given location."""
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[location_uuid],
+            location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_source,
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
@@ -370,10 +374,10 @@ class StorageClient(models.StorageInterface):
                 status_code=404,
                 detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
             )
-            loc = resp.locations[0]
+        loc = resp.locations[0]
 
         return models.Location(
-            location_uuid=loc.location_uuid,
+            uuid=loc.location_uuid,
             name=loc.location_name,
             capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
             latitude=loc.latlng.latitude,
