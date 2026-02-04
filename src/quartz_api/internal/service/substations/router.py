@@ -103,6 +103,7 @@ async def get_substation_forecast(
         window_end=pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2),
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.SUBSTATION,
+        forecaster_name="blend",
         authdata={},
     )
 
@@ -170,6 +171,7 @@ async def get_all_substation_forecast_at_one_timestamp(
         location_uuids=gsp_uuids,
         snapshot_timestamp_utc=datetime_utc,
         energy_type=models.EnergyType.SOLAR,
+        forecaster_name="blend",
         authdata={},
     )
     snapshot_dict: dict[UUID, models.PredictedGenerationValue] = {

@@ -77,6 +77,23 @@ class StorageClient(models.StorageInterface):
             )
         location = resp.locations[0]
 
+        if location_type == models.LocationType.SUBSTATION:
+            # Get the GSP the substation belongs to
+            req = dp.ListLocationsRequest(
+                enclosed_location_uuid_filter=[str(location_uuid)],
+                location_type_filter=dp.LocationType.GSP,
+                user_oauth_id_filter=oauth_id,
+            )
+            gsps = await self.dpc.list_locations(req)
+            if len(gsps.locations) == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No GSP found for substation UUID '{location_uuid}'",
+                )
+            gsp = gsps.locations[0]
+            # Spoof the location id so that the forecast is fetched for the GSP instead
+            location_uuid = gsp.location_uuid
+
         if forecaster_name is None:
             # Use the forecaster that produced the most recent forecast for the location by default,
             # taking into account the desired horizon.
@@ -102,23 +119,6 @@ class StorageClient(models.StorageInterface):
             )
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
-
-        if location_type == models.LocationType.SUBSTATION:
-            # Get the GSP the substation belongs to
-            req = dp.ListLocationsRequest(
-                enclosed_location_uuid_filter=[str(location_uuid)],
-                location_type_filter=dp.LocationType.GSP,
-                user_oauth_id_filter=oauth_id,
-            )
-            gsps = await self.dpc.list_locations(req)
-            if len(gsps.locations) == 0:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No GSP found for substation UUID '{location_uuid}'",
-                )
-            gsp = gsps.locations[0]
-            # Spoof the location id so that the forecast is fetched for the GSP instead
-            location_uuid = gsp.location_uuid
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=str(location_uuid),
@@ -266,23 +266,11 @@ class StorageClient(models.StorageInterface):
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
                 power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
-                valid_timestamp=v.target_timestamp_utc,
+                valid_timestamp=resp.timestamp_utc,
                 location_uuid=UUID(v.location_uuid),
                 capacity_kilowatts=v.effective_capacity_watts / 1000,
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
-                forecaster_name=v.forecaster_name,
-                forecaster_version=v.forecaster_version,
-                plevels_kilowatts={
-                    "p10": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p10"] / 1000.0,
-                    ),
-                    "p90": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p90"] / 1000.0,
-                    ),
-                }
-                if "p10" in v.other_statistics_fractions and "p90" in v.other_statistics_fractions
-                else {},
+                forecaster_name=forecaster.forecaster_name,
+                forecaster_version=forecaster.forecaster_version,
             )
             for v in resp.values
         ]
