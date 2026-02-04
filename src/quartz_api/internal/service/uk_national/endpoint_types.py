@@ -1,14 +1,14 @@
 """Classes defining types for router endpoints."""
 
 import datetime as dt
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
 from quartz_api.internal import models
 
 
-class ModelName(str, Enum):
+class ModelName(StrEnum):
     """Available model options for national forecasts."""
 
     blend = "blend"

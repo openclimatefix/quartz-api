@@ -1,7 +1,7 @@
 """Defines the domain models for the application."""
 
 import datetime as dt
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -50,7 +50,7 @@ UTCDatetimeDefaultWindowEnd = Annotated[
 ]
 
 
-class ForecastHorizon(str, Enum):
+class ForecastHorizon(StrEnum):
     """Defines the forecast horizon options.
 
     Can either be
