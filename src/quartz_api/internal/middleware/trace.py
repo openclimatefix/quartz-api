@@ -14,6 +14,7 @@ PROC_TIME_HEADER = "X-Process-Time"
 
 _trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="unset")
 
+
 def get_trace_id() -> str:
     """Get the trace_id for the current context. Generates a new one if missing."""
     tid = _trace_id_ctx.get()
@@ -21,6 +22,7 @@ def get_trace_id() -> str:
         tid = uuid.uuid4().hex
         _trace_id_ctx.set(tid)
     return tid
+
 
 def set_trace_id(trace_id: str) -> None:
     """Set the trace_id for the current context."""

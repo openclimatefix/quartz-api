@@ -1,19 +1,18 @@
 """Functions to format predicted power data for CSV export."""
 
-from datetime import datetime
+import datetime as dt
 
 import pandas as pd
 
-from quartz_api.internal.models import ForecastHorizon, PredictedPower
+from quartz_api.internal import models
 
 
-# NOTE: We should probably make this take a timezone argument.
-# This would mean changing the column names, so I'm leaving it for now,
-# as I don't know whether this would affect clients.
 def format_csv_and_created_time(
-    values: list[PredictedPower],
-    forecast_horizon: ForecastHorizon,
-) -> tuple[pd.DataFrame, datetime]:
+    values: list[models.PredictedGenerationValue],
+    forecast_horizon: models.ForecastHorizon,
+    tz: models.TZDependency,
+    now: dt.datetime | None = None,
+) -> tuple[pd.DataFrame, dt.datetime]:
     """Format the predicted power values into a pandas dataframe ready for CSV export.
 
     We also get the maximum created time of these forecasts
@@ -24,38 +23,44 @@ def format_csv_and_created_time(
     - PowerMW, the forecasted power in MW
 
     """
-    # change list of prediction power to pandas dataframe
-    df = pd.DataFrame([y.__dict__ for y in values])
+    if now is None:
+        now = dt.datetime.now(tz=tz)
 
-    # change Time columns from UTC to IST
-    df["Time"] = pd.to_datetime(df["Time"]).dt.tz_convert("Asia/Kolkata")
+    # Change list of prediction power to pandas dataframe
+    if forecast_horizon == models.ForecastHorizon.day_ahead:
+        # For day ahead, we only want values from 00:00 to 23:45 tomorrow, in the given timezone
+        wanted_values = [
+            v
+            for v in values
+            if v.valid_timestamp.astimezone(tz=tz).date() == (now + dt.timedelta(days=1)).date()
+        ]
+    elif forecast_horizon == models.ForecastHorizon.latest:
+        # For latest, we want all values from now onwards, in the given timezone
+        wanted_values = [v for v in values if v.valid_timestamp.astimezone(tz=tz) >= now]
+    else:
+        wanted_values = values
 
-    # create date columns
-    df["Date [IST]"] = df["Time"].dt.date
-    # create start and end time column and only show HH:MM
-    df["Start Time [IST]"] = df["Time"].dt.strftime("%H:%M")
-    df["End Time [IST]"] = (df["Time"] + pd.to_timedelta("15min")).dt.strftime("%H:%M")
+    # NOTE: Now this takes a timezone arg, [IST] here is potentially incorrect!
+    df = pd.DataFrame.from_records(
+        [
+            {
+                "Date [IST]": v.valid_timestamp.astimezone(tz=tz).date(),
+                "PowerMW": round(v.power_kilowatts / 1000.0, 4),
+                "Time": str(
+                    v.valid_timestamp.astimezone(tz=tz).strftime("%H:%M")
+                    + " - "
+                    + (v.valid_timestamp + dt.timedelta(minutes=15))
+                    .astimezone(tz=tz)
+                    .strftime("%H:%M"),
+                ),
+                "CreatedTime": v.created_timestamp.astimezone(tz=tz),
+            }
+            for v in wanted_values
+        ],
+    )
 
-    now_ist = pd.Timestamp.now(tz="Asia/Kolkata")
-    if forecast_horizon == ForecastHorizon.day_ahead:
-        # only get tomorrow's results, for IST time.
-        tomorrow = now_ist + pd.Timedelta(days=1)
-        df = df[df["Date [IST]"] == tomorrow.date()]
-    elif forecast_horizon == ForecastHorizon.latest:
-        # only get results from now onwards, for IST time.
-        df = df[df["Time"] >= now_ist]
-
-    # combine start and end times
-    df["Time"] = df["Start Time [IST]"].astype(str) + " - " + df["End Time [IST]"].astype(str)
-
-    # get the max created time
+    # Get the max created time
     created_time = df["CreatedTime"].max()
-
-    # change KW to MW
-    df["PowerMW"] = df["PowerKW"] / 1000
-
-    # drop and order
-    df = df.drop(columns=["CreatedTime", "Start Time [IST]", "End Time [IST]"])
     df = df[["Date [IST]", "Time", "PowerMW"]]
 
     return df, created_time

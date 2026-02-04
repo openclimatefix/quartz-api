@@ -2,6 +2,7 @@
 
 import datetime as dt
 import logging
+import time
 from collections.abc import Generator
 
 import pytest
@@ -24,9 +25,26 @@ log = logging.getLogger(__name__)
 @pytest.fixture(scope="session")
 def engine() -> Generator[Engine]:
     """Database engine fixture."""
-    with PostgresContainer("postgres:14.5") as postgres:
+    start_time = time.time()
+    with PostgresContainer("postgres:14.5-alpine") as postgres:
+        # Wait for two occurances of "database system is ready to accept connections"
+        # Shouldn't take more than 15 seconds
+        # (The Go testcontainers API is much nicer!)
+        ready_message = "database system is ready to accept connections"
+        while time.time() - start_time < 15:
+            try:
+                logs = postgres.get_logs()[0].decode("utf-8")
+                if logs.count(ready_message) >= 2:
+                    break
+            except Exception:
+                log.debug("Waiting for Postgres to be ready...")
+                pass
+            time.sleep(0.5)
+
         url = postgres.get_connection_url()
-        engine = create_engine(url)
+        if "localhost" in url:
+            url = url.replace("localhost", "127.0.0.1")
+        engine = create_engine(url, pool_pre_ping=True)
 
         yield engine
 

@@ -12,410 +12,335 @@ from typing_extensions import override
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
-from ..utils import get_window
-
 log = logging.getLogger("dataplatform.client")
 
+energy_type_map = {
+    models.EnergyType.SOLAR: dp.EnergySource.SOLAR,
+    models.EnergyType.WIND: dp.EnergySource.WIND,
+}
 
-class Client(models.DatabaseInterface):
-    """Defines a data platform interface that conforms to the DatabaseInterface."""
+location_type_map = {
+    models.LocationType.SITE: dp.LocationType.SITE,
+    models.LocationType.GSP: dp.LocationType.GSP,
+    models.LocationType.REGION: dp.LocationType.STATE,
+    models.LocationType.NATION: dp.LocationType.NATION,
+    models.LocationType.SUBSTATION: dp.LocationType.PRIMARY_SUBSTATION,
+}
 
-    dp_client: dp.DataPlatformDataServiceStub
+
+class StorageClient(models.StorageInterface):
+    """Defines a data platform conneciton that conforms to the StorageInterface."""
+
+    dpc: dp.DataPlatformDataServiceStub
 
     @classmethod
-    def from_dp(cls, dp_client: dp.DataPlatformDataServiceStub) -> "Client":
-        """Class method to create a new Data Platform client."""
+    def from_dp(cls, dp_client: dp.DataPlatformDataServiceStub) -> "StorageClient":
+        """Class method to create a new Data Platform storage client."""
         instance = cls()
-        instance.dp_client = dp_client
+        instance.dpc = dp_client
         return instance
 
     @override
-    async def get_predicted_solar_power_production_for_location(
+    async def get_predicted_generation(
         self,
-        location: str,
-        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-    ) -> list[models.PredictedPower]:
-        values = await self._get_predicted_power_production_for_location(
-            location_uuid=UUID(location),
-            energy_source=dp.EnergySource.SOLAR,
-            forecast_horizon=forecast_horizon,
-            forecast_horizon_minutes=forecast_horizon_minutes,
-            smooth_flag=smooth_flag,
-            oauth_id=None,
-        )
-        return values
-
-    @override
-    async def get_predicted_wind_power_production_for_location(
-        self,
-        location: str,
-        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-    ) -> list[models.PredictedPower]:
-        values = await self._get_predicted_power_production_for_location(
-            location_uuid=UUID(location),
-            energy_source=dp.EnergySource.WIND,
-            forecast_horizon=forecast_horizon,
-            forecast_horizon_minutes=forecast_horizon_minutes,
-            smooth_flag=smooth_flag,
-            oauth_id=None,
-        )
-        return values
-
-    @override
-    async def get_actual_solar_power_production_for_location(
-        self,
-        location: str,
-    ) -> list[models.ActualPower]:
-        values = await self._get_actual_power_production_for_location(
-            UUID(location),
-            dp.EnergySource.SOLAR,
-            oauth_id=None,
-        )
-        return values
-
-    @override
-    async def get_actual_wind_power_production_for_location(
-        self,
-        location: str,
-    ) -> list[models.ActualPower]:
-        values = await self._get_actual_power_production_for_location(
-            UUID(location),
-            dp.EnergySource.WIND,
-            oauth_id=None,
-        )
-        return values
-
-    @override
-    async def get_wind_regions(self) -> list[str]:
-        req = dp.ListLocationsRequest(
-            energy_source_filter=dp.EnergySource.WIND,
-            location_type_filter=dp.LocationType.STATE,
-        )
-        resp = await self.dp_client.list_locations(req)
-        return [loc.location_uuid for loc in resp.locations]
-
-    @override
-    async def get_solar_regions(self, type: str | None = None) -> list[models.Region]:
-
-        location_type_filter = dp.LocationType.STATE
-        if type == "nation":
-            location_type_filter = dp.LocationType.NATION
-        elif type == "gsp":
-            location_type_filter = dp.LocationType.GSP
-
-        req = dp.ListLocationsRequest(
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=location_type_filter,
-        )
-        resp = await self.dp_client.list_locations(req)
-
-        regions = []
-        for loc in resp.locations:
-                region = models.Region(
-                    region_name=loc.location_name,
-                    region_metadata={
-                        "location_uuid": loc.location_uuid,
-                        "effective_capacity_watts": loc.effective_capacity_watts,
-                        **dict(struct_to_dict(loc.metadata)),
-                    },
-                )
-                regions.append(region)
-        return regions
-        return [loc.location_uuid for loc in resp.locations]
-
-    @override
-    async def get_sites(self, authdata: dict[str, str]) -> list[models.Site]:
-        req = dp.ListLocationsRequest(
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.SITE,
-            user_oauth_id_filter=authdata["sub"],
-        )
-        resp = await self.dp_client.list_locations(req)
-        return [
-            models.Site(
-                site_uuid=loc.location_uuid,
-                client_site_name=loc.location_name,
-                orientation=loc.metadata.fields["orientation"].number_value
-                if "orientation" in loc.metadata.fields
-                else None,
-                tilt=loc.metadata.fields["tilt"].number_value
-                if "tilt" in loc.metadata.fields
-                else None,
-                capacity_kW=loc.effective_capacity_watts // 1000.0,
-                latitude=loc.latlng.latitude,
-                longitude=loc.latlng.longitude,
-            )
-            for loc in resp.locations
-        ]
-
-    @override
-    async def put_site(
-        self,
-        site_uuid: UUID,
-        site_properties: models.SiteProperties,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
         authdata: dict[str, str],
-    ) -> models.Site:
-        raise NotImplementedError("Data Platform client doesn't yet support site writing.")
-
-    @override
-    async def get_site_forecast(
-        self,
-        site_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.PredictedPower]:
-        forecast = await self._get_predicted_power_production_for_location(
-            site_uuid,
-            dp.EnergySource.SOLAR,
-            authdata["sub"],
-        )
-        return forecast
-
-    @override
-    async def get_site_generation(
-        self,
-        site_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.ActualPower]:
-        generation = await self._get_actual_power_production_for_location(
-            site_uuid,
-            dp.EnergySource.SOLAR,
-            authdata["sub"],
-        )
-        return generation
-
-    @override
-    async def post_site_generation(
-        self,
-        site_uuid: UUID,
-        generation: list[models.ActualPower],
-        authdata: dict[str, str],
-    ) -> None:
-        raise NotImplementedError("Data Platform client doesn't yet support site writing.")
-
-    @override
-    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
-        log.warning("Data Platform client does not support logging API calls to DB.")
-        pass
-
-    @override
-    async def get_substations(
-        self,
-        authdata: dict[str, str],
-    ) -> list[models.Substation]:
-        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
-        req = dp.ListLocationsRequest(
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=oauth_id,
-        )
-        resp = await self.dp_client.list_locations(req)
-
-        return [
-            models.Substation(
-                substation_uuid=loc.location_uuid,
-                substation_name=loc.location_name,
-                substation_type="primary"
-                if loc.location_type == dp.LocationType.PRIMARY_SUBSTATION
-                else "secondary",
-                capacity_kW=loc.effective_capacity_watts // 1000.0,
-                latitude=loc.latlng.latitude,
-                longitude=loc.latlng.longitude,
-                metadata = struct_to_dict(loc.metadata),
-            )
-            for loc in resp.locations
-        ]
-
-    @override
-    async def get_substation_forecast(
-        self,
-        location_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> list[models.PredictedPower]:
-        # Get the substation
-        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
-        # Get the substation to ensure user has access and it exists
-        req = dp.ListLocationsRequest(
-            location_uuids_filter=[str(location_uuid)],
-            energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.PRIMARY_SUBSTATION,
-            user_oauth_id_filter=oauth_id,
-        )
-        resp = await self.dp_client.list_locations(req)
-        if len(resp.locations) == 0:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No substation found for UUID '{location_uuid}'",
-            )
-        substation = resp.locations[0]
-
-        # Get the GSP that the substation belongs to
-        req = dp.ListLocationsRequest(
-            enclosed_location_uuid_filter=[str(location_uuid)],
-            location_type_filter=dp.LocationType.GSP,
-            user_oauth_id_filter=oauth_id,
-        )
-        gsps = await self.dp_client.list_locations(req)
-        if len(gsps.locations) == 0:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No GSP found for substation UUID '{location_uuid}'",
-            )
-        gsp = gsps.locations[0]
-        forecast = await self._get_predicted_power_production_for_location(
-            location_uuid=gsp.location_uuid,
-            energy_source=dp.EnergySource.SOLAR,
-            oauth_id=oauth_id,
-        )
-
-        # Scale the forecast to the substation capacity
-        scale_factor: float = substation.effective_capacity_watts / gsp.effective_capacity_watts
-        for value in forecast:
-            value.power_kW = value.power_kW * scale_factor
-
-        log.debug(
-            "gsp=%s, substation=%s, scalefactor=%s, scaling GSP to substation",
-            gsp.location_uuid,
-            substation.location_uuid,
-            scale_factor,
-        )
-
-        return forecast
-
-    @override
-    async def get_substation(
-        self,
-        location_uuid: UUID,
-        authdata: dict[str, str],
-    ) -> models.SubstationProperties:
-        oauth_id = get_oauth_id_from_sub(authdata["sub"]) if "sub" in authdata else None
-        req = dp.ListLocationsRequest(
-            location_uuids_filter=[str(location_uuid)],
-            energy_source_filter=dp.EnergySource.SOLAR,
-            user_oauth_id_filter=oauth_id,
-        )
-        resp = await self.dp_client.list_locations(req)
-        if len(resp.locations) == 0:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No substation found for UUID '{location_uuid}'",
-            )
-        loc = resp.locations[0]
-
-        return models.SubstationProperties(
-            substation_name=loc.location_name,
-            substation_type="primary",
-            capacity_kW=loc.effective_capacity_watts // 1000.0,
-            latitude=loc.latlng.latitude,
-            longitude=loc.latlng.longitude,
-        )
-
-
-    async def _get_actual_power_production_for_location(
-        self,
-        location_uuid: UUID,
-        energy_source: dp.EnergySource,
-        oauth_id: str | None,
-    ) -> list[models.ActualPower]:
-        """Local function to retrieve actual values regardless of energy type."""
-        if oauth_id is not None:
-            await self._check_user_access(
-                location_uuid,
-                energy_source,
-                dp.LocationType.SITE,
-                oauth_id,
-            )
-
-        start, end = get_window()
-        req = dp.GetObservationsAsTimeseriesRequest(
-            location_uuid=location_uuid,
-            observer_name="ruvnl",
-            energy_source=energy_source,
-            time_window=dp.TimeWindow(
-                start_timestamp_utc=start,
-                end_timestamp_utc=end,
-            ),
-        )
-        resp = await self.dp_client.get_observations_as_timeseries(req)
-        out: list[models.ActualPower] = [
-            models.ActualPower(
-                Time=value.timestamp_utc,
-                PowerKW=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
-            )
-            for value in resp.values
-        ]
-
-        return out
-
-    async def _get_predicted_power_production_for_location(
-        self,
-        location_uuid: UUID,
-        energy_source: dp.EnergySource,
-        oauth_id: str | None,
-        forecast_horizon: models.ForecastHorizon = models.ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,  # noqa: ARG002
-    ) -> list[models.PredictedPower]:
-        """Local function to retrieve predicted values regardless of energy type."""
-        if oauth_id is not None:
-            _ = await self._check_user_access(
-                location_uuid,
-                energy_source,
-                dp.LocationType.SITE,
-                oauth_id,
-            )
-
-        start, end = get_window()
-
-        if forecast_horizon == models.ForecastHorizon.latest or forecast_horizon_minutes is None:
-            forecast_horizon_minutes = 0
-        elif forecast_horizon == models.ForecastHorizon.day_ahead:
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        if forecast_horizon_minutes == 24 * 60:
+            # The user is requesting day-ahead.
             # The intra-day forecast caps out at 8 hours horizon, so anything greater than that is
             # assumed to be day-ahead. It doesn't seem like it's as simple as just using 24 hours,
             # from my asking around at least
             forecast_horizon_minutes = 9 * 60
 
-        # Use the forecaster that produced the most recent forecast for the location by default,
-        # taking into account the desired horizon.
-        # * At some point, we may want to allow the user to specify a particular forecaster.
-        req = dp.GetLatestForecastsRequest(
-            location_uuid=location_uuid,
-            energy_source=energy_source,
-            pivot_timestamp_utc=start - dt.timedelta(minutes=forecast_horizon_minutes),
+        oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        req = dp.ListLocationsRequest(
+            location_uuids_filter=[str(location_uuid)],
+            energy_source_filter=energy_type_map[energy_type],
+            location_type_filter=location_type_map[location_type],
+            user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.get_latest_forecasts(req)
-        if len(resp.forecasts) == 0:
-            return []
-        resp.forecasts.sort(
-            key=lambda f: f.created_timestamp_utc,
-            reverse=True,
-        )
-        forecaster = resp.forecasts[0].forecaster
+        resp = await self.dpc.list_locations(req)
+        if len(resp.locations) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No location found for UUID '{location_uuid}',\
+                      {location_type} and {energy_type}",
+            )
+        location = resp.locations[0]
+
+        if location_type == models.LocationType.SUBSTATION:
+            # Get the GSP the substation belongs to
+            req = dp.ListLocationsRequest(
+                enclosed_location_uuid_filter=[str(location_uuid)],
+                location_type_filter=dp.LocationType.GSP,
+                user_oauth_id_filter=oauth_id,
+            )
+            gsps = await self.dpc.list_locations(req)
+            if len(gsps.locations) == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No GSP found for substation UUID '{location_uuid}'",
+                )
+            gsp = gsps.locations[0]
+            # Spoof the location id so that the forecast is fetched for the GSP instead
+            location_uuid = gsp.location_uuid
+
+        if forecaster_name is None:
+            # Use the forecaster that produced the most recent forecast for the location by default,
+            # taking into account the desired horizon.
+            # NOTE: This is a pretty rough-and-ready way of getting the forecaster and should be
+            # changed.
+            req = dp.GetLatestForecastsRequest(
+                location_uuid=str(location_uuid),
+                energy_source=energy_type_map[energy_type],
+                pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
+            )
+            resp = await self.dpc.get_latest_forecasts(req)
+            if len(resp.forecasts) == 0:
+                return []
+            resp.forecasts.sort(
+                key=lambda f: f.created_timestamp_utc,
+                reverse=True,
+            )
+            forecaster = resp.forecasts[0].forecaster
+        else:
+            req = dp.ListForecastersRequest(
+                forecaster_names_filter=[forecaster_name],
+                latest_versions_only=True,
+            )
+            resp = await self.dpc.list_forecasters(req)
+            forecaster = resp.forecasters[0]
 
         req = dp.GetForecastAsTimeseriesRequest(
-            location_uuid=location_uuid,
-            energy_source=energy_source,
+            location_uuid=str(location_uuid),
+            energy_source=energy_type_map[energy_type],
             horizon_mins=forecast_horizon_minutes,
             time_window=dp.TimeWindow(
-                start_timestamp_utc=start,
-                end_timestamp_utc=end,
+                start_timestamp_utc=window_start,
+                end_timestamp_utc=window_end,
             ),
             forecaster=forecaster,
+            pivot_timestamp_utc=created_cutoff,
         )
-        resp = await self.dp_client.get_forecast_as_timeseries(req)
+        resp = await self.dpc.get_forecast_as_timeseries(req)
 
-        out: list[models.PredictedPower] = [
-            models.PredictedPower(
-                time=value.target_timestamp_utc,
-                power_kW=int(value.effective_capacity_watts * value.p50_value_fraction / 1000.0),
-                created_time=value.created_timestamp_utc,
+        if location_type == models.LocationType.SUBSTATION:
+            # Spoof the forecast values so that the capacity and id corresponds to the substation
+            for v in resp.values:
+                v.location_uuid = location_uuid
+                v.effective_capacity_watts = location.effective_capacity_watts
+
+        out: list[models.PredictedGenerationValue] = [
+            models.PredictedGenerationValue(
+                power_kilowatts=int(
+                    v.effective_capacity_watts * v.p50_value_fraction / 1000,
+                ),
+                valid_timestamp=v.target_timestamp_utc,
+                location_uuid=location_uuid,
+                capacity_kilowatts=int(v.effective_capacity_watts * 1000),
+                created_timestamp=v.created_timestamp_utc,
+                init_timestamp=v.initialization_timestamp_utc,
+                forecaster_name=forecaster.forecaster_name,
+                forecaster_version=forecaster.forecaster_version,
+                plevels_kilowatts={
+                    "p10": int(
+                        v.effective_capacity_watts * v.other_statistics_fractions["p10"] / 1000.0,
+                    ),
+                    "p90": int(
+                        v.effective_capacity_watts * v.other_statistics_fractions["p90"] / 1000.0,
+                    ),
+                }
+                if "p10" in v.other_statistics_fractions and "p90" in v.other_statistics_fractions
+                else {},
+            )
+            for v in resp.values
+        ]
+        return out
+
+    @override
+    async def put_predicted_generation(
+        self,
+        generation_values: list[models.PredictedGenerationValue],
+        location_type: models.LocationType,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+    ) -> None:
+        raise NotImplementedError("Data platform backend doesn't support forecast input yet.")
+
+    @override
+    async def get_actual_generation(
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+        created_cutoff: dt.datetime | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        if observer_name is None:
+            raise ValueError("Observer must be specified for data platform backend.")
+
+        if authdata != {}:
+            _ = await self._check_user_access(
+                location_uuid=location_uuid,
+                energy_source=energy_type_map[energy_type],
+                location_type=location_type_map[location_type],
+                oauth_id=get_oauth_id_from_sub(authdata["sub"]),
+            )
+
+        req = dp.GetObservationsAsTimeseriesRequest(
+            location_uuid=str(location_uuid),
+            observer_name=observer_name,
+            energy_source=energy_type_map[energy_type],
+            time_window=dp.TimeWindow(
+                start_timestamp_utc=window_start,
+                end_timestamp_utc=window_end,
+            ),
+        )
+        resp = await self.dpc.get_observations_as_timeseries(req)
+        out: list[models.ActualGenerationValue] = [
+            models.ActualGenerationValue(
+                valid_timestamp=value.timestamp_utc,
+                power_kilowatts=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
+                location_uuid=str(location_uuid),
+                capacity_kilowatts=int(value.effective_capacity_watts / 1000.0),
+                observer_name=observer_name,
             )
             for value in resp.values
         ]
+
         return out
+
+    @override
+    async def put_actual_generation(
+        self,
+        generation_values: list[models.ActualGenerationValue],
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+    ) -> None:
+        raise NotImplementedError("Data platform backend does not yet support writing generation")
+
+    @override
+    async def get_predicted_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        if forecaster_version is None:
+            req = dp.ListForecastersRequest(
+                forecaster_names_filter=[forecaster_name],
+                latest_versions_only=True,
+            )
+            resp = await self.dpc.list_forecasters(req)
+            forecaster = resp.forecasters[0]
+        else:
+            forecaster = dp.Forecaster(
+                forecaster_name=forecaster_name,
+                forecaster_version=forecaster_version,
+            )
+
+        req = dp.GetForecastAtTimestampRequest(
+            location_uuids=[str(uuid) for uuid in location_uuids],
+            energy_source=energy_type_map[energy_type],
+            timestamp_utc=snapshot_timestamp_utc,
+            forecaster=forecaster,
+        )
+        resp = await self.dpc.get_forecast_at_timestamp(req)
+
+        out: list[models.PredictedGenerationValue] = [
+            models.PredictedGenerationValue(
+                power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
+                valid_timestamp=resp.timestamp_utc,
+                location_uuid=UUID(v.location_uuid),
+                capacity_kilowatts=v.effective_capacity_watts / 1000,
+                forecaster_name=forecaster.forecaster_name,
+                forecaster_version=forecaster.forecaster_version,
+            )
+            for v in resp.values
+        ]
+
+        return out
+
+    @override
+    async def get_locations(
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        # For the moment, recreate the auth behaviour of the old routes in here.
+        # This should be delegated to the scoping on the API endpoints themselves later.
+        match energy_type, location_type:
+            case models.EnergyType.WIND, models.LocationType.REGION:
+                # get_wind_regions had no auth
+                oauth_id: str | None = None
+            case models.EnergyType.SOLAR, models.LocationType.NATION | models.LocationType.GSP:
+                # get_solar_regions had no auth
+                oauth_id = None
+            case _, models.LocationType.SUBSTATION:
+                # get substations had optional auth (?) (temporary while we onboard?)
+                oauth_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+            case _, models.LocationType.SITE:
+                # get_sites had auth
+                oauth_id = get_oauth_id_from_sub(authdata["sub"])
+            case _:
+                oauth_id = get_oauth_id_from_sub(authdata["sub"])
+
+        req = dp.ListLocationsRequest(
+            energy_source_filter=energy_type_map[energy_type],
+            location_type_filter=location_type_map[location_type],
+            user_oauth_id_filter=oauth_id,
+            location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
+        )
+        resp = await self.dpc.list_locations(req)
+        out: list[models.Location] = [
+            models.Location(
+                uuid=loc.location_uuid,
+                name=loc.location_name,
+                capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
+                latitude=loc.latlng.latitude,
+                longitude=loc.latlng.longitude,
+                metadata=struct_to_dict(loc.metadata),
+            )
+            for loc in resp.locations
+        ]
+        return out
+
+    @override
+    async def put_location(
+        self,
+        location: models.Location,
+        location_type: models.LocationType,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+    ) -> models.Location:
+        raise NotImplementedError("Data platform backend doesn't yet support location writing.")
+
+    @override
+    async def log_api_call(
+        self,
+        url: str,
+        authdata: dict[str, str],
+    ) -> None:
+        log.warning("Data Platform client does not support logging API calls to DB.")
+        pass
 
     async def _check_user_access(
         self,
@@ -423,75 +348,68 @@ class Client(models.DatabaseInterface):
         energy_source: dp.EnergySource,
         location_type: dp.LocationType,
         oauth_id: str,
-    ) -> bool:
+    ) -> models.Location:
         """Check if a user has access to a given location."""
         req = dp.ListLocationsRequest(
-            location_uuids_filter=[location_uuid],
+            location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_source,
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dp_client.list_locations(req)
+        resp = await self.dpc.list_locations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
             )
-        return True
+        loc = resp.locations[0]
 
-
-    @override
-    async def get_forecast_for_multiple_locations_one_timestamp(
-        self,
-        location_uuids: dict[str, int],
-        authdata: dict[str, str],
-        datetime_utc: dt.datetime,
-        model_name: str = "blend",
-    ) -> list[models.OneDatetimeManyForecastValues]:
-        """Get a forecast for multiple sites.
-
-        Args:
-            location_uuids: A list of location UUIDs.
-            authdata: Authentication data for the user.
-            datetime_utc: The datetime for the prediction window
-            model_name: The name of the forecasting model to use. Default is None.
-
-        Returns:
-            A list of OneDatetimeManyForecastValues objects.
-        """
-        # get forecasters"
-        req = dp.ListForecastersRequest(forecaster_names_filter=[model_name],
-                                      latest_versions_only=True)
-        resp = await self.dp_client.list_forecasters(req)
-        forecaster = resp.forecasters[0]
-
-
-        req = dp.GetForecastAtTimestampRequest(
-            location_uuids=location_uuids,
-            energy_source=dp.EnergySource.SOLAR,
-            timestamp_utc=datetime_utc,
-            forecaster=forecaster,
+        return models.Location(
+            uuid=loc.location_uuid,
+            name=loc.location_name,
+            capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
+            latitude=loc.latlng.latitude,
+            longitude=loc.latlng.longitude,
+            metadata=struct_to_dict(loc.metadata),
         )
-        resp = await self.dp_client.get_forecast_at_timestamp(req)
 
 
-        forecasts_one_timestamp = models.OneDatetimeManyForecastValues(
-            datetime_utc=resp.timestamp_utc,
-            forecast_values_kW={
-                forecast.location_uuid: round(
-                    forecast.value_fraction * forecast.effective_capacity_watts / 10**3, 2)
-                for forecast in resp.values
-            })
+# @override
+# async def get_latest_forecast(
+#     self,
+#     authdata: dict[str, str],
+#     location_uuid: UUID,
+#     forecaster_name: str | None = None,
+# ) -> models.Forecast:
+#     """Get the latest forecast for a site."""
+#     # get forecasters
+#     request = dp.GetLatestForecastsRequest(
+#         location_uuid=str(location_uuid),
+#         energy_source=dp.EnergySource.SOLAR,
+#     )
+#     response = await self.dp.get_latest_forecasts(request)
 
-        # sort by dictionary by keys
-        forecasts_one_timestamp.forecast_values_kW =\
-            dict(sorted(forecasts_one_timestamp.forecast_values_kW.items()))
+#     # reduce to forecaster_name
+#     if forecaster_name is not None:
+#         response.forecasts = [
+#             f for f in response.forecasts
+#             if f.forecaster.forecaster_name == forecaster_name
+#         ]
+
+#     # shouldnt need this but just incase
+#     response.forecasts.sort(
+#         key=lambda f: f.created_timestamp_utc,
+#         reverse=True,
+#     )
+
+#     return models.Forecast(
+#         created_time=response.forecasts[0].created_timestamp_utc,
+#         name=response.forecasts[0].forecaster.forecaster_name,
+#         version=response.forecasts[0].forecaster.forecaster_version,
+#     )
 
 
-        return forecasts_one_timestamp
-
-
-def struct_to_dict(values:Struct) -> dict:
+def struct_to_dict(values: Struct) -> dict:
     """Converts a Struct to a dictionary."""
     d = values.to_dict()
 

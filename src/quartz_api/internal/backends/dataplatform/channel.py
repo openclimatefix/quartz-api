@@ -27,6 +27,7 @@ class EnrichedChannel(Channel):
         metadata: _MetadataLike | None = None,
     ) -> Stream[_SendType, _RecvType]:
         from quartz_api.internal.middleware.trace import get_trace_id
+
         trace_id = get_trace_id()
         if metadata is not None:
             metadata["traceid"] = trace_id
@@ -39,4 +40,3 @@ class EnrichedChannel(Channel):
             deadline=deadline,
             metadata=metadata,
         )
-
