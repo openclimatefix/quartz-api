@@ -1,22 +1,25 @@
 """Domain models and interfaces for the application."""
 
 from .db_interface import (
-    DatabaseInterface,
-    DBClientDependency,
-    get_db_client,
+    EnergyType,
+    LocationType,
+    StorageInterface,
+    StorageClientDependency,
+    get_storage_client,
+    EnergyType,
+    LocationType,
+    PredictedGenerationValue,
+    ActualGenerationValue,
+    Location,
 )
 from .endpoint_types import (
-    ActualPower,
-    ForecastHorizon,
-    PredictedPower,
-    OneDatetimeManyForecastValues,
-    Region,
-    SiteProperties,
-    Site,
-    SubstationProperties,
-    Substation,
     TZDependency,
     get_timezone,
+    UTCDatetime,
+    UTCDatetimeDefaultWindowEnd,
+    UTCDatetimeDefaultNowWindowStart,
+    UTCDatetimeDefaultWindowStart,
+    ForecastHorizon,
 )
 
 

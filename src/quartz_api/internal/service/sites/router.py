@@ -1,39 +1,61 @@
 """The 'sites' FastAPI router object and associated routes logic."""
 
+import datetime as dt
 import pathlib
 from uuid import UUID
 
+import pandas as pd
 from fastapi import APIRouter
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from .endpoint_types import ActualPower, PredictedPower, Site, SiteProperties
+
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
+
+# TODO: I'm not sure if the inputs here are strictly solar only. If not, I need to find a way to
+# work out which type is desired.
+
 
 @router.get(
     "/sites",
     status_code=status.HTTP_200_OK,
 )
 async def get_sites(
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> list[models.Site]:
+) -> list[Site]:
     """Get sites."""
-    sites = await db.get_sites(authdata=auth)
-    return sites
+    sites = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+    )
+    out: list[Site] = [
+        Site(
+            site_uuid=s.uuid,
+            client_site_name=s.name,
+            latitude=s.latitude,
+            longitude=s.longitude,
+            capacity_kW=s.capacity_kilowatts,
+            orientation=s.metadata.get("orientation"),
+            tilt=s.metadata.get("tilt"),
+            metadata=s.metadata,
+        )
+        for s in sites
+    ]
+    return out
 
 
-@router.put(
-    "/sites/{site_uuid}",
-    response_model=models.SiteProperties,
-    status_code=status.HTTP_200_OK)
+@router.put("/sites/{site_uuid}", response_model=SiteProperties, status_code=status.HTTP_200_OK)
 async def put_site_info(
     site_uuid: UUID,
-    site_info: models.SiteProperties,
-    db: models.DBClientDependency,
+    site_info: SiteProperties,
+    db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> models.SiteProperties:
+) -> SiteProperties:
     """### This route allows a user to update site information for a single site.
 
     #### Parameters
@@ -42,8 +64,39 @@ async def put_site_info(
         You can update one or more fields at a time. For example :
         {"orientation": 170, "tilt": 35, "capacity_kw": 5}
     """
-    site = await db.put_site(site_uuid=site_uuid, site_properties=site_info, authdata=auth)
-    return site
+    loc: models.Location = models.Location(
+        uuid=site_uuid,
+        name=site_info.client_site_name,
+        capacity_kilowatts=site_info.capacity_kW,
+        latitude=site_info.latitude,
+        longitude=site_info.longitude,
+        metadata={
+            k: v
+            for k, v in {
+                "orientation": site_info.orientation,
+                "tilt": site_info.tilt,
+                "client_site_name": site_info.client_site_name,
+            }.items()
+            if v is not None
+        }
+        | site_info.metadata,
+    )
+    site = await db.put_location(
+        location=loc,
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+    )
+    out: SiteProperties = SiteProperties(
+        latitude=site.latitude,
+        longitude=site.longitude,
+        capacity_kW=site.capacity_kilowatts,
+        orientation=site.metadata.get("orientation"),
+        tilt=site.metadata.get("tilt"),
+        client_site_name=site.name,
+        metadata=site.metadata,
+    )
+    return out
 
 
 @router.get(
@@ -52,12 +105,33 @@ async def put_site_info(
 )
 async def get_forecast(
     site_uuid: UUID,
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> list[models.PredictedPower]:
+    tz: models.TZDependency,
+) -> list[PredictedPower]:
     """Get forecast of a site."""
-    forecast = await db.get_site_forecast(site_uuid=site_uuid, authdata=auth)
-    return forecast
+    pgvs = await db.get_predicted_generation(
+        location_uuid=site_uuid,
+        window_start=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() - dt.timedelta(days=2),
+        window_end=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() + dt.timedelta(days=2),
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+    )
+    out: list[PredictedPower] = [
+        PredictedPower(
+            power_kW=v.power_kilowatts,
+            time=v.valid_timestamp.astimezone(tz=tz),
+            created_time=v.created_timestamp.astimezone(tz=tz),
+            initialization_timestamp_utc=v.init_timestamp.astimezone(tz=tz),
+            forecaster_name=v.forecaster_name,
+            forecaster_version=v.forecaster_version,
+            plevel_kW=v.plevels_kilowatts,
+        )
+        for v in pgvs
+    ]
+
+    return out
 
 
 @router.get(
@@ -66,12 +140,28 @@ async def get_forecast(
 )
 async def get_generation(
     site_uuid: UUID,
-    db: models.DBClientDependency,
+    db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> list[models.ActualPower]:
+    tz: models.TZDependency,
+) -> list[ActualPower]:
     """Get get generation fo a site."""
-    generation = await db.get_site_generation(site_uuid=site_uuid, authdata=auth)
-    return generation
+    agvs = await db.get_actual_generation(
+        location_uuid=site_uuid,
+        window_start=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() - dt.timedelta(days=2),
+        window_end=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() + dt.timedelta(days=2),
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+    )
+    out: list[ActualPower] = [
+        ActualPower(
+            PowerKW=v.power_kilowatts,
+            Time=v.valid_timestamp.astimezone(tz=tz),
+            location_uuid=str(v.location_uuid),
+        )
+        for v in agvs
+    ]
+    return out
 
 
 @router.post(
@@ -80,8 +170,8 @@ async def get_generation(
 )
 async def post_generation(
     site_uuid: UUID,
-    generation: list[models.ActualPower],
-    db: models.DBClientDependency,
+    generation: list[ActualPower],
+    db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> None:
     """Post observed generation data.
@@ -114,9 +204,21 @@ async def post_generation(
     **Note**: Users should wait up to 1 day(s) to start experiencing the full
     effects from using live PV data.
     """
-    await db.post_site_generation(
-        site_uuid=site_uuid,
-        generation=generation,
+    agvs: list[models.ActualGenerationValue] = [
+        models.ActualGenerationValue(
+            power_kilowatts=g.PowerKW,
+            valid_timestamp=g.Time,
+            location_uuid=site_uuid,
+            capacity_kilowatts=0,  # NOTE: This is ignored when writing
+            observer_name="ruvnl",  # TODO: presumably this could change based on user input
+        )
+        for g in generation
+    ]
+
+    await db.put_actual_generation(
+        location_uuid=site_uuid,
+        generation_values=agvs,
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.SITE,
         authdata=auth,
     )
-

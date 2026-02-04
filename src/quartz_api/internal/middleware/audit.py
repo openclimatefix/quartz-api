@@ -36,15 +36,18 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
 
         url = request.url.path
         if request.url.query:
-             url += f"?{request.url.query}"
+            url += f"?{request.url.query}"
 
         try:
-            db_client: models.DatabaseInterface = getattr(request.app.state, "db_instance", None)
+            db_client: models.DatabaseInterface | None = getattr(
+                request.app.state,
+                "db_instance",
+                None,
+            )
             if db_client is None:
                 raise RuntimeError("Database client not found in app state.")
-            await self.db_client.save_api_call_to_db(url=url, authdata=auth)
+            await db_client.save_api_call_to_db(url=url, authdata=auth)
         except Exception as e:
             logging.error(f"Failed to log request to DB: {e}")
 
         return response
-

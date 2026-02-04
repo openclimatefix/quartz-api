@@ -1,14 +1,12 @@
 import datetime as dt
 import unittest
 
-from quartz_api.internal.models import ActualPower
-
 from ._resample import resample_generation
+from .endpoint_types import ActualPower
 
 
 class TestResampleGeneration(unittest.TestCase):
     def test_resample_generation_1_period(self) -> None:
-
         values = [
             ActualPower(Time=dt.datetime.fromisoformat("2021-01-01T00:00:00Z"), PowerKW=1.0),
             ActualPower(Time=dt.datetime.fromisoformat("2021-01-01T00:08:00Z"), PowerKW=2.0),
@@ -20,9 +18,7 @@ class TestResampleGeneration(unittest.TestCase):
         self.assertEqual(values[0].Time, dt.datetime.fromisoformat("2021-01-01T00:00:00Z"))
         self.assertEqual(values[0].PowerKW, 1.5)
 
-
     def test_resample_generation_3_periods_with_gaps(self) -> None:
-
         values = [
             ActualPower(Time=dt.datetime.fromisoformat("2021-01-01T00:00:00Z"), PowerKW=1.0),
             ActualPower(Time=dt.datetime.fromisoformat("2021-01-01T00:08:00Z"), PowerKW=2.0),

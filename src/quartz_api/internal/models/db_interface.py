@@ -1,176 +1,192 @@
 """Defines the domain interface for interacting with a backend."""
 
 import abc
-from datetime import datetime
+import datetime as dt
+from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-
-from .endpoint_types import (
-    ActualPower,
-    ForecastHorizon,
-    OneDatetimeManyForecastValues,
-    PredictedPower,
-    Region,
-    Site,
-    SiteProperties,
-    Substation,
-    SubstationProperties,
-)
+from pydantic import BaseModel, Field
 
 
-class DatabaseInterface(abc.ABC):
-    """Defines the interface for a generic database connection."""
+class EnergyType(Enum):
+    """Enum for different types of energy generation."""
+
+    SOLAR = 1
+    WIND = 2
+
+
+class LocationType(Enum):
+    """Enum for different types of locations."""
+
+    SITE = 1
+    SUBSTATION = 2
+    GSP = 3
+    REGION = 4
+    NATION = 5
+
+
+class GenerationValue(BaseModel):
+    """Base class for generation values."""
+
+    power_kilowatts: float
+    valid_timestamp: dt.datetime
+    location_uuid: UUID
+    capacity_kilowatts: float
+
+
+class PredictedGenerationValue(GenerationValue):
+    """Predicted generation value with additional metadata."""
+
+    created_timestamp: dt.datetime | None = None
+    init_timestamp: dt.datetime | None = None
+    forecaster_name: str
+    forecaster_version: str
+    """Dictionary of probabilistic levels for the forecast.
+
+    Keys are the level names (e.g., 'p10', 'p50', 'p90'),
+    and values are the corresponding power values in kW."""
+    plevels_kilowatts: dict[str, float] = Field(default_factory=dict)
+
+
+class ActualGenerationValue(GenerationValue):
+    """Generation value recorded by an observer."""
+
+    observer_name: str
+
+
+class Location(BaseModel):
+    """A location that has tracked or forecasted generation data."""
+
+    uuid: UUID
+    name: str
+    latitude: float
+    longitude: float
+    capacity_kilowatts: float
+    metadata: dict[str, str | int | float] = Field(default_factory=dict)
+
+
+class StorageInterface(abc.ABC):
+    """Defines the interface for a generic storage system."""
 
     @abc.abstractmethod
-    async def get_predicted_solar_power_production_for_location(
+    async def get_predicted_generation(
         self,
-        location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-        model_name: str | None = None,
-    ) -> list[PredictedPower]:
-        """Returns a list of predicted solar power production for a given location.
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: EnergyType,
+        location_type: LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[PredictedGenerationValue]:
+        """Return a list of predicted power values for a given location and time window.
 
-        Args:
-            location: The location for which to fetch predicted power.
-            forecast_horizon: The forecast horizon to use.
-            forecast_horizon_minutes: The forecast horizon in minutes to use.
-            smooth_flag: Whether to smooth the forecast data.
-            model_name: The name of the model to use for predictions.
+        The location_uuid parameter can also be a string to support legacy quartzdb routes that
+        expect a name, not a UUID.
         """
         pass
 
     @abc.abstractmethod
-    async def get_actual_solar_power_production_for_location(
+    async def put_predicted_generation(
         self,
-        location: str,
-        observer_name: str | None = None,
-    ) -> list[ActualPower]:
-        """Returns a list of actual solar power production for a given location."""
-        pass
-
-    @abc.abstractmethod
-    async def get_predicted_wind_power_production_for_location(
-        self,
-        location: str,
-        forecast_horizon: ForecastHorizon = ForecastHorizon.latest,
-        forecast_horizon_minutes: int | None = None,
-        smooth_flag: bool = True,
-        model_name: str | None = None,
-    ) -> list[PredictedPower]:
-        """Returns a list of predicted wind power production for a given location."""
-        pass
-
-    @abc.abstractmethod
-    async def get_actual_wind_power_production_for_location(
-        self,
-        location: str,
-        observer_name: str | None = None,
-    ) -> list[ActualPower]:
-        """Returns a list of actual wind power production for a given location."""
-        pass
-
-    @abc.abstractmethod
-    async def get_wind_regions(self) -> list[str]:
-        """Returns a list of wind regions."""
-        pass
-
-    @abc.abstractmethod
-    async def get_solar_regions(self) -> list[Region]:
-        """Returns a list of solar regions."""
-        pass
-
-    @abc.abstractmethod
-    async def save_api_call_to_db(self, url: str, authdata: dict[str, str]) -> None:
-        """Saves an API call to the database."""
-        pass
-
-    @abc.abstractmethod
-    async def get_sites(self, authdata: dict[str, str]) -> list[Site]:
-        """Get a list of sites."""
-        pass
-
-    @abc.abstractmethod
-    async def put_site(
-        self,
-        site_uuid: UUID,
-        site_properties: SiteProperties,
+        generation_values: list[PredictedGenerationValue],
+        location_type: LocationType,
+        energy_type: EnergyType,
         authdata: dict[str, str],
-    ) -> Site:
-        """Update site info."""
-        pass
-
-    @abc.abstractmethod
-    async def get_site_forecast(
-        self,
-        site_uuid: UUID,
-        authdata: dict[str, str],
-        model_name: str | None = None,
-    ) -> list[PredictedPower]:
-        """Get a forecast for a site."""
-        pass
-
-    @abc.abstractmethod
-    async def get_site_generation(
-        self, site_uuid: UUID, authdata: dict[str, str], observer_name: str | None = None,
-    ) -> list[ActualPower]:
-        """Get the generation for a site."""
-        pass
-
-    @abc.abstractmethod
-    async def post_site_generation(
-        self, site_uuid: UUID, generation: list[ActualPower], authdata: dict[str, str],
     ) -> None:
-        """Post the generation for a site."""
+        """Store predicted generation values in the storage system."""
         pass
 
     @abc.abstractmethod
-    async def get_substations(self, authdata: dict[str, str]) -> list[Substation]:
-        """Get a list of substations."""
-        pass
-
-    @abc.abstractmethod
-    async def get_substation_forecast(
+    async def get_actual_generation(
         self,
-        location_uuid: UUID,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: EnergyType,
+        location_type: LocationType,
         authdata: dict[str, str],
-    ) -> list[PredictedPower]:
-        """Get forecasted generation values of a substation."""
+        observer_name: str | None = None,
+        created_cutoff: dt.datetime | None = None,
+    ) -> list[ActualGenerationValue]:
+        """Return a list of predicted power values for a given location and time window.
+
+        The location_uuid parameter can also be a string to support legacy quartzdb routes that
+        expect a name, not a UUID.
+        """
         pass
 
     @abc.abstractmethod
-    async def get_substation(
+    async def put_actual_generation(
         self,
-        location_uuid: UUID,
+        generation_values: list[ActualGenerationValue],
+        energy_type: EnergyType,
+        location_type: LocationType,
         authdata: dict[str, str],
-    ) -> SubstationProperties:
-        """Get substation metadata."""
+    ) -> None:
+        """Store actual generation values in the storage system."""
         pass
 
     @abc.abstractmethod
-    async def get_forecast_for_multiple_locations_one_timestamp(
+    async def get_predicted_generation_snapshot(
         self,
-        location_uuids_to_location_ids: dict[str, int],
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: EnergyType,
         authdata: dict[str, str],
-        datetime_utc: datetime | None = None,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[PredictedGenerationValue]:
+        """Return forecasted generation values for multiple locations at a given timestamp."""
+        pass
 
-    ) -> OneDatetimeManyForecastValues:
-        """Get a forecast for multiple sites."""
+    @abc.abstractmethod
+    async def get_locations(
+        self,
+        energy_type: EnergyType,
+        location_type: LocationType,
+        authdata: dict[str, str],
+        location_uuid: UUID | None = None,
+    ) -> list[Location]:
+        """Return a list of locations for a given energy and location type."""
+        pass
+
+    @abc.abstractmethod
+    async def put_location(
+        self,
+        location: Location,
+        location_type: LocationType,
+        energy_type: EnergyType,
+        authdata: dict[str, str],
+    ) -> Location:
+        """Store or update a location in the storage system."""
+        pass
+
+    @abc.abstractmethod
+    async def log_api_call(
+        self,
+        url: str,
+        authdata: dict[str, str],
+    ) -> None:
+        """Log an API call to the storage system."""
         pass
 
 
-def get_db_client() -> DatabaseInterface:
-    """Get the client implementation.
+def get_storage_client() -> StorageInterface:
+    """Get the storage client implementation.
 
     Note: This should be overridden via FastAPI's dependency injection system with an actual
-    database client implementation.
+    storage client implementation.
     """
     raise HTTPException(
         status_code=401,
-        detail="No database client implementation has been provided.",
+        detail="No storage client implementation has been provided.",
     )
 
-DBClientDependency = Annotated[DatabaseInterface, Depends(get_db_client)]
+
+StorageClientDependency = Annotated[StorageInterface, Depends(get_storage_client)]

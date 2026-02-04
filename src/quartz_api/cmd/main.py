@@ -5,9 +5,10 @@ import importlib
 import importlib.metadata
 import logging
 import pathlib
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import sentry_sdk
 import uvicorn
@@ -16,6 +17,8 @@ from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
@@ -23,10 +26,18 @@ from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from quartz_api.internal import models, service
-from quartz_api.internal.backends import DataPlatformClient, DummyClient, QuartzClient
+from quartz_api.internal.backends import (
+    DataPlatformStorage,
+    DummyStorage,
+    EnrichedChannel,
+    QuartzStorage,
+)
 from quartz_api.internal.middleware import audit, auth, sentry, trace
 
 from ._logging import setup_json_logging
+
+if TYPE_CHECKING:
+    from grpclib.client import Channel
 
 log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
@@ -69,30 +80,30 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
 
 
 @asynccontextmanager
-async def _lifespan(server: FastAPI, conf: ConfigTree) -> Generator[None]:
+async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     """Configure FastAPI app instance with startup and shutdown events."""
-    db_instance: models.DatabaseInterface | None = None
+    storage: models.StorageInterface | None = None
     grpc_channel: Channel | None = None
 
     match conf.get_string("backend.source"):
         case "quartzdb":
-            db_instance = QuartzClient(
+            storage = QuartzStorage(
                 database_url=conf.get_string("backend.quartzdb.database_url"),
             )
         case "dummydb":
-            db_instance = DummyClient()
+            storage = DummyStorage()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            grpc_channel = Channel(
+            grpc_channel = EnrichedChannel(
                 host=conf.get_string("backend.dataplatform.host"),
                 port=conf.get_int("backend.dataplatform.port"),
             )
             client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
-            db_instance = DataPlatformClient.from_dp(dp_client=client)
+            storage = DataPlatformStorage.from_dp(dp_client=client)
         case _ as backend_type:
             raise ValueError(f"Unknown backend: {backend_type}")
 
-    server.dependency_overrides[models.get_db_client] = lambda: db_instance
+    server.dependency_overrides[models.get_storage_client] = lambda: storage
 
     yield
 
@@ -120,6 +131,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         },
     )
 
+    FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
+
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
 
@@ -140,7 +153,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
-
         sentry_sdk.init(
             dsn=conf.get_string("sentry.dsn"),
             environment=conf.get_string("sentry.environment"),
@@ -162,7 +174,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
         except ModuleNotFoundError as e:
             raise OSError(f"No such router router '{r}'") from e
-
 
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)
@@ -199,10 +210,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
-
-
     timezone: str = conf.get_string("api.timezone")
-    server.dependency_overrides[models.get_timezone] = lambda: timezone
+    server.dependency_overrides[models.get_timezone] = lambda: ZoneInfo(key=timezone)
 
     # Add middlewares
     server.add_middleware(
@@ -231,7 +240,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             capture_logs=True,
         )
 
-
     return server
 
 
@@ -254,4 +262,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-

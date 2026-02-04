@@ -4,13 +4,15 @@ import datetime as dt
 import math
 from collections import defaultdict
 
-from quartz_api.internal import models
+import pandas as pd
+
+from .endpoint_types import ActualPower, PredictedPower
 
 
 def resample_generation(
-    values: list[models.ActualPower],
+    values: list[ActualPower],
     interval_minutes: int,
-) -> list[models.ActualPower]:
+) -> list[ActualPower]:
     """Perform binning on the generation data, with a specified bin width."""
     if not values:
         return []
@@ -24,13 +26,56 @@ def resample_generation(
         bucket_time = dt.datetime.fromtimestamp(floored_ts, tz=value.Time.tzinfo)
         buckets[bucket_time].append(value.PowerKW)
 
-    results: list[models.ActualPower] = []
+    results: list[ActualPower] = []
     for bucket_time in sorted(buckets.keys()):
         avg_power = sum(buckets[bucket_time]) / len(buckets[bucket_time])
         if avg_power < 0:
             avg_power = 0.0
 
-        results.append(models.ActualPower(Time=bucket_time, PowerKW=avg_power))
+        results.append(
+            ActualPower(
+                Time=bucket_time,
+                PowerKW=avg_power,
+                location_uuid=values[0].location_uuid,
+            ),
+        )
 
     return results
 
+
+def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
+    """Smooths the forecast values."""
+    # convert to dataframe
+    df = pd.DataFrame(
+        {
+            "time": [value.time for value in values],
+            "power_kW": [value.power_kW for value in values],
+        },
+    )
+
+    # smooth and make sure it is symmetrical
+    df = df.set_index("time")
+    # try to do this in one step, but couldnt, center=True and closed='both' didnt work
+    df = (df.rolling(4, min_periods=1).mean() + df[::-1].rolling(4, min_periods=1).mean()) / 2.0
+
+    # convert to ints
+    df["power_kW"] = df["power_kW"].astype(int)
+    df["created_time"] = [value.created_time for value in values]
+    df["initialization_timestamp_utc"] = [value.initialization_timestamp_utc for value in values]
+    df["forecaster_name"] = [value.forecaster_name for value in values]
+    df["forecaster_version"] = [value.forecaster_version for value in values]
+    df["plevel_kW"] = [value.plevel_kW for value in values]
+
+    # convert back to list of PredictedPower
+    return [
+        PredictedPower(
+            time=index,
+            power_kW=row.power_kW,
+            created_time=row.created_time,
+            initialization_timestamp_utc=row.initialization_timestamp_utc,
+            forecaster_name=row.forecaster_name,
+            forecaster_version=row.forecaster_version,
+            plevel_kW=row.plevel_kW,
+        )
+        for index, row in df.iterrows()
+    ]
