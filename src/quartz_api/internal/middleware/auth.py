@@ -4,6 +4,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
+from apitally.fastapi import set_consumer
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer
 from fastapi_plugin.fast_api_client import Auth0FastAPI
@@ -81,10 +82,13 @@ class AuthClient:
 
                 raise e
 
+            # set the apitally consumer, this means we can see who has used which routes
+            email = claims["https://openclimatefix.org/email"]
+            set_consumer(request,identifier=email)
+
             return claims
 
         return _proxy_dependency
-
 
 auth_instance = AuthClient()
 
