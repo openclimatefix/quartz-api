@@ -17,7 +17,6 @@ INTRADAY_LIMIT_HOURS = int(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 def limit_end_datetime_by_permissions(
     auth: AuthDependency,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
-    intraday_limit_hours: int = INTRADAY_LIMIT_HOURS,
 ) -> dt.datetime:
     """Ensures only users with required permissions can access intraday data."""
     permissions: str | list[str] = auth.get("permissions", [])
@@ -30,7 +29,7 @@ def limit_end_datetime_by_permissions(
         )
         return end_datetime_utc
 
-    intraday_max_allowed = dt.datetime.now(dt.UTC) + dt.timedelta(hours=intraday_limit_hours)
+    intraday_max_allowed = dt.datetime.now(dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
     if "read:uk-intraday" in permissions:
         return min(end_datetime_utc, intraday_max_allowed)
 
