@@ -399,9 +399,10 @@ class StorageClient(models.StorageInterface):
     async def get_locations(
         self,
         energy_type: models.EnergyType,
-        location_type: models.LocationType,
+        location_type: models.LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
     ) -> list[models.Location]:
         locations: list[models.Location] = []
         match energy_type, location_type, location_uuid:
