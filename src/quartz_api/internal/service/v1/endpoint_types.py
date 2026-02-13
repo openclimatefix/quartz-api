@@ -7,6 +7,26 @@ from uuid import UUID
 from fastapi import Path, Query
 from pydantic import BaseModel, Field
 
+from .country_config import COUNTRIES
+
+
+def _get_observer_sources() -> tuple[str, ...]:
+    """Extract all unique observer source names from country configs."""
+    sources = set()
+    for country_cfg in COUNTRIES.values():
+        for gen_type in country_cfg.generation_types:
+            sources.add(gen_type.name)
+    return tuple(sorted(sources))
+
+
+def _build_observer_pattern() -> str:
+    """Build regex pattern from available observer sources."""
+    sources = _get_observer_sources()
+    if not sources:
+        return "^$"  # fallback if empty
+    return f"^({'|'.join(sources)})$"
+
+
 ValidSource = Annotated[
     str,
     Path(
@@ -19,14 +39,22 @@ ValidObserver = Annotated[
     str,
     Query(
         description="The observer source name.",
-        pattern="^(pvlive_in_day|pvlive_day_after)$",
-        examples=["pvlive_in_day", "pvlive_day_after"],
+        pattern=_build_observer_pattern(),
+        examples=list(_get_observer_sources()),
+        enum=list(_get_observer_sources()),
     ),
 ]
 
 class Source(BaseModel):
     """An available forecast source (energy type)."""
 
+    name: str
+    label: str
+
+class GenerationType(BaseModel):
+    """A generation (observation) source definition for a country."""
+
+    source: str
     name: str
     label: str
 
