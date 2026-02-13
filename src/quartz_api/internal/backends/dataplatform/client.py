@@ -26,6 +26,11 @@ location_type_map: dict[models.LocationType, common_pb2.LocationType] = {
     models.LocationType.REGION: common_pb2.LocationType.LOCATION_TYPE_STATE,
     models.LocationType.NATION: common_pb2.LocationType.LOCATION_TYPE_NATION,
     models.LocationType.SUBSTATION: common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
+    models.LocationType.DNO: common_pb2.LocationType.DNO,
+}
+
+dp_to_internal_location_type: dict[common_pb2.LocationType, models.LocationType] = {
+    v: k for k, v in location_type_map.items()
 }
 
 
@@ -373,9 +378,10 @@ class StorageClient(models.StorageInterface):
     async def get_locations(
         self,
         energy_type: models.EnergyType,
-        location_type: models.LocationType,
+        location_type: models.LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
     ) -> list[models.Location]:
         # For the moment, recreate the auth behaviour of the old routes in here.
         # This should be delegated to the scoping on the API endpoints themselves later.
@@ -392,14 +398,22 @@ class StorageClient(models.StorageInterface):
             case _, models.LocationType.SITE:
                 # get_sites had auth
                 oauth_id = get_oauth_id_from_sub(authdata["sub"])
+            case _, None:
+                # No location type filter — used by v1 API for listing all region types
+                oauth_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
             case _:
                 oauth_id = get_oauth_id_from_sub(authdata["sub"])
 
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=energy_type_map[energy_type],
-            location_type_filter=location_type_map[location_type],
+            location_type_filter=location_type_map[location_type]
+            if location_type is not None
+            else None,
             user_oauth_id_filter=oauth_id,
             location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
+            enclosing_location_uuid_filter=str(enclosing_location_uuid)
+            if enclosing_location_uuid is not None
+            else None,
         )
         resp = await self.dpc.ListLocations(req)
 
@@ -411,6 +425,7 @@ class StorageClient(models.StorageInterface):
                     capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                     latitude=loc.latlng.latitude,
                     longitude=loc.latlng.longitude,
+                    location_type=dp_to_internal_location_type.get(loc.location_type),
                     metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},
                 )
                 for loc in resp.locations

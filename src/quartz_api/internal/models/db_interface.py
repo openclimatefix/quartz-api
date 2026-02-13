@@ -25,6 +25,7 @@ class LocationType(Enum):
     GSP = 3
     REGION = 4
     NATION = 5
+    DNO = 6
 
 
 @dataclasses.dataclass(slots=True)
@@ -71,6 +72,7 @@ class Location:
     latitude: float
     longitude: float
     capacity_kilowatts: float
+    location_type: LocationType | None = None
     metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 
@@ -168,11 +170,17 @@ class StorageInterface(abc.ABC):
     async def get_locations(
         self,
         energy_type: EnergyType,
-        location_type: LocationType,
+        location_type: LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
     ) -> list[Location]:
-        """Return a list of locations for a given energy and location type."""
+        """Return a list of locations for a given energy and location type.
+
+        If location_type is None, locations of all types are returned.
+        If enclosing_location_uuid is provided, only locations enclosed by that
+        location (i.e. children/descendants) are returned.
+        """
         pass
 
     @abc.abstractmethod
