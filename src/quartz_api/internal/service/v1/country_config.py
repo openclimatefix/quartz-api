@@ -21,11 +21,21 @@ class RegionTypeConfig:
 
 
 @dataclass(frozen=True)
+class GenerationType:
+    """Configuration for a generation source."""
+
+    source: str
+    name: str
+    label: str
+
+
+@dataclass(frozen=True)
 class CountryConfig:
     """Configuration for a country."""
 
     nation_name: str
     region_types: tuple[RegionTypeConfig, ...]
+    generation_types: tuple[GenerationType, ...] = ()
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -42,6 +52,13 @@ class CountryConfig:
         for rt in self.region_types:
             if rt.location_type == location_type:
                 return rt
+        return None
+
+    def get_generation_type(self, source: str) -> GenerationType | None:
+        """Look up a generation source by its user-facing name."""
+        for gt in self.generation_types:
+            if gt.source == source:
+                return gt
         return None
 
 
@@ -70,6 +87,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.DNO,
                 source_types=("solar",),
             ),
+        ),
+        generation_types=(
+            GenerationType(source="solar", name="pvlive_in_day", label="PV Live Estimated"),
+            GenerationType(source="solar", name="pvlive_day_after", label="PV Live Updated"),
         ),
     ),
     "NL": CountryConfig(

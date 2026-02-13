@@ -16,6 +16,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig
 from .endpoint_types import (
     ForecastValue,
+    GenerationType,
     GenerationValue,
     RegionDetail,
     RegionSummary,
@@ -184,6 +185,26 @@ async def get_region_types(
         for rt in cfg.region_types
     ]
 
+@router.get(
+    "/{source}/{country}/generation-sources",
+    status_code=status.HTTP_200_OK,
+)
+async def get_generation_sources(
+    source: ValidSource,
+    country: str,
+    auth: AuthDependency,
+) -> list[GenerationType]:
+    """List available generation types for a country."""
+    _ = _energy_type_for(source)
+    cfg = _country_config(country)
+
+    sources = []
+    for s in cfg.generation_types:
+        if s.source == source:
+            sources.append(s)
+
+    return sources
+
 
 @router.get(
     "/{source}/{country}/regions",
@@ -194,7 +215,7 @@ async def get_country_regions(
     country: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    type: str | None = Query(
+    region_type: str | None = Query(
         None,
         description="Filter by region type (e.g. 'gsp', 'dno', 'national').",
     ),
@@ -206,7 +227,7 @@ async def get_country_regions(
     """List regions for a country, optionally filtered by type or parent.
 
     - No filters: returns all regions of all configured types.
-    - ``?type=gsp``: only GSP regions.
+    - ``?region_type=gsp``: only GSP regions.
     - ``?parent_id={uuid}``: children of a specific region.
     """
     energy_type = _energy_type_for(source)
@@ -223,13 +244,13 @@ async def get_country_regions(
         )
         return [_location_to_detail(loc, cfg) for loc in locs]
 
-    if type is not None:
+    if region_type is not None:
         # Filter by specific region type
-        rt = cfg.get_region_type(type)
+        rt = cfg.get_region_type(region_type)
         if rt is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown region type '{type}' for {country.upper()}. "
+                detail=f"Unknown region type '{region_type}' for {country.upper()}. "
                 f"Available: {[r.type for r in cfg.region_types]}",
             )
         if rt.location_type == models.LocationType.NATION:
