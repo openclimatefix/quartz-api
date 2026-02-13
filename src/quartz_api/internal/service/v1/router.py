@@ -21,7 +21,8 @@ from .endpoint_types import (
     RegionSummary,
     RegionType,
     Source,
-    ValidSource, ValidObserver,
+    ValidObserver,
+    ValidSource,
 )
 
 router = APIRouter(prefix="/v1", tags=["v1"])
