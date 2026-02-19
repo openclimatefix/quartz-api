@@ -234,8 +234,9 @@ async def get_all_available_forecasts(
     gsp_ids = list(gsp_uuid_id_map.values())
 
     # We can zip these because the tasks will return in the same order as they were created
-    for gsp_id, predicted_generation_value in zip(gsp_ids, snapshot, strict=True):
+    for predicted_generation_value in snapshot:
 
+        gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
         grouped_data[start_datetime_utc][gsp_id] \
             = predicted_generation_value.power_kilowatts / 1000.0
 
