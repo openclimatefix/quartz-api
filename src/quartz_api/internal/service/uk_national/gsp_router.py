@@ -189,11 +189,6 @@ async def get_all_available_forecasts(
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
     ],
-    end_datetime_utc: Annotated[
-        dt.datetime,
-        Depends(limit_end_datetime_by_permissions),
-    ],
-    creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
 ) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
@@ -214,7 +209,6 @@ async def get_all_available_forecasts(
     - **historic**: boolean that defaults to `true`, returning yesterday's and
     today's forecasts for all GSPs
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
-    - **end_datetime_utc**: optional end datetime for the query. e.g '2023-08-12 14:00:00+00:00'
     """
     gsps = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
@@ -227,26 +221,12 @@ async def get_all_available_forecasts(
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
 
-    tasks = []
-    for gsp_uuid in gsp_uuid_id_map:
-        tasks.append(
-            asyncio.create_task(
-                db.get_predicted_generation(
-                    location_uuid=str(gsp_uuid),
-                    window_start=start_datetime_utc,
-                    window_end=end_datetime_utc,
-                    energy_type=models.EnergyType.SOLAR,
-                    location_type=models.LocationType.GSP,
-                    authdata={},
-                    created_cutoff=creation_utc_limit,
-                    forecast_horizon_minutes=0,
-                    forecaster_name="blend",
-                ),
-            ),
-        )
-
-    results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
-        *tasks, return_exceptions=True,
+    snapshot = await db.get_predicted_generation_snapshot(
+        location_uuids=gsp_uuid_id_map.keys(),
+        snapshot_timestamp_utc=start_datetime_utc,
+        energy_type=models.EnergyType.SOLAR,
+        forecaster_name="blend",
+        authdata={},
     )
 
     # reorganize results by timestamp
@@ -254,12 +234,10 @@ async def get_all_available_forecasts(
     gsp_ids = list(gsp_uuid_id_map.values())
 
     # We can zip these because the tasks will return in the same order as they were created
-    for gsp_id, gsp_timeseries in zip(gsp_ids, results, strict=True):
-        if isinstance(gsp_timeseries, Exception):
-            raise gsp_timeseries
+    for gsp_id, predicted_generation_value in zip(gsp_ids, snapshot, strict=True):
 
-        for point in gsp_timeseries:
-            grouped_data[point.valid_timestamp][gsp_id] = point.power_kilowatts / 1000.0
+        grouped_data[start_datetime_utc][gsp_id] \
+            = predicted_generation_value.power_kilowatts / 1000.0
 
     out: list[OneDatetimeManyForecastValuesMW] = [
         OneDatetimeManyForecastValuesMW(

@@ -175,7 +175,10 @@ async def test_gsp_forecast_all(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 10
+    assert len(data) == 1 # we only get one timestamp of data
+    assert "datetimeUtc" in data[0]
+    assert "forecastValues" in data[0]
+    assert len(data[0]["forecastValues"]) == 10
 
 
 # 4.4 Check GSP pvlive route
