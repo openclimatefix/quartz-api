@@ -124,7 +124,7 @@ class StorageClient(models.StorageInterface):
         # As such, limit data by default to data that was created before the start of the forecast
         # window. In either case, take into account the forecast horizon.
         if created_cutoff is None:
-            created_cutoff = window_start
+            created_cutoff = dt.datetime.now(tz=dt.UTC)
         created_cutoff -= dt.timedelta(minutes=forecast_horizon_minutes)
 
         req = dp.GetForecastAsTimeseriesRequest(
