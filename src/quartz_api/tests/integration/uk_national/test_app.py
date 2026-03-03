@@ -195,7 +195,7 @@ async def test_gsp_forecast_all_gsp_ids(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 48 # we only get X hours of data
+    assert len(data) == 10
     assert "datetimeUtc" in data[0]
     assert "forecastValues" in data[0]
     assert len(data[0]["forecastValues"]) == 3

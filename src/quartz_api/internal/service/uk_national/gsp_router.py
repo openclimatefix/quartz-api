@@ -189,7 +189,13 @@ async def get_all_available_forecasts(
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
     ],
+    end_datetime_utc: Annotated[
+        dt.datetime,
+        Depends(limit_end_datetime_by_permissions),
+    ],
+    creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
+
 ) -> list[OneDatetimeManyForecastValuesMW]:
     """### Get all forecasts for all GSPs.
 
@@ -221,24 +227,49 @@ async def get_all_available_forecasts(
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
 
-    snapshot = await db.get_predicted_generation_snapshot(
-        location_uuids=gsp_uuid_id_map.keys(),
-        snapshot_timestamp_utc=start_datetime_utc,
-        energy_type=models.EnergyType.SOLAR,
-        forecaster_name="blend",
-        authdata={},
-    )
+    if gsp_ids is None:
+        snapshot = await db.get_predicted_generation_snapshot(
+            location_uuids=gsp_uuid_id_map.keys(),
+            snapshot_timestamp_utc=start_datetime_utc,
+            energy_type=models.EnergyType.SOLAR,
+            forecaster_name="blend",
+            authdata={},
+        )
+        results = [snapshot]
+    else:
+        tasks = []
+        for gsp_uuid in gsp_uuid_id_map:
+            tasks.append(
+                asyncio.create_task(
+                    db.get_predicted_generation(
+                        location_uuid=str(gsp_uuid),
+                        window_start=start_datetime_utc,
+                        window_end=end_datetime_utc,
+                        energy_type=models.EnergyType.SOLAR,
+                        location_type=models.LocationType.GSP,
+                        authdata={},
+                        created_cutoff=creation_utc_limit,
+                        forecast_horizon_minutes=0,
+                        forecaster_name="blend",
+                    ),
+                ),
+            )
+
+        results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
+            *tasks, return_exceptions=True,
+        )
 
     # reorganize results by timestamp
     grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
     gsp_ids = list(gsp_uuid_id_map.values())
 
     # We can zip these because the tasks will return in the same order as they were created
-    for predicted_generation_value in snapshot:
+    for snapshot in results:
+        for predicted_generation_value in snapshot:
 
-        gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
-        grouped_data[start_datetime_utc][gsp_id] \
-            = predicted_generation_value.power_kilowatts / 1000.0
+            gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
+            grouped_data[predicted_generation_value.valid_timestamp][gsp_id] \
+                = predicted_generation_value.power_kilowatts / 1000.0
 
     out: list[OneDatetimeManyForecastValuesMW] = [
         OneDatetimeManyForecastValuesMW(
