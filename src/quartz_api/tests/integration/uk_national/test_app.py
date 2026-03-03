@@ -181,6 +181,26 @@ async def test_gsp_forecast_all(
     assert len(data[0]["forecastValues"]) == 10
 
 
+# 4.3.1 Check GSP forecast route,
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_gsp_ids(
+    api_client,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test a sample endpoint for UK National forecast data."""
+
+    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 48 # we only get X hours of data
+    assert "datetimeUtc" in data[0]
+    assert "forecastValues" in data[0]
+    assert len(data[0]["forecastValues"]) == 3
+
+
 # 4.4 Check GSP pvlive route
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_pvlive_all(
