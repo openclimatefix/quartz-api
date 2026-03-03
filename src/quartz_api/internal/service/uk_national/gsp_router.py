@@ -227,6 +227,8 @@ async def get_all_available_forecasts(
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
 
+    # if gsp ids are not set, then we use snapshot method, which gets all gsps for one timestamp
+    # if gsp_ids is set, then we loop over all gsp ids to get forecasts. The UI current needs this.
     if gsp_ids is None:
         snapshot = await db.get_predicted_generation_snapshot(
             location_uuids=gsp_uuid_id_map.keys(),
