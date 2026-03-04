@@ -61,6 +61,11 @@ class StorageClient(models.StorageInterface):
             # from my asking around at least
             forecast_horizon_minutes = 9 * 60
 
+        # Limit the creation time if not set
+        if created_cutoff is None:
+            created_cutoff = dt.datetime.now(tz=dt.UTC) - \
+                dt.timedelta(minutes=forecast_horizon_minutes)
+
         oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],

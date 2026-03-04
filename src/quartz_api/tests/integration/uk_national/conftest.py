@@ -174,9 +174,13 @@ async def make_national_forecast_values(
     """Make forecast values for the national location."""
     # get time now, rounded down by 30 mins
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
-    request = forecast(national_location.location_uuid, "blend_adjust", init_time_utc)
-    _ = await dp_client.create_forecast(request)
-
+    for i in range(15):
+        request = forecast(
+            national_location.location_uuid,
+            "blend_adjust",
+            init_time_utc - datetime.timedelta(minutes=i * 30),
+        )
+        _ = await dp_client.create_forecast(request)
 
 @pytest_asyncio.fixture(scope="session")
 async def make_gsp_forecast_values(
