@@ -61,6 +61,11 @@ class StorageClient(models.StorageInterface):
             # from my asking around at least
             forecast_horizon_minutes = 9 * 60
 
+        # Limit the creation time if not set
+        if created_cutoff is None:
+            created_cutoff = dt.datetime.now(tz=dt.UTC) - \
+                dt.timedelta(minutes=forecast_horizon_minutes)
+
         oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
@@ -119,13 +124,6 @@ class StorageClient(models.StorageInterface):
             )
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
-
-        # API users use created_cutoff to view the data as it was at a given point in time.
-        # As such, limit data by default to data that was created before the start of the forecast
-        # window. In either case, take into account the forecast horizon.
-        if created_cutoff is None:
-            created_cutoff = dt.datetime.now(tz=dt.UTC)
-        created_cutoff -= dt.timedelta(minutes=forecast_horizon_minutes)
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=str(location_uuid),

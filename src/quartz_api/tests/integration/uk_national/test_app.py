@@ -24,7 +24,7 @@ async def test_national_forecast(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 10
+    assert len(data) == 24
 
 
 # 2.2 Test the National Forecast, with horizon minutes
@@ -44,7 +44,7 @@ async def test_national_forecast_horizon_minutes(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 6
+    assert len(data) == 16
 
 
 # 2.2 Test the National Forecast, include metadata
@@ -63,7 +63,7 @@ async def test_national_forecast_include_metadata(
     assert isinstance(data, dict)
     assert "location" in data
     assert "forecastValues" in data
-    assert len(data["forecastValues"]) == 10
+    assert len(data["forecastValues"]) == 24
 
 
 # 2.3 Test the National Forecast, metadata and non-metadata values are the same
