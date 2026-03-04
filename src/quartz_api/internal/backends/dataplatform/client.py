@@ -120,6 +120,13 @@ class StorageClient(models.StorageInterface):
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
 
+        # API users use created_cutoff to view the data as it was at a given point in time.
+        # As such, limit data by default to data that was created before the start of the forecast
+        # window. In either case, take into account the forecast horizon.
+        if created_cutoff is None:
+            created_cutoff = window_start
+        created_cutoff -= dt.timedelta(minutes=forecast_horizon_minutes)
+
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=str(location_uuid),
             energy_source=energy_type_map[energy_type],
