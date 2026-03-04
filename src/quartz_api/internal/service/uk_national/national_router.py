@@ -133,14 +133,16 @@ async def get_national_forecast(
     else:
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
-        old = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
-        input_data = InputDataLastUpdated(gsp=old, nwp=old, pv=old, satellite=old)
+        input_data = format_metadata(pgvs[0].metadata)
+
+        # get version
+        version = pgvs[0].metadata.get("app_version", pgvs[0].forecaster_version)
 
         national_forecast = NationalForecast(
             location=Location.from_location(nation),
             model=MLModel(
                 name=pgvs[0].forecaster_name,
-                version=pgvs[0].forecaster_version,
+                version=version,
             ),
             forecast_creation_time=pgvs[0].created_timestamp,
             initialization_datetime_utc=pgvs[0].init_timestamp,
@@ -208,3 +210,16 @@ async def get_national_pvlive(
     ]
 
     return out
+
+
+def format_metadata(metadata: dict) -> InputDataLastUpdated:
+    """Format metadata dictionary into InputDataLastUpdated object."""
+    old = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
+    gsp = metadata.get("gsp_last_updated", old)
+    satellite = metadata.get("satellite_last_updated", old)
+
+    # the nwp keys could be nwp_ukv_last_updated, nwp_ecwmwf_last_updated, or nwp_last_updated
+    nwp = old
+    for nwp_key in [k for k in metadata if "nwp" in k]:
+        nwp = max([metadata.get(nwp_key, old)])
+    return InputDataLastUpdated(gsp=gsp, nwp=nwp, pv=old, satellite=satellite)

@@ -49,6 +49,9 @@ class PredictedGenerationValue(GenerationValue):
     and values are the corresponding power values in kW."""
     plevels_kilowatts: dict[str, float] = Field(default_factory=dict)
 
+    # metadata: Additional metadata about the forecast
+    metadata: dict[str, str | float] = Field(default_factory=dict)
+
 
 class ActualGenerationValue(GenerationValue):
     """Generation value recorded by an observer."""
