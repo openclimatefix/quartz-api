@@ -31,7 +31,7 @@ async def dp_client() -> dp.DataPlatformDataServiceStub:
     # we use a specific postgres image with postgis and pgpartman installed
     # TODO make a release of this, not using logging tag.
     with PostgresContainer(
-        "ghcr.io/openclimatefix/data-platform-pgdb:logging",
+        f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
         username="postgres",
         password="postgres",  # noqa S106
         dbname="postgres",
