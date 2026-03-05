@@ -133,10 +133,10 @@ async def get_national_forecast(
     else:
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
-        input_data = format_metadata(pgvs[0].metadata)
+        input_data = format_metadata(pgvs[-1].metadata)
 
         # get version
-        version = pgvs[0].metadata.get("app_version", pgvs[0].forecaster_version)
+        version = pgvs[-1].metadata.get("app_version", pgvs[-1].forecaster_version)
 
         national_forecast = NationalForecast(
             location=Location.from_location(nation),
