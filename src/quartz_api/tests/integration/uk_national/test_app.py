@@ -91,6 +91,7 @@ async def test_national_forecast_metadata_true_and_false(
             data[i]["expectedPowerGenerationMegawatts"]
             == data_metadata["forecastValues"][i]["expectedPowerGenerationMegawatts"]
         )
+    assert data_metadata["model"]["version"] == "1.2.3"
 
 
 # 3.1 Test the National PVlive route

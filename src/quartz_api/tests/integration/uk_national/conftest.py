@@ -163,6 +163,7 @@ def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.Creat
             )
             for i in range(10)
         ],
+        metadata=Struct(fields={"app_version": Value(string_value="1.2.3")}),
     )
 
 

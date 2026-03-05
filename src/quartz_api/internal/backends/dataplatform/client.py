@@ -166,6 +166,7 @@ class StorageClient(models.StorageInterface):
                 }
                 if "p10" in v.other_statistics_fractions and "p90" in v.other_statistics_fractions
                 else {},
+                metadata=struct_to_dict(v.metadata),
             )
             for v in resp.values
         ]
