@@ -10,6 +10,14 @@ from quartz_api.internal.models import LocationType
 
 
 @dataclass(frozen=True)
+class ForecastModel:
+    """A forecaster (model) available for a region type."""
+
+    name: str
+    label: str
+
+
+@dataclass(frozen=True)
 class RegionTypeConfig:
     """Configuration for a region type within a country."""
 
@@ -18,10 +26,11 @@ class RegionTypeConfig:
     level: int
     location_type: LocationType
     source_types: tuple[str, ...] = ()
+    forecast_models: tuple[ForecastModel, ...] = ()
 
 
 @dataclass(frozen=True)
-class GenerationType:
+class GenerationSource:
     """Configuration for a generation source."""
 
     source: str
@@ -35,7 +44,7 @@ class CountryConfig:
 
     nation_name: str
     region_types: tuple[RegionTypeConfig, ...]
-    generation_types: tuple[GenerationType, ...] = ()
+    generation_sources: tuple[GenerationSource, ...] = ()
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -54,13 +63,27 @@ class CountryConfig:
                 return rt
         return None
 
-    def get_generation_type(self, source: str) -> GenerationType | None:
+    def get_generation_source(self, source: str) -> GenerationSource | None:
         """Look up a generation source by its user-facing name."""
-        for gt in self.generation_types:
+        for gt in self.generation_sources:
             if gt.source == source:
                 return gt
         return None
 
+
+_BLEND_ONLY = (ForecastModel(name="blend", label="Blend"),)
+
+_NATIONAL_FORECAST_MODELS = (
+    ForecastModel(name="blend", label="Blend"),
+    ForecastModel(name="pvnet_intraday", label="PVNet Intraday"),
+    ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead"),
+    ForecastModel(name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)"),
+    ForecastModel(
+        name="pvnet_intraday_met_office_only",
+        label="PVNet Intraday (Met Office only)",
+    ),
+    ForecastModel(name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)"),
+)
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
@@ -72,6 +95,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=0,
                 location_type=LocationType.NATION,
                 source_types=("solar",),
+                forecast_models=_NATIONAL_FORECAST_MODELS,
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -79,6 +103,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=10,
                 location_type=LocationType.GSP,
                 source_types=("solar",),
+                forecast_models=_BLEND_ONLY,
             ),
             RegionTypeConfig(
                 type="dno",
@@ -86,11 +111,12 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=20,
                 location_type=LocationType.DNO,
                 source_types=("solar",),
+                forecast_models=_BLEND_ONLY,
             ),
         ),
-        generation_types=(
-            GenerationType(source="solar", name="pvlive_in_day", label="PV Live Estimated"),
-            GenerationType(source="solar", name="pvlive_day_after", label="PV Live Updated"),
+        generation_sources=(
+            GenerationSource(source="solar", name="pvlive_in_day", label="PV Live Estimated"),
+            GenerationSource(source="solar", name="pvlive_day_after", label="PV Live Updated"),
         ),
     ),
     "NL": CountryConfig(

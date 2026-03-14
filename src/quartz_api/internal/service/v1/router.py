@@ -15,10 +15,15 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig
 from .endpoint_types import (
+    ForecastModel,
+    ForecastResponse,
+    ForecastSnapshot,
     ForecastValue,
-    GenerationType,
+    GenerationResponse,
+    GenerationSource,
     GenerationValue,
     RegionDetail,
+    RegionForecastValue,
     RegionSummary,
     RegionType,
     Source,
@@ -181,7 +186,15 @@ async def get_region_types(
     _ = _energy_type_for(source)  # validate source
     cfg = _country_config(country)
     return [
-        RegionType(type=rt.type, label=rt.label, level=rt.level)
+        RegionType(
+            type=rt.type,
+            label=rt.label,
+            level=rt.level,
+            forecast_models=[
+                ForecastModel(name=f.name, label=f.label)
+                for f in rt.forecast_models
+            ],
+        )
         for rt in cfg.region_types
     ]
 
@@ -193,13 +206,13 @@ async def get_generation_sources(
     source: ValidSource,
     country: str,
     auth: AuthDependency,
-) -> list[GenerationType]:
+) -> list[GenerationSource]:
     """List available generation types for a country."""
     _ = _energy_type_for(source)
     cfg = _country_config(country)
 
     sources = []
-    for s in cfg.generation_types:
+    for s in cfg.generation_sources:
         if s.source == source:
             sources.append(s)
 
@@ -331,7 +344,25 @@ async def get_region_forecast(
     region_id: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> list[ForecastValue]:
+    start_utc: dt.datetime | None = Query(
+        None, description="Start of forecast window (UTC).",
+    ),
+    end_utc: dt.datetime | None = Query(
+        None, description="End of forecast window (UTC).",
+    ),
+    creation_limit_utc: dt.datetime | None = Query(
+        None,
+        description=(
+            "Only include forecasts created at or before this time (UTC). "
+            "Use to retrieve the forecast 'as it was' at a point in time."
+        ),
+    ),
+    forecast_horizon_minutes: int | None = Query(
+        None,
+        description="Forecast horizon filter in minutes.",
+    ),
+    model: str | None = Query(None, description="Forecast model name."),
+) -> ForecastResponse:
     """Get the forecast for a specific region."""
     energy_type = _energy_type_for(source)
     _country_config(country)  # validate country
@@ -354,25 +385,31 @@ async def get_region_forecast(
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     pgvs = await db.get_predicted_generation(
         location_uuid=region_id,
-        window_start=now - dt.timedelta(days=2),
-        window_end=now + dt.timedelta(days=2),
+        window_start=start_utc or now - dt.timedelta(days=2),
+        window_end=end_utc or now + dt.timedelta(days=2),
         energy_type=energy_type,
         location_type=location_type,
         authdata={}, # TODO: add auth when loosed on DP side
+        created_cutoff=creation_limit_utc,
+        forecast_horizon_minutes=forecast_horizon_minutes or 0,
+        forecaster_name=model,
     )
 
-    return [
-        ForecastValue(
-            target_time=v.valid_timestamp,
-            power_kW=v.power_kilowatts,
-            capacity_kW=v.capacity_kilowatts,
-            created_time=v.created_timestamp,
-            forecaster_name=v.forecaster_name,
-            forecaster_version=v.forecaster_version,
-            plevels_kW=v.plevels_kilowatts,
-        )
-        for v in pgvs
-    ]
+    first = pgvs[0] if pgvs else None
+    return ForecastResponse(
+        capacity_kW=first.capacity_kilowatts if first else 0.0,
+        model_name=first.forecaster_name if first else None,
+        model_version=first.forecaster_version if first else None,
+        created_time=first.created_timestamp if first else None,
+        values=[
+            ForecastValue(
+                time=v.valid_timestamp,
+                power_kW=v.power_kilowatts,
+                plevels_kW=v.plevels_kilowatts,
+            )
+            for v in pgvs
+        ],
+    )
 
 
 @router.get(
@@ -385,8 +422,16 @@ async def get_region_generation(
     region_id: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    observer: ValidObserver,
-) -> list[GenerationValue]:
+    observer: ValidObserver = "pvlive_in_day",
+    start_datetime_utc: dt.datetime | None = Query(
+        None,
+        description="Start of generation window (UTC).",
+    ),
+    end_datetime_utc: dt.datetime | None = Query(
+        None,
+        description="End of generation window (UTC).",
+    ),
+) -> GenerationResponse:
     """Get observed generation data for a specific region."""
     energy_type = _energy_type_for(source)
     _country_config(country)  # validate country
@@ -409,22 +454,26 @@ async def get_region_generation(
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(
         location_uuid=region_id,
-        window_start=now - dt.timedelta(days=5),
-        window_end=now,
+        window_start=start_datetime_utc or now - dt.timedelta(days=5),
+        window_end=end_datetime_utc or now,
         energy_type=energy_type,
         location_type=location_type,
         observer_name=observer,
         authdata={}, # TODO: add auth when loosed on DP side
     )
 
-    return [
-        GenerationValue(
-            time=v.valid_timestamp,
-            power_kW=v.power_kilowatts,
-            capacity_kW=v.capacity_kilowatts,
-        )
-        for v in agvs
-    ]
+    first = agvs[0] if agvs else None
+    return GenerationResponse(
+        capacity_kW=first.capacity_kilowatts if first else 0.0,
+        observer_name=observer,
+        values=[
+            GenerationValue(
+                time=v.valid_timestamp,
+                power_kW=v.power_kilowatts,
+            )
+            for v in agvs
+        ],
+    )
 
 
 @router.get(
@@ -436,7 +485,7 @@ async def get_forecasts_snapshot(
     country: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    forecaster: str = Query(None, description="Forecast model name."),
+    model: str | None = Query(None, description="Forecast model name."),
     region_type: str | None = Query(
         None,
         description="Filter regions by type (e.g. 'gsp').",
@@ -445,7 +494,7 @@ async def get_forecasts_snapshot(
         None,
         description="Forecast target timestamp (UTC).",
     ),
-) -> list[ForecastValue]:
+) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp.
 
     Used for retrieving the latest forecast snapshot across many regions.
@@ -488,21 +537,25 @@ async def get_forecasts_snapshot(
         location_uuids=[
             UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
         ],
-        forecaster_name=forecaster,
+        forecaster_name=model,
         snapshot_timestamp_utc=snapshot_time,
         energy_type=energy_type,
         authdata=auth,
     )
 
-    return [
-        ForecastValue(
-            target_time=v.valid_timestamp,
-            power_kW=v.power_kilowatts,
-            capacity_kW=v.capacity_kilowatts,
-            created_time=v.created_timestamp,
-            forecaster_name=v.forecaster_name,
-            forecaster_version=v.forecaster_version,
-            plevels_kW=v.plevels_kilowatts,
-        )
-        for v in snapshot
-    ]
+    first = snapshot[0] if snapshot else None
+    return ForecastSnapshot(
+        time=snapshot_time,
+        model_name=first.forecaster_name if first else None,
+        model_version=first.forecaster_version if first else None,
+        created_time=first.created_timestamp if first else None,
+        values=[
+            RegionForecastValue(
+                region_id=v.location_uuid,
+                capacity_kW=v.capacity_kilowatts,
+                power_kW=v.power_kilowatts,
+                plevels_kW=v.plevels_kilowatts,
+            )
+            for v in snapshot
+        ],
+    )
