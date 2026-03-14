@@ -15,9 +15,12 @@ from zoneinfo import ZoneInfo
 import grpc
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
-from fastapi import FastAPI, status
+from dp_sdk.ocf import dp
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
@@ -52,7 +55,7 @@ class GetHealthResponse(BaseModel):
     status: int
 
 
-def _custom_openapi(server: FastAPI) -> dict[str, Any]:
+def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
         return server.openapi_schema
@@ -75,6 +78,42 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
     openapi_schema["tags"] = server.openapi_tags
+
+    if auth_config:
+        domain = auth_config["domain"]
+        audience = auth_config["audience"]
+
+        # Replace the auto-generated HTTPBearer scheme with a proper OAuth2
+        # authorization code flow so Swagger UI shows the Auth0 redirect button.
+        components = openapi_schema.setdefault("components", {})
+        security_schemes = components.setdefault("securitySchemes", {})
+        security_schemes.pop("HTTPBearer", None)
+        security_schemes["oauth2"] = {
+            "type": "oauth2",
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": f"https://{domain}/authorize",
+                    "tokenUrl": f"https://{domain}/oauth/token",
+                    "scopes": {
+                        "openid": "OpenID",
+                        "profile": "Profile",
+                        "email": "Email",
+                    },
+                },
+            },
+        }
+
+        # Update per-operation security requirements to reference oauth2 instead
+        # of HTTPBearer so Swagger applies the token after the Auth0 redirect.
+        for path_item in openapi_schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                operation["security"] = [
+                    {"oauth2": []} if "HTTPBearer" in req else req
+                    for req in operation.get("security", [])
+                ]
+
     server.openapi_schema = openapi_schema
 
     return openapi_schema
@@ -155,11 +194,13 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 "description": "Routes providing information about the API.",
             },
         ],
-        docs_url="/swagger",
+        docs_url=None,  # served manually below so we can inject auto-authorize JS
         redoc_url=None,
+        swagger_ui_oauth2_redirect_url="/swagger/oauth2-redirect",
         swagger_ui_init_oauth={
             "usePkceWithAuthorizationCodeGrant": True,
         },
+        swagger_ui_parameters={"persistAuthorization": True},
     )
 
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
@@ -186,6 +227,43 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     def redoc_html() -> FileResponse:
         """Render ReDoc HTML."""
         return FileResponse(static_dir / "redoc.html")
+
+    @server.get("/swagger/oauth2-redirect", include_in_schema=False)
+    async def swagger_ui_redirect() -> HTMLResponse:
+        """OAuth2 redirect handler for Swagger UI token exchange."""
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @server.get("/swagger", include_in_schema=False)
+    async def swagger_ui(request: Request) -> HTMLResponse:  # noqa: ARG001
+        """Serve Swagger UI with auto-authorize JS injected."""
+        html = get_swagger_ui_html(
+            openapi_url=server.openapi_url,
+            title=server.title,
+            oauth2_redirect_url=server.swagger_ui_oauth2_redirect_url,
+            init_oauth=server.swagger_ui_init_oauth,
+            swagger_ui_parameters=server.swagger_ui_parameters,
+        )
+        # Inject a small script that auto-clicks through the Authorize modal so
+        # the user only needs to press the top-level "Authorize" button once.
+        auto_authorize_js = """
+<script>
+(function () {
+  document.addEventListener('click', (e) => {
+    // Only trigger on the top-level Authorize button, not buttons inside the modal.
+    if (!e.target.closest('.btn.authorize') || e.target.closest('.dialog-ux')) return;
+    setTimeout(() => {
+      const modal = document.querySelector('.dialog-ux');
+      if (!modal) return;
+      const btn = Array.from(modal.querySelectorAll('button'))
+        .find(b => b.textContent.trim() === 'Authorize');
+      if (btn) btn.click();
+    }, 50);
+  });
+})();
+</script>
+"""
+        patched = html.body.decode().replace("</body>", auto_authorize_js + "</body>")
+        return HTMLResponse(patched)
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
@@ -214,11 +292,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             except ModuleNotFoundError as e:
                 raise OSError(f"No such router router '{r}'") from e
 
-    # Customize the OpenAPI schema
-    server.openapi = lambda: _custom_openapi(server)
-
     # Store auth instance for middleware
     auth_instance = None
+    auth_openapi_config: dict[str, str] | None = None
 
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
@@ -243,11 +319,21 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 host_url=conf.get_string("api.host_url"),
                 client_id=conf.get_string("auth0.client_id"),
             )
-
             description += auth_description
+
+            auth_openapi_config = {"domain": domain, "audience": audience}
+            server.swagger_ui_init_oauth = {
+                "usePkceWithAuthorizationCodeGrant": True,
+                "clientId": conf.get_string("auth0.client_id"),
+                "scopes": "openid profile email",
+                "additionalQueryStringParams": {"audience": audience},
+            }
 
         case _:
             raise ValueError("Invalid Auth0 configuration")
+
+    # Customize the OpenAPI schema (after auth config is resolved)
+    server.openapi = lambda: _custom_openapi(server, auth_openapi_config)
 
     timezone: str = conf.get_string("api.timezone")
     server.dependency_overrides[models.get_timezone] = lambda: ZoneInfo(key=timezone)
