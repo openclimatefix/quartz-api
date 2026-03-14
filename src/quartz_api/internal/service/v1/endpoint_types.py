@@ -14,7 +14,7 @@ def _get_observer_sources() -> tuple[str, ...]:
     """Extract all unique observer source names from country configs."""
     sources = set()
     for country_cfg in COUNTRIES.values():
-        for gen_type in country_cfg.generation_types:
+        for gen_type in country_cfg.generation_sources:
             sources.add(gen_type.name)
     return tuple(sorted(sources))
 
@@ -45,13 +45,22 @@ ValidObserver = Annotated[
     ),
 ]
 
+
 class Source(BaseModel):
     """An available forecast source (energy type)."""
 
     name: str
     label: str
 
-class GenerationType(BaseModel):
+
+class ForecastModel(BaseModel):
+    """A forecaster (model) available for a region type."""
+
+    name: str
+    label: str
+
+
+class GenerationSource(BaseModel):
     """A generation (observation) source definition for a country."""
 
     source: str
@@ -65,6 +74,7 @@ class RegionType(BaseModel):
     type: str
     label: str
     level: int
+    forecast_models: list[ForecastModel] = []
 
 
 class RegionSummary(BaseModel):
@@ -87,13 +97,19 @@ class RegionDetail(RegionSummary):
 class ForecastValue(BaseModel):
     """A single forecast value at a point in time."""
 
-    target_time: dt.datetime
+    time: dt.datetime
     power_kW: float
-    capacity_kW: float
-    created_time: dt.datetime | None = None
-    forecaster_name: str | None = None
-    forecaster_version: str | None = None
     plevels_kW: dict[str, float] = Field(default_factory=dict)
+
+
+class ForecastResponse(BaseModel):
+    """Forecast time series for a region, with shared metadata."""
+
+    capacity_kW: float
+    model_name: str | None = None
+    model_version: str | None = None
+    created_time: dt.datetime | None = None
+    values: list[ForecastValue]
 
 
 class GenerationValue(BaseModel):
@@ -101,4 +117,30 @@ class GenerationValue(BaseModel):
 
     time: dt.datetime
     power_kW: float
+
+
+class GenerationResponse(BaseModel):
+    """Observed generation time series for a region, with shared metadata."""
+
     capacity_kW: float
+    observer_name: str | None = None
+    values: list[GenerationValue]
+
+
+class RegionForecastValue(BaseModel):
+    """A single forecast value for one region — used in snapshot responses."""
+
+    region_id: UUID
+    capacity_kW: float
+    power_kW: float
+    plevels_kW: dict[str, float] = Field(default_factory=dict)
+
+
+class ForecastSnapshot(BaseModel):
+    """Snapshot forecast across all regions at a single point in time."""
+
+    time: dt.datetime
+    model_name: str | None = None
+    model_version: str | None = None
+    created_time: dt.datetime | None = None
+    values: list[RegionForecastValue]
