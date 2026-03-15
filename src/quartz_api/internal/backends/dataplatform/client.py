@@ -296,7 +296,7 @@ class StorageClient(models.StorageInterface):
             raise ValueError("Forecaster name must be specified for data platform backend.")
         if forecaster_version is None:
             req = messages_pb2.ListForecastersRequest(
-                forecaster_names_filter=[forecaster_name],
+                forecaster_names_filter=[forecaster_name] if forecaster_name is not None else [],
                 latest_versions_only=True,
             )
             resp = await self.dpc.ListForecasters(req)
