@@ -485,7 +485,8 @@ async def get_forecasts_snapshot(
     country: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    model: str | None = Query(None, description="Forecast model name."),
+    model_name: str | None = Query(None, description="Forecast model name."),
+    model_version: str | None = Query(None, description="Forecast model version."),
     region_type: str | None = Query(
         None,
         description="Filter regions by type (e.g. 'gsp').",
@@ -529,15 +530,13 @@ async def get_forecasts_snapshot(
             else nation.uuid,
         )
 
-    if len(regions) == 0:
-        return []
-
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[
             UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
         ],
-        forecaster_name=model,
+        forecaster_name=model_name,
+        forecaster_version=model_version,
         snapshot_timestamp_utc=snapshot_time,
         energy_type=energy_type,
         authdata=auth,
