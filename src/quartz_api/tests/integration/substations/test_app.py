@@ -1,7 +1,7 @@
 """Integration tests for the substations routes."""
 
 import uuid
-
+import pandas as pd
 import pytest
 
 
@@ -182,12 +182,13 @@ async def test_get_all_substations_forecast_with_timestamp(
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test GET /substations/forecast with a specific datetime_utc parameter."""
-    import pandas as pd
 
     # Use the current time rounded to 30 minutes
-    timestamp = pd.Timestamp.utcnow().floor("30T").isoformat()
-
-    response = await api_client.get(f"/substations/forecast?datetime_utc={timestamp}")
+    timestamp = pd.Timestamp.utcnow().floor("30min").isoformat()
+    response = await api_client.get(
+        "/substations/forecast",
+        params={"datetime_utc": timestamp},
+    )
     assert response.status_code == 200
 
     data = response.json()
