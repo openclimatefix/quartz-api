@@ -1,6 +1,7 @@
 """Integration tests for the substations routes."""
 
 import uuid
+
 import pandas as pd
 import pytest
 
@@ -228,7 +229,7 @@ async def test_get_all_substations_forecast_values(
     assert response.status_code == 200
 
     data = response.json()
-    for substation_uuid, power_kw in data["forecast_values_kW"].items():
+    for _substation_uuid, power_kw in data["forecast_values_kW"].items():
         assert isinstance(power_kw, (int, float))
         # Power should be non-negative
         assert power_kw >= 0
