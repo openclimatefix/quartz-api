@@ -73,8 +73,8 @@ async def config() -> None:
         "src/quartz_api/cmd/server.conf",
     )
     # Clean up environment variable
-    del os.environ["ROUTERS"]
-    del os.environ["SOURCE"]
+    os.environ.pop("ROUTERS", None)
+    os.environ.pop("SOURCE", None)
 
 
 @pytest_asyncio.fixture(scope="session")

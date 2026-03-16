@@ -66,8 +66,8 @@ async def config():
     yield ConfigFactory.parse_file(
         "src/quartz_api/cmd/server.conf",
     )
-    del os.environ["ROUTERS"]
-    del os.environ["SOURCE"]
+    os.environ.pop("ROUTERS", None)
+    os.environ.pop("SOURCE", None)
 
 
 @pytest_asyncio.fixture(scope="session")
