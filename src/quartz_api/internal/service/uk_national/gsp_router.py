@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime as dt
+import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Annotated
 
@@ -29,7 +30,10 @@ from .time_utils import (
 if TYPE_CHECKING:
     from uuid import UUID
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(tags=["GSP"])
+
 
 
 @router.get(
@@ -78,10 +82,8 @@ async def get_forecasts_for_a_specific_gsp(
     )
     filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
     if len(filtered_gsps) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"GSP with gsp_id {gsp_id} not found",
-        )
+        log.warning(f"GSP with gsp_id {gsp_id} not found")
+        return []
     gsp = filtered_gsps[0]
 
     pgvs = await db.get_predicted_generation(
