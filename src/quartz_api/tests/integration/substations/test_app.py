@@ -159,7 +159,7 @@ async def test_get_substation_forecast_multiple(
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast(
     api_client,
-    substation_locations,
+    substation_locations,  # noqa arg001
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test GET /substations/forecast returns forecasts for all substations."""
@@ -179,7 +179,7 @@ async def test_get_all_substations_forecast(
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast_with_timestamp(
     api_client,
-    substation_locations,
+    substation_locations,  # noqa arg001
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test GET /substations/forecast with a specific datetime_utc parameter."""

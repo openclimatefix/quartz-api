@@ -22,7 +22,7 @@ from quartz_api.internal.backends import DataPlatformStorage
 
 
 @pytest_asyncio.fixture(scope="session")
-async def dp_client():
+async def dp_client() -> dp.DataPlatformDataServiceStub:
     """Fixture to spin up a PostgreSQL container for the entire test session.
 
     This fixture uses `testcontainers` to start a fresh PostgreSQL container and provides
@@ -58,7 +58,7 @@ async def dp_client():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def config():
+async def config() -> None:
     """Returns the configuration tree for the substations integration tests."""
     os.environ["ROUTERS"] = "substations"
     os.environ["SOURCE"] = "dataplatform"
@@ -71,7 +71,7 @@ async def config():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def api_client(config: ConfigTree, dp_client: dp.DataPlatformDataServiceStub):
+async def api_client(config: ConfigTree, dp_client: dp.DataPlatformDataServiceStub) -> AsyncClient:
     """Returns a TestClient for the FastAPI application."""
     app = _create_server(config)
 
