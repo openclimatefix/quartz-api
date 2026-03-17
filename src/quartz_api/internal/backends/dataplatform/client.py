@@ -7,6 +7,7 @@ from uuid import UUID
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from fastapi_cache.decorator import cache
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -284,6 +285,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
+    @cache(expire=300)
     async def get_locations(
         self,
         energy_type: models.EnergyType,

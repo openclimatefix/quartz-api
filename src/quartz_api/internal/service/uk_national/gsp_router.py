@@ -35,6 +35,20 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["GSP"])
 
 
+async def get_gsps(
+        db: models.StorageClientDependency, auth: AuthDependency) -> list[models.Location]:
+    """Function to get all solar gsps."""
+    gsps = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.GSP,
+        authdata=auth,
+    )
+
+    # the cache seems to return the list of pydantic elements as list of dicts
+    if isinstance(gsps[0], dict):
+        gsps = [models.Location(**gsp) for gsp in gsps]
+
+    return gsps
 
 @router.get(
     "/{gsp_id}/forecast",
@@ -75,11 +89,7 @@ async def get_forecasts_for_a_specific_gsp(
     returns the latest forecast made 60 minutes before the target time)
     """
     # get gsps
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
     if len(filtered_gsps) != 1:
         log.warning(f"GSP with gsp_id {gsp_id} not found")
@@ -144,11 +154,7 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
     if len(filtered_gsps) != 1:
         raise HTTPException(
@@ -218,11 +224,7 @@ async def get_all_available_forecasts(
     today's forecasts for all GSPs
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
@@ -318,12 +320,7 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
-
+    gsps = await get_gsps(db, auth)
     gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
