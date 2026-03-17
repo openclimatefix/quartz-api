@@ -93,7 +93,7 @@ class Location(EnhancedBaseModel):
         installed_capacity_mw = loc.capacity_kilowatts / 10**3
         full_name = loc.metadata.get("full_name", loc.name)
         gsp_name = loc.name
-        gsp_group = loc.metadata.get("gsp_group", "UNKNOWN")
+        gsp_group = loc.metadata.get("gsp_group", gsp_name)
         region_name = full_name
 
         return Location(
