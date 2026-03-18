@@ -39,7 +39,8 @@ async def get_system_details(
                                      location_type=models.LocationType.NATION,
                                      authdata={})
 
-    national = regions[0]
+    uk_national = [r for r in regions if r.name == "uk"]
+    national = uk_national[0]
     installed_capacity_mw = national.capacity_kilowatts / 1000
 
     location = Location(
