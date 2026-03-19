@@ -32,7 +32,7 @@ class EnrichedChannel(Channel):
         if metadata is None:
             metadata = {}
         metadata["traceid"] = trace_id
-        
+
         return super().request(
             name=name,
             cardinality=cardinality,
