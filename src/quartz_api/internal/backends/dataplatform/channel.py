@@ -29,8 +29,10 @@ class EnrichedChannel(Channel):
         from quartz_api.internal.middleware.trace import get_trace_id
 
         trace_id = get_trace_id()
-        if metadata is not None:
-            metadata["traceid"] = trace_id
+        if metadata is None:
+            metadata = {}
+        metadata["traceid"] = trace_id
+        
         return super().request(
             name=name,
             cardinality=cardinality,
