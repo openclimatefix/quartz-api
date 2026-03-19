@@ -43,7 +43,7 @@ async def get_system_details(
     national = uk_national[0]
     installed_capacity_mw = national.capacity_kilowatts / 1000
     if "capacity_no_degradation_kw" in national.metadata:
-        installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000_000
+        installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000
 
     location = Location(
         label="National-GB",
@@ -74,7 +74,7 @@ async def get_system_details(
 
         if "capacity_no_degradation_kw" in region.metadata:
             location.installed_capacity_mw \
-                = region.metadata["capacity_no_degradation_kw"] / 1_000_000
+                = region.metadata["capacity_no_degradation_kw"] / 1_000
 
         locations.append(location)
 
