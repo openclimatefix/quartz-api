@@ -73,7 +73,8 @@ async def get_system_details(
             return [location]
 
         if "capacity_no_degradation_watts" in region.metadata:
-            location.installed_capacity_mw = region.metadata["capacity_no_degradation_watts"] / 1_000_000
+            location.installed_capacity_mw \
+                = region.metadata["capacity_no_degradation_watts"] / 1_000_000
 
         locations.append(location)
 
