@@ -125,7 +125,7 @@ async def get_forecasts_for_a_specific_gsp(
             target_time=pp.valid_timestamp,
             expected_power_generation_megawatts=round(pp.power_kilowatts / 1000, 4),
             expected_power_generation_normalized=round(
-                pp.power_kilowatts / pp.capacity_kilowatts,
+                pp.power_kilowatts / pp.capacity_kilowatts if pp.capacity_kilowatts!=0 else 0,
                 4,
             ),
         )
