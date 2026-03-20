@@ -21,7 +21,7 @@ router = APIRouter(tags=["System"])
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("1/second")
+@limiter.limit("3600/hour")
 @cache(key_builder=key_builder)
 async def get_system_details(
     request: Request,  # noqa: ARG001

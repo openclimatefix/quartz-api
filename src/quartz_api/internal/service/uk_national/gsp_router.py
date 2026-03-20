@@ -66,7 +66,7 @@ async def get_gsps_cached(
     "/{gsp_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("1/second")
+@limiter.limit("3600/hour")
 @cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -142,7 +142,7 @@ async def get_forecasts_for_a_specific_gsp(
     "/{gsp_id}/pvlive",
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("1/second")
+@limiter.limit("3600/hour")
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -208,7 +208,7 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValuesMW],
     include_in_schema=False,
 )
-@limiter.limit("1/second")
+@limiter.limit("3600/hour")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
@@ -316,7 +316,7 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
-@limiter.limit("1/second")
+@limiter.limit("3600/hour")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
