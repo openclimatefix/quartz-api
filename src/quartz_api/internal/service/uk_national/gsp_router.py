@@ -7,13 +7,14 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from .cache import key_builder
 from .endpoint_types import (
@@ -65,8 +66,10 @@ async def get_gsps_cached(
     "/{gsp_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("1/second")
 @cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     gsp_id: int,
@@ -139,8 +142,10 @@ async def get_forecasts_for_a_specific_gsp(
     "/{gsp_id}/pvlive",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("1/second")
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     gsp_id: int,
@@ -203,8 +208,10 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValuesMW],
     include_in_schema=False,
 )
+@limiter.limit("1/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_all_available_forecasts(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: Annotated[
@@ -309,8 +316,10 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
+@limiter.limit("1/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now

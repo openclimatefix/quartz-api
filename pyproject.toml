@@ -33,6 +33,7 @@ dependencies = [
     "apitally[fastapi]>=0.22.3",
     "auth0-fastapi-api>=1.0.0b5",
     "fastapi-cache2[memcache]>=0.2.2",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]

@@ -22,6 +22,8 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
@@ -32,7 +34,7 @@ from quartz_api.internal.backends import (
     EnrichedChannel,
     QuartzStorage,
 )
-from quartz_api.internal.middleware import audit, auth, sentry, trace
+from quartz_api.internal.middleware import audit, auth, ratelimit, sentry, trace
 
 from ._logging import setup_json_logging
 
@@ -132,6 +134,10 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
 
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
+
+    # Register rate limiter
+    server.state.limiter = ratelimit.limiter
+    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")

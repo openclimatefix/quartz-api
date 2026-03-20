@@ -1,11 +1,12 @@
 """The 'system' FastAPI router object."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.models import (
     StorageClientDependency,
 )
@@ -20,8 +21,10 @@ router = APIRouter(tags=["System"])
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("1/second")
 @cache(key_builder=key_builder)
 async def get_system_details(
+    request: Request,  # noqa: ARG001
     db: StorageClientDependency,
     auth: AuthDependency,  # noqa
     gsp_id: int | None = None,
