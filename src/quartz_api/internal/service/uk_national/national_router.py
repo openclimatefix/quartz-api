@@ -4,13 +4,14 @@ import datetime as dt
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from .cache import key_builder
 from .endpoint_types import (
@@ -41,8 +42,11 @@ model_names_external_to_internal = {
     "/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_national_forecast(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
@@ -157,8 +161,11 @@ async def get_national_forecast(
     "/pvlive",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_national_pvlive(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
