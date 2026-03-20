@@ -143,7 +143,7 @@ async def make_forecasters(dp_client: dp.DataPlatformDataServiceStub) -> None:
     for model_name in ["blend", "blend_adjust"]:
         create_forecaster_request = dp.CreateForecasterRequest(
             name=model_name,
-            version="0.0.0",
+            version="1.3.0",
         )
         _ = await dp_client.create_forecaster(create_forecaster_request)
 
@@ -154,7 +154,7 @@ def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.Creat
         location_uuid=location_uuid,
         energy_source=dp.EnergySource.SOLAR,
         init_time_utc=init_time_utc,
-        forecaster=dp.Forecaster(forecaster_name=name, forecaster_version="0.0.0"),
+        forecaster=dp.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
         values=[
             dp.CreateForecastRequestForecastValue(
                 horizon_mins=i * 30,

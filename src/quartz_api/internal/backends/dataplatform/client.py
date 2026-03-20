@@ -117,13 +117,18 @@ class StorageClient(models.StorageInterface):
                 reverse=True,
             )
             forecaster = resp.forecasts[0].forecaster
-        else:
+        elif forecaster_version is None:
             req = dp.ListForecastersRequest(
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
+        else:
+            forecaster = dp.Forecaster(
+                forecaster_name=forecaster_name,
+                forecaster_version=forecaster_version,
+            )
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=str(location_uuid),
@@ -151,7 +156,7 @@ class StorageClient(models.StorageInterface):
                 ),
                 valid_timestamp=v.target_timestamp_utc,
                 location_uuid=location_uuid,
-                capacity_kilowatts=int(v.effective_capacity_watts * 1000),
+                capacity_kilowatts=int(v.effective_capacity_watts / 1000),
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
                 forecaster_name=forecaster.forecaster_name,

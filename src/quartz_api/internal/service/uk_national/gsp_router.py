@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+GSP_FORECASTER_NAME = "blend"
+GSP_FORECASTER_VERSION = "1.3.0"
+
 router = APIRouter(tags=["GSP"])
 
 async def get_gsps(
@@ -113,15 +116,18 @@ async def get_forecasts_for_a_specific_gsp(
         authdata={},
         created_cutoff=creation_utc_limit,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
-        forecaster_name="blend",
-        forecaster_version=None,
+        forecaster_name=GSP_FORECASTER_NAME,
+        forecaster_version=GSP_FORECASTER_VERSION,
     )
 
     out: list[ForecastValue] = [
         ForecastValue(
             target_time=pp.valid_timestamp,
-            expected_power_generation_megawatts=pp.power_kilowatts / 1000,
-            expected_power_generation_normalized=pp.power_kilowatts / pp.capacity_kilowatts,
+            expected_power_generation_megawatts=round(pp.power_kilowatts / 1000, 4),
+            expected_power_generation_normalized=round(
+                pp.power_kilowatts / pp.capacity_kilowatts,
+                4,
+            ),
         )
         for pp in pgvs
     ]
@@ -246,7 +252,8 @@ async def get_all_available_forecasts(
             location_uuids=gsp_uuid_id_map.keys(),
             snapshot_timestamp_utc=start_datetime_utc,
             energy_type=models.EnergyType.SOLAR,
-            forecaster_name="blend",
+            forecaster_name=GSP_FORECASTER_NAME,
+            forecaster_version=GSP_FORECASTER_VERSION,
             authdata={},
         )
         results = [snapshot]
@@ -264,7 +271,8 @@ async def get_all_available_forecasts(
                         authdata={},
                         created_cutoff=creation_utc_limit,
                         forecast_horizon_minutes=0,
-                        forecaster_name="blend",
+                        forecaster_name=GSP_FORECASTER_NAME,
+                        forecaster_version=GSP_FORECASTER_VERSION,
                     ),
                 ),
             )
