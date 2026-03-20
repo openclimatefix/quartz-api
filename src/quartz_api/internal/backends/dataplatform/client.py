@@ -63,7 +63,7 @@ class StorageClient(models.StorageInterface):
 
         # Limit the creation time if not set
         if created_cutoff is None:
-            created_cutoff = dt.datetime.now(tz=dt.UTC) - \
+            created_cutoff = window_start - \
                 dt.timedelta(minutes=forecast_horizon_minutes)
 
         oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
