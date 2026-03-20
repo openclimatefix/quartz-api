@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from .ratelimit import get_user_key
+from quartz_api.internal.middleware.ratelimit import get_user_key
 
 
 def _make_app(rate_limit: str = "1/second") -> FastAPI:
