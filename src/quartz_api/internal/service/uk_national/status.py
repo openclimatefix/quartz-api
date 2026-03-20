@@ -27,6 +27,7 @@ if db_url is not None:
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("3600/hour")
+@limiter.limit("10/second")
 async def get_status(request: Request) -> Status:  # noqa: ARG001
     """### Get status for the database and forecasts.
 
@@ -48,6 +49,7 @@ async def get_status(request: Request) -> Status:  # noqa: ARG001
 
 @router.get("/check_last_forecast_run", include_in_schema=False)
 @limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def check_last_forecast_run(
     request: Request,  # noqa: ARG001
@@ -79,6 +81,7 @@ async def check_last_forecast_run(
 
 @router.get("/update_last_data", include_in_schema=False)
 @limiter.limit("3600/hour")
+@limiter.limit("10/second")
 async def update_last_data(request: Request) -> None:
     """Update the last data. This is a legacy route, and should not be used."""
     raise NotImplementedError()
