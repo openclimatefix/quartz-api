@@ -57,6 +57,7 @@ async def get_national_forecast(
         Depends(limit_end_datetime_by_permissions),
     ],
     start_datetime_utc: models.UTCDatetime | None = None,
+    _window_check: models.WindowSizeValidator = None,
     creation_limit_utc: models.UTCDatetime | None = None,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,

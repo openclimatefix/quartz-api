@@ -6,8 +6,10 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query
 from pydantic import AfterValidator, AwareDatetime, BaseModel, Field
+
+MAX_WINDOW_DAYS = 7
 
 
 def convert_to_camelcase(snake_str: str) -> str:
@@ -48,6 +50,31 @@ UTCDatetimeDefaultWindowEnd = Annotated[
         ),
     ),
 ]
+
+
+def validate_window_size(
+    start_datetime_utc: UTCDatetimeDefaultWindowStart,
+    end_datetime_utc: UTCDatetimeDefaultWindowEnd,
+) -> None:
+    """Validate that the requested time window does not exceed MAX_WINDOW_DAYS."""
+    window = end_datetime_utc - start_datetime_utc
+    if window <= dt.timedelta(0):
+        raise HTTPException(
+            status_code=422,
+            detail="start_datetime_utc must be before end_datetime_utc.",
+        )
+    if window > dt.timedelta(days=MAX_WINDOW_DAYS):
+        window_hours = window.total_seconds() / 3600
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Requested time window of {window_hours:.0f} hours exceeds "
+                f"the maximum allowed window of {MAX_WINDOW_DAYS * 24} hours ({MAX_WINDOW_DAYS} days)."
+            ),
+        )
+
+
+WindowSizeValidator = Annotated[None, Depends(validate_window_size)]
 
 
 class ForecastHorizon(StrEnum):

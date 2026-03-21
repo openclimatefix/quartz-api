@@ -20,6 +20,7 @@ from .endpoint_types import (
     UTCDatetimeDefaultNowWindowStart,
     UTCDatetimeDefaultWindowStart,
     ForecastHorizon,
+    WindowSizeValidator,
 )
 
 

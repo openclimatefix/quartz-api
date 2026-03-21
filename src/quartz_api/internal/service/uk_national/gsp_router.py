@@ -61,6 +61,7 @@ async def get_forecasts_for_a_specific_gsp(
         dt.datetime,
         Depends(limit_end_datetime_by_permissions),
     ],
+    _window_check: models.WindowSizeValidator = None,
     creation_utc_limit: models.UTCDatetime | None = None,
     forecast_horizon_minutes: int | None = None,
 ) -> list[ForecastValue]:
@@ -136,6 +137,7 @@ async def get_truths_for_a_specific_gsp(
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
+    _window_check: models.WindowSizeValidator = None,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[GSPYield]:
     """### Get PV_Live values for a specific GSP for yesterday and today.
@@ -210,6 +212,7 @@ async def get_all_available_forecasts(
         dt.datetime,
         Depends(limit_end_datetime_by_permissions),
     ],
+    _window_check: models.WindowSizeValidator = None,
     creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
     compact: bool = False,
@@ -366,6 +369,7 @@ async def get_truths_for_all_gsps(
     auth: AuthDependency,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
+    _window_check: models.WindowSizeValidator = None,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
     gsp_ids: str | None = None,
 ) -> list[GSPYieldGroupByDatetime]:
