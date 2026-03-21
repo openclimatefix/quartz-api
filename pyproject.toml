@@ -58,7 +58,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.21.2/dp_sdk-0.21.2-py3-none-any.whl" }
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.22.0/dp_sdk-0.22.0-py3-none-any.whl" }
 
 
 [project.urls]

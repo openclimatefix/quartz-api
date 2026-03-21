@@ -356,43 +356,64 @@ async def get_truths_for_all_gsps(
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
 
-    tasks = []
-    for gsp_uuid in gsp_uuid_id_map:
-        tasks.append(
-            asyncio.create_task(
-                db.get_actual_generation(
-                    location_uuid=str(gsp_uuid),
-                    window_start=start_datetime_utc,
-                    window_end=end_datetime_utc,
-                    energy_type=models.EnergyType.SOLAR,
-                    location_type=models.LocationType.GSP,
-                    authdata={},
-                    observer_name=f"pvlive_{regime}",
-                ),
+    if gsp_ids is None:
+        # Return a snapshot of the data at the start_datetime_utc for all gsps
+        values = await db.get_actual_generation_snapshot(
+                location_uuids=list(gsp_uuid_id_map.keys()),
+                snapshot_timestamp_utc=start_datetime_utc,
+                energy_type=models.EnergyType.SOLAR,
+                observer_name=f"pvlive_{regime}",
+                authdata={},
+            )
+        out: list[GSPYieldGroupByDatetime] = [
+            GSPYieldGroupByDatetime(
+                datetime_utc=start_datetime_utc,
+                generation_kw_by_gsp_id={
+                    gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in values
+                },
             ),
+        ]
+
+    else:
+        # If specific GSP IDs are set, then return a 2d response of all timestamps for each GSP.
+        tasks = []
+        for gsp_uuid in gsp_uuid_id_map:
+            tasks.append(
+                asyncio.create_task(
+                    db.get_actual_generation(
+                        location_uuid=str(gsp_uuid),
+                        window_start=start_datetime_utc,
+                        window_end=end_datetime_utc,
+                        energy_type=models.EnergyType.SOLAR,
+                        location_type=models.LocationType.GSP,
+                        authdata={},
+                        observer_name=f"pvlive_{regime}",
+                    ),
+                ),
+            )
+
+        results: list[list[models.ActualGenerationValue] | Exception]  = await asyncio.gather(
+            *tasks, return_exceptions=True,
         )
+        # reorganize results by timestamp
+        grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
+        gsp_ids = list(gsp_uuid_id_map.values())
+        # We can zip these because the tasks will return in the same order as they were created
+        for gsp_id, gsp_timeseries in zip(gsp_ids, results, strict=True):
+            if isinstance(gsp_timeseries, Exception):
+                raise gsp_timeseries
 
-    results: list[list[models.ActualGenerationValue] | Exception]  = await asyncio.gather(
-        *tasks, return_exceptions=True,
-    )
-    # reorganize results by timestamp
-    grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
-    gsp_ids = list(gsp_uuid_id_map.values())
-    # We can zip these because the tasks will return in the same order as they were created
-    for gsp_id, gsp_timeseries in zip(gsp_ids, results, strict=True):
-        if isinstance(gsp_timeseries, Exception):
-            raise gsp_timeseries
+            for point in gsp_timeseries:
+                grouped_data[point.valid_timestamp][gsp_id] = point.power_kilowatts
 
-        for point in gsp_timeseries:
-            grouped_data[point.valid_timestamp][gsp_id] = point.power_kilowatts
+        out: list[GSPYieldGroupByDatetime] = [
+            GSPYieldGroupByDatetime(
+                datetime_utc=ts,
+                generation_kw_by_gsp_id=dict(sorted(gsp_dict.items())),
+            )
+            for ts, gsp_dict in grouped_data.items()
+        ]
 
-    out: list[GSPYieldGroupByDatetime] = [
-        GSPYieldGroupByDatetime(
-            datetime_utc=ts,
-            generation_kw_by_gsp_id=dict(sorted(gsp_dict.items())),
-        )
-        for ts, gsp_dict in grouped_data.items()
-    ]
     return out
 
 

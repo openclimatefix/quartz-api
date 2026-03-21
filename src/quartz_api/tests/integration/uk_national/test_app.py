@@ -229,7 +229,15 @@ async def test_gsp_pvlive_all(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
+    # Calling with no specified gsps only returns a single snapshot timestamp
     response = await api_client.get("/v0/solar/GB/gsp/pvlive/all")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+
+    # Calling with specified gsps returns all timestamps for those gsps
+    response = await api_client.get("/v0/solar/GB/gsp/pvlive/all?gsp_ids=1,2,3")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)

@@ -149,6 +149,18 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def get_actual_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: EnergyType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+    ) -> list[ActualGenerationValue]:
+        """Return actual generation values for multiple locations at a given timestamp."""
+        pass
+
+    @abc.abstractmethod
     async def get_locations(
         self,
         energy_type: EnergyType,
