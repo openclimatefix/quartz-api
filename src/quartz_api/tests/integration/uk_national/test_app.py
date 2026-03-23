@@ -41,7 +41,7 @@ async def test_national_forecast_horizon_minutes(
     """
 
     response = await api_client_uk_national.get(
-        "/v0/solar/GB/national/forecast?forecast_horizon_minutes=120"
+        "/v0/solar/GB/national/forecast?forecast_horizon_minutes=120",
     )
     assert response.status_code == 200
     data = response.json()
@@ -60,7 +60,7 @@ async def test_national_forecast_include_metadata(
     """Test a sample endpoint for UK National forecast data."""
 
     response = await api_client_uk_national.get(
-        "/v0/solar/GB/national/forecast?include_metadata=true"
+        "/v0/solar/GB/national/forecast?include_metadata=true",
     )
     assert response.status_code == 200
     data = response.json()
@@ -85,7 +85,7 @@ async def test_national_forecast_metadata_true_and_false(
     data = response.json()
 
     response = await api_client_uk_national.get(
-        "/v0/solar/GB/national/forecast?include_metadata=true"
+        "/v0/solar/GB/national/forecast?include_metadata=true",
     )
     assert response.status_code == 200
     data_metadata = response.json()

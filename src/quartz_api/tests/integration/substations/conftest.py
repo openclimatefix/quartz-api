@@ -32,7 +32,7 @@ async def config_substations() -> None:
 
 @pytest_asyncio.fixture(scope="module")
 async def api_client_substations(
-    config_substations: ConfigTree, dp_client: dp.DataPlatformDataServiceStub
+    config_substations: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Returns a TestClient for the FastAPI application."""
     app = _create_server(config_substations)

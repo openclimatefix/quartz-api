@@ -92,7 +92,6 @@ def make_location(
     location_type: dp.LocationType = dp.LocationType.NATION,
 ) -> dp.CreateLocationRequest:
     """Create a location request."""
-
     lat = float(gsp_id)
     lon = float(gsp_id)
     polygon_wkt = (
