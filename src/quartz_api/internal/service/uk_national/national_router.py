@@ -94,9 +94,11 @@ async def get_national_forecast(
     # In the legacy database, when metadata=true,
     # we get from from now - rounded up to nearest 30 mins, onwards.
     if start_datetime_utc is None:
-        start_datetime_utc = pd.Timestamp.utcnow().floor("6h").to_pydatetime()
+        start_datetime_utc \
+            = pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
         if include_metadata:
             trim_start=True
+            start_datetime_utc = pd.Timestamp.utcnow().floor("1h").to_pydatetime()
     else:
         trim_start=False
 

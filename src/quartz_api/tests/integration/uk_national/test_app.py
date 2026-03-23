@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 
@@ -63,7 +64,9 @@ async def test_national_forecast_include_metadata(
     assert isinstance(data, dict)
     assert "location" in data
     assert "forecastValues" in data
-    assert len(data["forecastValues"]) == 24
+    # We make 10 forecasts values from now to the future,
+    # metadata route gets 30 mins onwards from now
+    assert len(data["forecastValues"]) == 9
 
 
 # 2.3 Test the National Forecast, metadata and non-metadata values are the same
@@ -76,11 +79,15 @@ async def test_national_forecast_metadata_true_and_false(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client.get("/v0/solar/GB/national/forecast")
+    now = pd.Timestamp.utcnow().floor("30min").to_pydatetime().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    url = f"/v0/solar/GB/national/forecast?start_datetime_utc={now}"
+    response = await api_client.get(url)
     assert response.status_code == 200
     data = response.json()
 
-    response = await api_client.get("/v0/solar/GB/national/forecast?include_metadata=true")
+    url = f"/v0/solar/GB/national/forecast?include_metadata=true&start_datetime_utc={now}"
+    response = await api_client.get(url)
     assert response.status_code == 200
     data_metadata = response.json()
 
