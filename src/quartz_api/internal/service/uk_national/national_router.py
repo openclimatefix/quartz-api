@@ -12,6 +12,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
+from quartz_api.internal.service.uk_national import metadata
 
 from .cache import key_builder
 from .endpoint_types import (
@@ -49,11 +50,11 @@ async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEnd,
         Depends(limit_end_datetime_by_permissions),
     ],
+    start_datetime_utc: models.UTCDatetime | None = None,
     creation_limit_utc: models.UTCDatetime | None = None,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
@@ -89,6 +90,12 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
+    if start_datetime_utc is None:
+        if include_metadata:
+            start_datetime_utc = pd.Timestamp.utcnow().floor("6h").to_pydatetime()
+        else:
+            start_datetime_utc = pd.Timestamp.utcnow().ceil("30").to_pydatetime()
+
     # get model name
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
