@@ -1,11 +1,12 @@
 """The 'system' FastAPI router object."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.models import (
     StorageClientDependency,
 )
@@ -20,8 +21,11 @@ router = APIRouter(tags=["System"])
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_system_details(
+    request: Request,  # noqa: ARG001
     db: StorageClientDependency,
     auth: AuthDependency,  # noqa
     gsp_id: int | None = None,
@@ -39,8 +43,11 @@ async def get_system_details(
                                      location_type=models.LocationType.NATION,
                                      authdata={})
 
-    national = regions[0]
+    uk_national = [r for r in regions if r.name == "uk"]
+    national = uk_national[0]
     installed_capacity_mw = national.capacity_kilowatts / 1000
+    if "capacity_no_degradation_kw" in national.metadata:
+        installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000
 
     location = Location(
         label="National-GB",
@@ -68,6 +75,10 @@ async def get_system_details(
 
         if gsp_id is not None and gsp_id == location.gsp_id:
             return [location]
+
+        if "capacity_no_degradation_kw" in region.metadata:
+            location.installed_capacity_mw \
+                = region.metadata["capacity_no_degradation_kw"] / 1_000
 
         locations.append(location)
 

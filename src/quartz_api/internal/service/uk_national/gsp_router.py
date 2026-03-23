@@ -2,17 +2,19 @@
 
 import asyncio
 import datetime as dt
+import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from .cache import key_builder
 from .endpoint_types import (
@@ -29,15 +31,46 @@ from .time_utils import (
 if TYPE_CHECKING:
     from uuid import UUID
 
+log = logging.getLogger(__name__)
+
+GSP_FORECASTER_NAME = "blend"
+GSP_FORECASTER_VERSION = "1.3.0"
+
 router = APIRouter(tags=["GSP"])
 
+async def get_gsps(
+        db: models.StorageClientDependency, auth: AuthDependency) -> list[models.Location]:
+    """Get all solar gsps and convert dict to pydantic models."""
+    gsps = await get_gsps_cached(db, auth)
+    if isinstance(gsps[0], dict):
+        # the cache seems to return the list of pydantic elements as list of dicts
+        gsps = [models.Location(**gsp) for gsp in gsps]
+
+    return gsps
+
+
+@cache(expire=300)
+async def get_gsps_cached(
+    db: models.StorageClientDependency, auth: AuthDependency,
+) -> list[models.Location]:
+    """Get all solar gsps."""
+    gsps = await db.get_locations(
+        energy_type=models.EnergyType.SOLAR,
+        location_type=models.LocationType.GSP,
+        authdata=auth,
+    )
+
+    return gsps
 
 @router.get(
     "/{gsp_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     gsp_id: int,
@@ -71,17 +104,11 @@ async def get_forecasts_for_a_specific_gsp(
     returns the latest forecast made 60 minutes before the target time)
     """
     # get gsps
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
     if len(filtered_gsps) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"GSP with gsp_id {gsp_id} not found",
-        )
+        log.warning(f"GSP with gsp_id {gsp_id} not found")
+        return []
     gsp = filtered_gsps[0]
 
     pgvs = await db.get_predicted_generation(
@@ -93,15 +120,18 @@ async def get_forecasts_for_a_specific_gsp(
         authdata={},
         created_cutoff=creation_utc_limit,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
-        forecaster_name="blend",
-        forecaster_version=None,
+        forecaster_name=GSP_FORECASTER_NAME,
+        forecaster_version=GSP_FORECASTER_VERSION,
     )
 
     out: list[ForecastValue] = [
         ForecastValue(
             target_time=pp.valid_timestamp,
-            expected_power_generation_megawatts=pp.power_kilowatts / 1000,
-            expected_power_generation_normalized=pp.power_kilowatts / pp.capacity_kilowatts,
+            expected_power_generation_megawatts=round(pp.power_kilowatts / 1000, 4),
+            expected_power_generation_normalized=round(
+                pp.power_kilowatts / pp.capacity_kilowatts if pp.capacity_kilowatts!=0 else 0,
+                4,
+            ),
         )
         for pp in pgvs
     ]
@@ -113,8 +143,11 @@ async def get_forecasts_for_a_specific_gsp(
     "/{gsp_id}/pvlive",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     gsp_id: int,
@@ -142,11 +175,7 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
     if len(filtered_gsps) != 1:
         raise HTTPException(
@@ -181,8 +210,11 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValuesMW],
     include_in_schema=False,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_all_available_forecasts(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: Annotated[
@@ -216,11 +248,7 @@ async def get_all_available_forecasts(
     today's forecasts for all GSPs
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
+    gsps = await get_gsps(db, auth)
     gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
@@ -234,7 +262,8 @@ async def get_all_available_forecasts(
             location_uuids=gsp_uuid_id_map.keys(),
             snapshot_timestamp_utc=start_datetime_utc,
             energy_type=models.EnergyType.SOLAR,
-            forecaster_name="blend",
+            forecaster_name=GSP_FORECASTER_NAME,
+            forecaster_version=GSP_FORECASTER_VERSION,
             authdata={},
         )
         results = [snapshot]
@@ -252,7 +281,8 @@ async def get_all_available_forecasts(
                         authdata={},
                         created_cutoff=creation_utc_limit,
                         forecast_horizon_minutes=0,
-                        forecaster_name="blend",
+                        forecaster_name=GSP_FORECASTER_NAME,
+                        forecaster_version=GSP_FORECASTER_VERSION,
                     ),
                 ),
             )
@@ -289,8 +319,11 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
+@limiter.limit("3600/hour")
+@limiter.limit("10/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
@@ -316,55 +349,67 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
-
+    gsps = await get_gsps(db, auth)
     gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
 
-    tasks = []
-    for gsp_uuid in gsp_uuid_id_map:
-        tasks.append(
-            asyncio.create_task(
-                db.get_actual_generation(
-                    location_uuid=str(gsp_uuid),
-                    window_start=start_datetime_utc,
-                    window_end=end_datetime_utc,
-                    energy_type=models.EnergyType.SOLAR,
-                    location_type=models.LocationType.GSP,
-                    authdata={},
-                    observer_name=f"pvlive_{regime}",
-                ),
+    out: list[GSPYieldGroupByDatetime] = []
+
+    if gsp_ids is None:
+        # Return a snapshot of the data at the start_datetime_utc for all gsps
+        values = await db.get_actual_generation_snapshot(
+                location_uuids=list(gsp_uuid_id_map.keys()),
+                snapshot_timestamp_utc=start_datetime_utc,
+                energy_type=models.EnergyType.SOLAR,
+                observer_name=f"pvlive_{regime}",
+                authdata={},
+            )
+        out = [
+            GSPYieldGroupByDatetime(
+                datetime_utc=start_datetime_utc,
+                generation_kw_by_gsp_id={
+                    gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in values
+                },
             ),
+        ]
+
+    else:
+        # If specific GSP IDs are set, then return a 2d response of all timestamps for each GSP.
+        # Looping over snapshots results in fewer calls than looping over GSPs
+        tasks = []
+        for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min"):
+            tasks.append(
+                asyncio.create_task(
+                    db.get_actual_generation_snapshot(
+                        location_uuids=list(gsp_uuid_id_map.keys()),
+                        snapshot_timestamp_utc=ts,
+                        energy_type=models.EnergyType.SOLAR,
+                        observer_name=f"pvlive_{regime}",
+                        authdata={},
+                    ),
+                ),
+            )
+
+        results: list[list[models.ActualGenerationValue] | Exception]  = await asyncio.gather(
+            *tasks, return_exceptions=True,
         )
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
 
-    results: list[list[models.ActualGenerationValue] | Exception]  = await asyncio.gather(
-        *tasks, return_exceptions=True,
-    )
-    # reorganize results by timestamp
-    grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
-    gsp_ids = list(gsp_uuid_id_map.values())
-    # We can zip these because the tasks will return in the same order as they were created
-    for gsp_id, gsp_timeseries in zip(gsp_ids, results, strict=True):
-        if isinstance(gsp_timeseries, Exception):
-            raise gsp_timeseries
+            if isinstance(result, list) and len(result) > 0:
+                out.append(
+                    GSPYieldGroupByDatetime(
+                        datetime_utc=result[0].valid_timestamp,
+                        generation_kw_by_gsp_id={
+                            gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in result
+                        },
+                    ),
+                )
 
-        for point in gsp_timeseries:
-            grouped_data[point.valid_timestamp][gsp_id] = point.power_kilowatts
-
-    out: list[GSPYieldGroupByDatetime] = [
-        GSPYieldGroupByDatetime(
-            datetime_utc=ts,
-            generation_kw_by_gsp_id=dict(sorted(gsp_dict.items())),
-        )
-        for ts, gsp_dict in grouped_data.items()
-    ]
     return out
 
 

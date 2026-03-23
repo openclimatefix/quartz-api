@@ -226,6 +226,34 @@ class StorageClient(models.StorageInterface):
         return values
 
     @override
+    async def get_actual_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        values: list[models.ActualGenerationValue] = []
+        for location_uuid in location_uuids:
+            match energy_type:
+                case models.EnergyType.WIND:
+                    pf = _basicWindPowerProductionFunc()
+                case models.EnergyType.SOLAR:
+                    pf = _basicSolarPowerProductionFunc(int(snapshot_timestamp_utc.timestamp()))
+
+            values.append(
+                models.ActualGenerationValue(
+                    power_kilowatts=pf.PowerProductionKW,
+                    valid_timestamp=snapshot_timestamp_utc,
+                    location_uuid=location_uuid,
+                    capacity_kilowatts=10000,
+                    observer_name=observer_name or "DummyObserver",
+                ),
+            )
+        return values
+
+    @override
     async def put_location(
         self,
         location: models.Location,

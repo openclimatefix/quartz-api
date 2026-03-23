@@ -117,13 +117,18 @@ class StorageClient(models.StorageInterface):
                 reverse=True,
             )
             forecaster = resp.forecasts[0].forecaster
-        else:
+        elif forecaster_version is None:
             req = dp.ListForecastersRequest(
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
             resp = await self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
+        else:
+            forecaster = dp.Forecaster(
+                forecaster_name=forecaster_name,
+                forecaster_version=forecaster_version,
+            )
 
         req = dp.GetForecastAsTimeseriesRequest(
             location_uuid=str(location_uuid),
@@ -151,7 +156,7 @@ class StorageClient(models.StorageInterface):
                 ),
                 valid_timestamp=v.target_timestamp_utc,
                 location_uuid=location_uuid,
-                capacity_kilowatts=int(v.effective_capacity_watts * 1000),
+                capacity_kilowatts=int(v.effective_capacity_watts / 1000),
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
                 forecaster_name=forecaster.forecaster_name,
@@ -277,6 +282,42 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=v.effective_capacity_watts / 1000,
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
+            )
+            for v in resp.values
+        ]
+
+        return out
+
+    @override
+    async def get_actual_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        if observer_name is None:
+            raise ValueError("Observer must be specified for data platform backend.")
+
+        req = dp.GetObservationsAtTimestampRequest(
+            location_uuids=[str(uuid) for uuid in location_uuids],
+            energy_source=energy_type_map[energy_type],
+            timestamp_utc=snapshot_timestamp_utc,
+            observer_name=observer_name,
+        )
+        resp = await self.dpc.get_observations_at_timestamp(req)
+
+        out: list[models.ActualGenerationValue] = [
+            models.ActualGenerationValue(
+                valid_timestamp=resp.timestamp_utc,
+                power_kilowatts=round(
+                    v.value_fraction * v.effective_capacity_watts / 1000,
+                    4,
+                ),
+                location_uuid=UUID(v.location_uuid),
+                capacity_kilowatts=v.effective_capacity_watts / 1000,
+                observer_name=observer_name,
             )
             for v in resp.values
         ]
