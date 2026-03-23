@@ -8,20 +8,20 @@ import pytest
 
 # 1. Does the app start up, and can we use health
 @pytest.mark.asyncio(loop_scope="session")
-async def test_app_start(api_client) -> None:
+async def test_app_start(api_client_substations) -> None:
     """Test that the app starts up correctly with the given configuration."""
-    response = await api_client.get("/health")
+    response = await api_client_substations.get("/health")
     assert response.status_code == 200
 
 
 # 2.1 Test listing all substations
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substations(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa: ARG001 - ensures substations are created
 ) -> None:
     """Test GET /substations returns all substations."""
-    response = await api_client.get("/substations")
+    response = await api_client_substations.get("/substations")
     assert response.status_code == 200
 
     data = response.json()
@@ -43,11 +43,11 @@ async def test_get_substations(
 # 2.2 Test listing substations with correct names
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substations_names(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa: ARG001 - ensures substations are created
 ) -> None:
     """Test GET /substations returns substations with correct names."""
-    response = await api_client.get("/substations")
+    response = await api_client_substations.get("/substations")
     assert response.status_code == 200
 
     data = response.json()
@@ -66,14 +66,14 @@ async def test_get_substations_names(
 # 3.1 Test getting a specific substation by UUID
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substation_by_uuid(
-    api_client,
+    api_client_substations,
     substation_locations,
 ) -> None:
     """Test GET /substations/{uuid} returns the correct substation."""
     # Get the first substation UUID from our fixtures
     substation_uuid, name, gsp_id = substation_locations[0]
 
-    response = await api_client.get(f"/substations/{substation_uuid}")
+    response = await api_client_substations.get(f"/substations/{substation_uuid}")
     assert response.status_code == 200
 
     data = response.json()
@@ -88,24 +88,24 @@ async def test_get_substation_by_uuid(
 # 3.2 Test getting a substation with unknown UUID returns 404
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substation_by_uuid_not_found(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa: ARG001 - ensures substations are created
 ) -> None:
     """Test GET /substations/{uuid} returns 404 for unknown UUID."""
     unknown_uuid = uuid.uuid4()
-    response = await api_client.get(f"/substations/{unknown_uuid}")
+    response = await api_client_substations.get(f"/substations/{unknown_uuid}")
     assert response.status_code == 404
 
 
 # 3.3 Test getting each substation by UUID returns correct data
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_by_uuid(
-    api_client,
+    api_client_substations,
     substation_locations,
 ) -> None:
     """Test that each substation can be retrieved by its UUID."""
     for substation_uuid, name, gsp_id in substation_locations:
-        response = await api_client.get(f"/substations/{substation_uuid}")
+        response = await api_client_substations.get(f"/substations/{substation_uuid}")
         assert response.status_code == 200
 
         data = response.json()
@@ -116,7 +116,7 @@ async def test_get_all_substations_by_uuid(
 # 4.1 Test getting forecast for a specific substation
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substation_forecast(
-    api_client,
+    api_client_substations,
     substation_locations,
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
@@ -124,7 +124,7 @@ async def test_get_substation_forecast(
     # Get the first substation UUID
     substation_uuid, _, _ = substation_locations[0]
 
-    response = await api_client.get(f"/substations/{substation_uuid}/forecast")
+    response = await api_client_substations.get(f"/substations/{substation_uuid}/forecast")
     assert response.status_code == 200
 
     data = response.json()
@@ -140,13 +140,13 @@ async def test_get_substation_forecast(
 # 4.2 Test getting forecast for multiple substations
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_substation_forecast_multiple(
-    api_client,
+    api_client_substations,
     substation_locations,
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test that forecasts can be retrieved for all substations."""
     for substation_uuid, _, _ in substation_locations:
-        response = await api_client.get(f"/substations/{substation_uuid}/forecast")
+        response = await api_client_substations.get(f"/substations/{substation_uuid}/forecast")
         assert response.status_code == 200
 
         data = response.json()
@@ -158,12 +158,12 @@ async def test_get_substation_forecast_multiple(
 # 5.1 Test getting all substation forecasts at one timestamp
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa arg001
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test GET /substations/forecast returns forecasts for all substations."""
-    response = await api_client.get("/substations/forecast")
+    response = await api_client_substations.get("/substations/forecast")
     assert response.status_code == 200
 
     data = response.json()
@@ -178,7 +178,7 @@ async def test_get_all_substations_forecast(
 # 5.2 Test getting all substation forecasts at a specific timestamp
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast_with_timestamp(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa arg001
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
@@ -186,7 +186,7 @@ async def test_get_all_substations_forecast_with_timestamp(
 
     # Use the current time rounded to 30 minutes
     timestamp = pd.Timestamp.utcnow().floor("30min").isoformat()
-    response = await api_client.get(
+    response = await api_client_substations.get(
         "/substations/forecast",
         params={"datetime_utc": timestamp},
     )
@@ -200,12 +200,12 @@ async def test_get_all_substations_forecast_with_timestamp(
 # 5.3 Test all substation forecasts contain correct UUIDs
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast_uuids(
-    api_client,
+    api_client_substations,
     substation_locations,
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test that the forecast response contains all substation UUIDs."""
-    response = await api_client.get("/substations/forecast")
+    response = await api_client_substations.get("/substations/forecast")
     assert response.status_code == 200
 
     data = response.json()
@@ -220,12 +220,12 @@ async def test_get_all_substations_forecast_uuids(
 # 5.4 Test all substation forecasts have valid power values
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast_values(
-    api_client,
+    api_client_substations,
     substation_locations,  # noqa: ARG001 - ensures substations are created
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test that all forecast values are valid numbers."""
-    response = await api_client.get("/substations/forecast")
+    response = await api_client_substations.get("/substations/forecast")
     assert response.status_code == 200
 
     data = response.json()
