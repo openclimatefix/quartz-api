@@ -18,12 +18,16 @@ from quartz_api.internal.middleware.ratelimit import limiter
 
 from .cache import key_builder
 from .endpoint_types import (
+    Location,
+    MLModel,
+    Forecast,
     ForecastValue,
     GSPYield,
     GSPYieldGroupByDatetime,
     OneDatetimeManyForecastValuesMW,
     convert_list_of_gsp_ids,
 )
+from quartz_api.internal.service.uk_national.metadata import format_metadata
 from .time_utils import (
     limit_end_datetime_by_permissions,
 )
@@ -208,7 +212,7 @@ async def get_truths_for_a_specific_gsp(
 @router.get(
     "/forecast/all/",
     response_model=list[OneDatetimeManyForecastValuesMW],
-    include_in_schema=False,
+    include_in_schema=True,
 )
 @limiter.limit("3600/hour")
 @limiter.limit("10/second")
@@ -227,8 +231,9 @@ async def get_all_available_forecasts(
     ],
     creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
+    compact: bool = False
 
-) -> list[OneDatetimeManyForecastValuesMW]:
+) -> list[OneDatetimeManyForecastValuesMW] | list[Forecast]:
     """### Get all forecasts for all GSPs.
 
     The return object contains a forecast object with system details and
@@ -295,23 +300,72 @@ async def get_all_available_forecasts(
     grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
     gsp_ids = list(gsp_uuid_id_map.values())
 
-    # We can zip these because the tasks will return in the same order as they were created
-    for snapshot in results:
-        for predicted_generation_value in snapshot:
+    if compact:
+        # We can zip these because the tasks will return in the same order as they were created
+        for snapshot in results:
+            for predicted_generation_value in snapshot:
 
-            gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
-            grouped_data[predicted_generation_value.valid_timestamp][gsp_id] \
-                = predicted_generation_value.power_kilowatts / 1000.0
+                gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
+                grouped_data[predicted_generation_value.valid_timestamp][gsp_id] \
+                    = predicted_generation_value.power_kilowatts / 1000.0
 
-    out: list[OneDatetimeManyForecastValuesMW] = [
-        OneDatetimeManyForecastValuesMW(
-            datetime_utc=ts,
-            forecast_values=dict(sorted(gsp_dict.items())),
-        )
-        for ts, gsp_dict in grouped_data.items()
-    ]
+        out: list[OneDatetimeManyForecastValuesMW] = [
+            OneDatetimeManyForecastValuesMW(
+                datetime_utc=ts,
+                forecast_values=dict(sorted(gsp_dict.items())),
+            )
+            for ts, gsp_dict in grouped_data.items()
+        ]
 
-    return out
+        return out
+    else:
+        # Lets format like a list of Forecasts objects
+
+        # 1. lets split the results up into groups of gsps
+        forecast_values_by_gsp_id = {}
+        forecasts_by_gsp_id = {}
+        for result in results:
+            for predicted_generation_value in result:
+                gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
+                forecast_value = ForecastValue(expected_power_generation_megawatts=round(predicted_generation_value.power_kilowatts / 1000, 4),
+                              target_time=predicted_generation_value.valid_timestamp)
+                forecast_values_by_gsp_id.setdefault(gsp_id, []).append(forecast_value)
+            
+                if gsp_id not in forecasts_by_gsp_id:
+
+                    version = predicted_generation_value.metadata.get("app_version", predicted_generation_value.forecaster_version)
+                    input_data = format_metadata(predicted_generation_value.metadata)
+                    gsp = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id][0]
+
+                    forecasts_by_gsp_id[gsp_id] = Forecast(
+                    location=Location.from_location(gsp),
+                    model=MLModel(
+                        name=predicted_generation_value.forecaster_name,
+                        version=version,
+                    ),
+                    forecast_creation_time=predicted_generation_value.created_timestamp,
+                    initialization_datetime_utc=predicted_generation_value.init_timestamp,
+                    forecast_values=[],
+                    input_data_last_updated=input_data,
+                )
+
+            forecasts = []
+            gsp_ids = list(gsp_uuid_id_map.values())
+            for gsp_id in gsp_ids:
+
+                gsp_forecasts = forecasts_by_gsp_id[gsp_id]
+                forecast_values = forecast_values_by_gsp_id[gsp_id]
+
+                gsp_forecasts.forecast_values = forecast_values
+
+                forecasts.append(gsp_forecasts)
+
+            return forecasts
+
+
+        
+
+
 
 
 @router.get(
