@@ -244,7 +244,7 @@ async def test_gsp_pvlive_all(
     assert len(data) == 1
 
     # Calling with specified gsps returns all timestamps for those gsps
-    response = await api_client.get("/v0/solar/GB/gsp/pvlive/all?gsp_ids=1,2,3")
+    response = await api_client_uk_national.get("/v0/solar/GB/gsp/pvlive/all?gsp_ids=1,2,3")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
