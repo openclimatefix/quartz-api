@@ -89,10 +89,8 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-    # This is so we can match the legacy date
-    # note that the data-platform needs the start window to be less than now
     # In the legacy database, when metadata=true,
-    # we get from from now - rounded up to nearest 30 mins, onwards.
+    # we get from from now - rounded up to nearest 30 mins, less 3 days.
     if start_datetime_utc is None:
         start_datetime_utc \
             = pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
