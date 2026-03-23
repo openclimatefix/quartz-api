@@ -340,8 +340,7 @@ async def get_all_available_forecasts(
                                                                       predicted_generation_value.forecaster_version)
                     input_data = format_metadata(predicted_generation_value.metadata)
                     gsp = next(g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id)
-                    # forecast_creation_time=predicted_generation_value.created_timestamp
-                    # TODO doforecast_creation_time
+                    forecast_creation_time = predicted_generation_value.created_timestamp
 
                     forecasts_by_gsp_id[gsp_id] = Forecast(
                     location=Location.from_location(gsp),
@@ -349,8 +348,7 @@ async def get_all_available_forecasts(
                         name=predicted_generation_value.forecaster_name,
                         version=version,
                     ),
-                    # forecast_creation_time=predicted_generation_value.created_timestamp,
-                    forecast_creation_time=pd.Timestamp.now(tz="UTC").to_pydatetime(),
+                    forecast_creation_time=forecast_creation_time,
                     initialization_datetime_utc=predicted_generation_value.init_timestamp,
                     forecast_values=[],
                     input_data_last_updated=input_data,
