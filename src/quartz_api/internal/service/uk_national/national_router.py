@@ -89,11 +89,16 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
+    # This is so we can match the legacy date
+    # note that the data-platform needs the start window to be less than now
+    # In the legacy database, when metadata=true,
+    # we get from from now - rounded up to nearest 30 mins, onwards.
     if start_datetime_utc is None:
+        start_datetime_utc = pd.Timestamp.utcnow().floor("6h").to_pydatetime()
         if include_metadata:
-            start_datetime_utc = pd.Timestamp.utcnow().floor("6h").to_pydatetime()
-        else:
-            start_datetime_utc = pd.Timestamp.utcnow().ceil("30").to_pydatetime()
+            trim_start=True
+    else:
+        trim_start=False
 
     # get model name
     model_name = model_names_external_to_internal[model_name]
@@ -141,6 +146,15 @@ async def get_national_forecast(
         return out
 
     else:
+
+        # this is to match legacy api behaviour where if you ask for metadata,
+        # you only get forecasts from the current time onwards,
+        # as the metadata is only relevant for the current forecast.
+        # We can remove this in the future if we want to.
+        if trim_start:
+            start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime()
+            out = [v for v in out if v.target_time >= start_datetime_utc]
+
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
         input_data = format_metadata(pgvs[-1].metadata)
