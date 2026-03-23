@@ -159,7 +159,7 @@ async def test_get_substation_forecast_multiple(
 @pytest.mark.asyncio(loop_scope="session")
 async def test_get_all_substations_forecast(
     api_client_substations,
-    substation_locations,  # noqa arg001
+    substation_locations,
     make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
 ) -> None:
     """Test GET /substations/forecast returns forecasts for all substations."""
@@ -173,6 +173,14 @@ async def test_get_all_substations_forecast(
 
     # Should have forecasts for all 5 substations
     assert len(data["forecast_values_kW"]) == 5
+
+    forecast_uuids = set(data["forecast_values_kW"].keys())
+    expected_uuids = {str(sub_uuid) for sub_uuid, _, _ in substation_locations}
+    assert forecast_uuids == expected_uuids
+
+    for _substation_uuid, power_kw in data["forecast_values_kW"].items():
+        assert isinstance(power_kw, (int, float))
+        assert power_kw >= 0
 
 
 # 5.2 Test getting all substation forecasts at a specific timestamp
@@ -197,39 +205,3 @@ async def test_get_all_substations_forecast_with_timestamp(
     assert "forecast_values_kW" in data
 
 
-# 5.3 Test all substation forecasts contain correct UUIDs
-@pytest.mark.asyncio(loop_scope="session")
-async def test_get_all_substations_forecast_uuids(
-    api_client_substations,
-    substation_locations,
-    make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
-) -> None:
-    """Test that the forecast response contains all substation UUIDs."""
-    response = await api_client_substations.get("/substations/forecast")
-    assert response.status_code == 200
-
-    data = response.json()
-    forecast_uuids = set(data["forecast_values_kW"].keys())
-
-    # Get expected UUIDs from fixtures
-    expected_uuids = {str(sub_uuid) for sub_uuid, _, _ in substation_locations}
-
-    assert forecast_uuids == expected_uuids
-
-
-# 5.4 Test all substation forecasts have valid power values
-@pytest.mark.asyncio(loop_scope="session")
-async def test_get_all_substations_forecast_values(
-    api_client_substations,
-    substation_locations,  # noqa: ARG001 - ensures substations are created
-    make_gsp_forecast_values,  # noqa: ARG001 - ensures forecasts are created
-) -> None:
-    """Test that all forecast values are valid numbers."""
-    response = await api_client_substations.get("/substations/forecast")
-    assert response.status_code == 200
-
-    data = response.json()
-    for _substation_uuid, power_kw in data["forecast_values_kW"].items():
-        assert isinstance(power_kw, (int, float))
-        # Power should be non-negative
-        assert power_kw >= 0
