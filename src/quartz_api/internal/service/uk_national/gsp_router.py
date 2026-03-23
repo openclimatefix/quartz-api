@@ -212,7 +212,7 @@ async def get_truths_for_a_specific_gsp(
 @router.get(
     "/forecast/all/",
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
-    include_in_schema=True,
+    include_in_schema=False,
 )
 @limiter.limit("3600/hour")
 @limiter.limit("10/second")
@@ -321,8 +321,8 @@ async def get_all_available_forecasts(
         # Lets format like a list of Forecasts objects
 
         # 1. lets split the results up into groups of gsps
-        forecast_values_by_gsp_id = {}
-        forecasts_by_gsp_id = {}
+        forecast_values_by_gsp_id: dict[int, list[ForecastValue]] = {}
+        forecasts_by_gsp_id: dict[int, Forecast] = {}
         for snapshot in results:
             for predicted_generation_value in snapshot:
                 gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
@@ -359,12 +359,12 @@ async def get_all_available_forecasts(
         gsp_ids = sorted(gsp_uuid_id_map.values())
         for gsp_id in gsp_ids:
 
-            gsp_forecasts = forecasts_by_gsp_id[gsp_id]
+            gsp_forecast = forecasts_by_gsp_id[gsp_id]
             forecast_values = forecast_values_by_gsp_id[gsp_id]
 
-            gsp_forecasts.forecast_values = forecast_values
+            gsp_forecast.forecast_values = forecast_values
 
-            forecasts.append(gsp_forecasts)
+            forecasts.append(gsp_forecast)
 
         return forecasts
 
