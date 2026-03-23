@@ -64,9 +64,7 @@ async def test_national_forecast_include_metadata(
     assert isinstance(data, dict)
     assert "location" in data
     assert "forecastValues" in data
-    # We make 10 forecasts values from now to the future,
-    # metadata route gets 30 mins onwards from now
-    assert len(data["forecastValues"]) == 9
+    assert len(data["forecastValues"]) == 24
 
 
 # 2.3 Test the National Forecast, metadata and non-metadata values are the same

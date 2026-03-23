@@ -97,10 +97,8 @@ async def get_national_forecast(
         start_datetime_utc \
             = pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
         if include_metadata:
-            trim_start=True
-            start_datetime_utc = pd.Timestamp.utcnow().floor("1h").to_pydatetime()
-    else:
-        trim_start=False
+            start_datetime_utc \
+                = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
 
     # get model name
     model_name = model_names_external_to_internal[model_name]
@@ -148,14 +146,6 @@ async def get_national_forecast(
         return out
 
     else:
-
-        # this is to match legacy api behaviour where if you ask for metadata,
-        # you only get forecasts from the current time onwards,
-        # as the metadata is only relevant for the current forecast.
-        # We can remove this in the future if we want to.
-        if trim_start:
-            start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime()
-            out = [v for v in out if v.target_time >= start_datetime_utc]
 
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
