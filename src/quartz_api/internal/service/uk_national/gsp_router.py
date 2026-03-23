@@ -295,7 +295,6 @@ async def get_all_available_forecasts(
         results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
             *tasks, return_exceptions=True,
         )
-
     # reorganize results by timestamp
     grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
     gsp_ids = list(gsp_uuid_id_map.values())
@@ -324,8 +323,8 @@ async def get_all_available_forecasts(
         # 1. lets split the results up into groups of gsps
         forecast_values_by_gsp_id = {}
         forecasts_by_gsp_id = {}
-        for result in results:
-            for predicted_generation_value in result:
+        for snapshot in results:
+            for predicted_generation_value in snapshot:
                 gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
                 forecast_value = ForecastValue(
                     expected_power_generation_megawatts
@@ -350,22 +349,25 @@ async def get_all_available_forecasts(
                     ),
                     forecast_creation_time=forecast_creation_time,
                     initialization_datetime_utc=predicted_generation_value.init_timestamp,
+                    # we will add to this later
                     forecast_values=[],
                     input_data_last_updated=input_data,
                 )
+            
 
-            forecasts: list[Forecast] = []
-            gsp_ids = list(gsp_uuid_id_map.values())
-            for gsp_id in gsp_ids:
+        forecasts: list[Forecast] = []
+        gsp_ids = sorted(list(gsp_uuid_id_map.values()))
+        for gsp_id in gsp_ids:
+            print(gsp_id)
 
-                gsp_forecasts = forecasts_by_gsp_id[gsp_id]
-                forecast_values = forecast_values_by_gsp_id[gsp_id]
+            gsp_forecasts = forecasts_by_gsp_id[gsp_id]
+            forecast_values = forecast_values_by_gsp_id[gsp_id]
 
-                gsp_forecasts.forecast_values = forecast_values
+            gsp_forecasts.forecast_values = forecast_values
 
-                forecasts.append(gsp_forecasts)
+            forecasts.append(gsp_forecasts)
 
-            return forecasts
+        return forecasts
 
 
 
