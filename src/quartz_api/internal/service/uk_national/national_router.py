@@ -89,9 +89,6 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
-
-    print(start_datetime_utc)
-
     # get model name
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
@@ -165,8 +162,7 @@ async def get_national_forecast(
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("3600/hour")
-@limiter.limit("1/second")
-@limiter.limit("10/minute")
+@limiter.limit("10/second")
 # @cache(key_builder=key_builder)
 async def get_national_pvlive(
     request: Request,  # noqa: ARG001

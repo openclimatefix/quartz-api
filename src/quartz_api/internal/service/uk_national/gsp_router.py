@@ -15,19 +15,19 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
+from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from .cache import key_builder
 from .endpoint_types import (
-    Location,
-    MLModel,
     Forecast,
     ForecastValue,
     GSPYield,
     GSPYieldGroupByDatetime,
+    Location,
+    MLModel,
     OneDatetimeManyForecastValuesMW,
     convert_list_of_gsp_ids,
 )
-from quartz_api.internal.service.uk_national.metadata import format_metadata
 from .time_utils import (
     limit_end_datetime_by_permissions,
 )
@@ -211,7 +211,7 @@ async def get_truths_for_a_specific_gsp(
 
 @router.get(
     "/forecast/all/",
-    response_model=list[OneDatetimeManyForecastValuesMW],
+    response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=True,
 )
 @limiter.limit("3600/hour")
@@ -231,9 +231,9 @@ async def get_all_available_forecasts(
     ],
     creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
-    compact: bool = False
+    compact: bool = False,
 
-) -> list[OneDatetimeManyForecastValuesMW] | list[Forecast]:
+) -> list[OneDatetimeManyForecastValuesMW | Forecast]:
     """### Get all forecasts for all GSPs.
 
     The return object contains a forecast object with system details and
@@ -327,15 +327,21 @@ async def get_all_available_forecasts(
         for result in results:
             for predicted_generation_value in result:
                 gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
-                forecast_value = ForecastValue(expected_power_generation_megawatts=round(predicted_generation_value.power_kilowatts / 1000, 4),
-                              target_time=predicted_generation_value.valid_timestamp)
+                forecast_value = ForecastValue(
+                    expected_power_generation_megawatts
+                        =round(predicted_generation_value.power_kilowatts / 1000, 4),
+                    target_time=predicted_generation_value.valid_timestamp,
+                )
                 forecast_values_by_gsp_id.setdefault(gsp_id, []).append(forecast_value)
-            
+
                 if gsp_id not in forecasts_by_gsp_id:
 
-                    version = predicted_generation_value.metadata.get("app_version", predicted_generation_value.forecaster_version)
+                    version = predicted_generation_value.metadata.get("app_version",
+                                                                      predicted_generation_value.forecaster_version)
                     input_data = format_metadata(predicted_generation_value.metadata)
-                    gsp = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id][0]
+                    gsp = next(g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id)
+                    forecast_creation_time=predicted_generation_value.created_timestamp
+                    print(forecast_creation_time)
 
                     forecasts_by_gsp_id[gsp_id] = Forecast(
                     location=Location.from_location(gsp),
@@ -343,13 +349,14 @@ async def get_all_available_forecasts(
                         name=predicted_generation_value.forecaster_name,
                         version=version,
                     ),
-                    forecast_creation_time=predicted_generation_value.created_timestamp,
+                    # forecast_creation_time=predicted_generation_value.created_timestamp,
+                    forecast_creation_time=pd.Timestamp.now(tz="UTC").to_pydatetime(),
                     initialization_datetime_utc=predicted_generation_value.init_timestamp,
                     forecast_values=[],
                     input_data_last_updated=input_data,
                 )
 
-            forecasts = []
+            forecasts: list[Forecast] = []
             gsp_ids = list(gsp_uuid_id_map.values())
             for gsp_id in gsp_ids:
 
@@ -363,7 +370,7 @@ async def get_all_available_forecasts(
             return forecasts
 
 
-        
+
 
 
 

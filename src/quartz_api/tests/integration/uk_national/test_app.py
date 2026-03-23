@@ -189,7 +189,7 @@ async def test_gsp_forecast_all(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/")
+    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
@@ -209,7 +209,7 @@ async def test_gsp_forecast_all_gsp_ids(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3")
+    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3&compact=true")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
@@ -217,6 +217,27 @@ async def test_gsp_forecast_all_gsp_ids(
     assert "datetimeUtc" in data[0]
     assert "forecastValues" in data[0]
     assert len(data[0]["forecastValues"]) == 3
+
+
+# 4.3.2 Check GSP forecast route, compact=false
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_compact_false(
+    api_client,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test a sample endpoint for UK National forecast data."""
+
+    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 10
+    assert "location" in data[0]
+    assert "model" in data[0]
+    assert "forecastValues" in data[0]
+    assert len(data[0]["forecastValues"]) == 1
 
 
 # 4.4 Check GSP pvlive route
