@@ -12,7 +12,6 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
-from quartz_api.internal.service.uk_national import metadata
 
 from .cache import key_builder
 from .endpoint_types import (
