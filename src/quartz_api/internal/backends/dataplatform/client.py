@@ -289,6 +289,42 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
+    async def get_actual_generation_snapshot(
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        if observer_name is None:
+            raise ValueError("Observer must be specified for data platform backend.")
+
+        req = dp.GetObservationsAtTimestampRequest(
+            location_uuids=[str(uuid) for uuid in location_uuids],
+            energy_source=energy_type_map[energy_type],
+            timestamp_utc=snapshot_timestamp_utc,
+            observer_name=observer_name,
+        )
+        resp = await self.dpc.get_observations_at_timestamp(req)
+
+        out: list[models.ActualGenerationValue] = [
+            models.ActualGenerationValue(
+                valid_timestamp=resp.timestamp_utc,
+                power_kilowatts=round(
+                    v.value_fraction * v.effective_capacity_watts / 1000,
+                    4,
+                ),
+                location_uuid=UUID(v.location_uuid),
+                capacity_kilowatts=v.effective_capacity_watts / 1000,
+                observer_name=observer_name,
+            )
+            for v in resp.values
+        ]
+
+        return out
+
+    @override
     async def get_locations(
         self,
         energy_type: models.EnergyType,
