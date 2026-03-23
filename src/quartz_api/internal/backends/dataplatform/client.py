@@ -274,7 +274,6 @@ class StorageClient(models.StorageInterface):
         )
         resp = await self.dpc.get_forecast_at_timestamp(req)
 
-        # TODO it would be good to add forecast_creation_time and init_timestamp here too
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
                 power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
@@ -283,6 +282,8 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=v.effective_capacity_watts / 1000,
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
+                created_timestamp=v.created_timestamp_utc,
+                init_timestamp=v.initialization_timestamp_utc,
             )
             for v in resp.values
         ]
