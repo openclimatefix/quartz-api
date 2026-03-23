@@ -353,12 +353,11 @@ async def get_all_available_forecasts(
                     forecast_values=[],
                     input_data_last_updated=input_data,
                 )
-            
+
 
         forecasts: list[Forecast] = []
-        gsp_ids = sorted(list(gsp_uuid_id_map.values()))
+        gsp_ids = sorted(gsp_uuid_id_map.values())
         for gsp_id in gsp_ids:
-            print(gsp_id)
 
             gsp_forecasts = forecasts_by_gsp_id[gsp_id]
             forecast_values = forecast_values_by_gsp_id[gsp_id]
