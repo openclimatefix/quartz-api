@@ -369,11 +369,6 @@ async def get_all_available_forecasts(
         return forecasts
 
 
-
-
-
-
-
 @router.get(
     "/pvlive/all",
     response_model=list[GSPYieldGroupByDatetime],
