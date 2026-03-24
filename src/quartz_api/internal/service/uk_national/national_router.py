@@ -49,11 +49,11 @@ async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEnd,
         Depends(limit_end_datetime_by_permissions),
     ],
+    start_datetime_utc: models.UTCDatetime | None = None,
     creation_limit_utc: models.UTCDatetime | None = None,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
@@ -89,6 +89,15 @@ async def get_national_forecast(
     Returns: The national forecast data.
 
     """
+    # In the legacy database, when metadata=true,
+    # we get from from now - rounded up to nearest 30 mins, less 3 days.
+    if start_datetime_utc is None:
+        start_datetime_utc \
+            = pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
+        if include_metadata:
+            start_datetime_utc \
+                = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
+
     # get model name
     model_name = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
@@ -135,6 +144,7 @@ async def get_national_forecast(
         return out
 
     else:
+
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
         input_data = format_metadata(pgvs[-1].metadata)

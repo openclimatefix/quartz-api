@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 
@@ -80,24 +81,27 @@ async def test_national_forecast_metadata_true_and_false(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client_uk_national.get("/v0/solar/GB/national/forecast")
+    now = pd.Timestamp.utcnow().floor("30min").to_pydatetime().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    url = f"/v0/solar/GB/national/forecast?start_datetime_utc={now}"
+    response = await api_client_uk_national.get(url)
     assert response.status_code == 200
     data = response.json()
 
-    response = await api_client_uk_national.get(
-        "/v0/solar/GB/national/forecast?include_metadata=true",
-    )
-    assert response.status_code == 200
-    data_metadata = response.json()
+    url = f"/v0/solar/GB/national/forecast?include_metadata=true&start_datetime_utc={now}"
+    response_with_metadata = await api_client_uk_national.get(url)
 
-    assert len(data_metadata["forecastValues"]) == len(data)
+    assert response_with_metadata.status_code == 200
+    data_with_metadata = response_with_metadata.json()
+
+    assert len(data_with_metadata["forecastValues"]) == len(data)
     for i in range(10):
-        assert data[i]["targetTime"] == data_metadata["forecastValues"][i]["targetTime"]
+        assert data[i]["targetTime"] == data_with_metadata["forecastValues"][i]["targetTime"]
         assert (
             data[i]["expectedPowerGenerationMegawatts"]
-            == data_metadata["forecastValues"][i]["expectedPowerGenerationMegawatts"]
+            == data_with_metadata["forecastValues"][i]["expectedPowerGenerationMegawatts"]
         )
-    assert data_metadata["model"]["version"] == "1.2.3"
+    assert data_with_metadata["model"]["version"] == "1.2.3"
 
 
 # 3.1 Test the National PVlive route
