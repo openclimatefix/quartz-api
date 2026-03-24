@@ -11,7 +11,7 @@ from quartz_api.internal.models import (
     StorageClientDependency,
 )
 
-from .cache import key_builder
+from .cache import get_gsps, key_builder
 from .endpoint_types import Location
 
 router = APIRouter(tags=["System"])
@@ -62,9 +62,7 @@ async def get_system_details(
         return [location]
 
     # GSP
-    regions = await db.get_locations(energy_type=models.EnergyType.SOLAR,
-                                     location_type=models.LocationType.GSP,
-                                     authdata={})
+    regions = await get_gsps(db=db, auth={})
 
     locations = [location]
     for region in regions:
