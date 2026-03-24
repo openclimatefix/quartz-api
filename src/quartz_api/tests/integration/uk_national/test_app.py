@@ -92,7 +92,7 @@ async def test_national_forecast_metadata_true_and_false(
     response_with_metadata = await api_client_uk_national.get(url)
 
     assert response_with_metadata.status_code == 200
-    data_with_metadata = response.json()
+    data_with_metadata = response_with_metadata.json()
 
     assert len(data_with_metadata["forecastValues"]) == len(data)
     for i in range(10):
