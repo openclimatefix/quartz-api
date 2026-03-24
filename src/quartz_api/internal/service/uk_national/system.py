@@ -38,48 +38,43 @@ async def get_system_details(
     #### Parameters
     - **gsp_id**: gsp_id of the requested system
     """
-    # National
-    regions = await db.get_locations(energy_type=models.EnergyType.SOLAR,
-                                     location_type=models.LocationType.NATION,
-                                     authdata={})
+    out: list[Location] = []
 
-    uk_national = [r for r in regions if r.name == "uk"]
-    national = uk_national[0]
-    installed_capacity_mw = national.capacity_kilowatts / 1000
-    if "capacity_no_degradation_kw" in national.metadata:
-        installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000
+    if gsp_id is None or gsp_id == 0:
+        nations = await db.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.NATION,
+            authdata={},
+        )
 
-    location = Location(
-        label="National-GB",
-        gsp_id=0,
-        gsp_name="National",
-        gsp_group="National",
-        region_name="National",
-        installed_capacity_mw=installed_capacity_mw,
-    )
+        uk_national = [n for n in nations if n.name == "uk"]
+        national = uk_national[0]
+        installed_capacity_mw = national.capacity_kilowatts / 1000
+        if "capacity_no_degradation_kw" in national.metadata:
+            installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000
 
-    if gsp_id == 0:
-        return [location]
+        # Why not use from_location here?
+        location = Location(
+            label="National-GB",
+            gsp_id=0,
+            gsp_name="National",
+            gsp_group="National",
+            region_name="National",
+            installed_capacity_mw=installed_capacity_mw,
+        )
+        out.append(location)
 
-    # GSP
-    regions = await get_gsps(db=db, auth={})
+    if gsp_id is not None and gsp_id == 0:
+        return out
 
-    locations = [location]
-    for region in regions:
-        location = Location.from_location(region)
+    gsps = await get_gsps(db=db, auth={})
 
-        if gsp_id is not None and gsp_id != location.gsp_id:
-            continue
+    if gsp_id is not None and gsp_id > 0:
+        out = [Location.from_location(gsp) for gsp in gsps if gsp.gsp_id == gsp_id]
 
-        if gsp_id is not None and gsp_id == location.gsp_id:
-            return [location]
+    if gsp_id is None:
+        out.extend([Location.from_location(gsp) for gsp in gsps])
 
-        if "capacity_no_degradation_kw" in region.metadata:
-            location.installed_capacity_mw \
-                = region.metadata["capacity_no_degradation_kw"] / 1_000
+    out.sort(key=lambda x: x.gsp_id)
 
-        locations.append(location)
-
-    locations.sort(key=lambda x: x.gsp_id)
-
-    return locations
+    return out
