@@ -306,7 +306,7 @@ async def get_all_available_forecasts(
 
                 gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
                 grouped_data[predicted_generation_value.valid_timestamp][gsp_id] \
-                    = predicted_generation_value.power_kilowatts / 1000.0
+                    = round(predicted_generation_value.power_kilowatts / 1000.0, 4)
 
         out: list[OneDatetimeManyForecastValuesMW] = [
             OneDatetimeManyForecastValuesMW(

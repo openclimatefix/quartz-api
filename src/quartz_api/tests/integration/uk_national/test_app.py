@@ -216,7 +216,8 @@ async def test_gsp_forecast_all_gsp_ids(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3&compact=true")
+    url = "/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3&compact=true"
+    response = await api_client_uk_national.get(url)
 
     assert response.status_code == 200
     data = response.json()
