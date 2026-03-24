@@ -105,6 +105,7 @@ async def get_forecasts_for_a_specific_gsp(
         forecaster_name=GSP_FORECASTER_NAME,
         forecaster_version=GSP_FORECASTER_VERSION,
     )
+    log.info(f"Fetched {len(pgvs)} predicted generation values for gsp_id {gsp_id}")
 
     out: list[ForecastValue] = [
         ForecastValue(
@@ -165,6 +166,7 @@ async def get_truths_for_a_specific_gsp(
             detail=f"GSP with gsp_id {gsp_id} not found",
         )
     gsp = filtered_gsps[0]
+    log.info(f"Fetched GSP {gsp_id}")
 
     agvs = await db.get_actual_generation(
         location_uuid=gsp.uuid,
@@ -175,6 +177,7 @@ async def get_truths_for_a_specific_gsp(
         authdata={},
         observer_name=f"pvlive_{regime}",
     )
+    log.info(f"Fetched {len(agvs)} actual generation values for gsp_id {gsp_id}")
 
     out: list[GSPYield] = [
         GSPYield(
@@ -237,6 +240,7 @@ async def get_all_available_forecasts(
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
+    log.info(f"Fetched {len(gsp_uuid_id_map)} GSPs")
 
     # if gsp ids are not set, then we use snapshot method, which gets all gsps for one timestamp
     # if gsp_ids is set, then we loop over all gsp ids to get forecasts. The UI current needs this.
@@ -273,6 +277,7 @@ async def get_all_available_forecasts(
         results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
             *tasks, return_exceptions=True,
         )
+    log.info(f"Fetched predicted generation values for {len(results)} GSPs")
     # reorganize results by timestamp
     grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
     gsp_ids = list(gsp_uuid_id_map.values())
@@ -388,6 +393,7 @@ async def get_truths_for_all_gsps(
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
     }
+    log.info(f"Fetched {len(gsp_uuid_id_map)} GSPs")
 
     out: list[GSPYieldGroupByDatetime] = []
 
