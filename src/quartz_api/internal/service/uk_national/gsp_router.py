@@ -383,7 +383,7 @@ async def get_truths_for_all_gsps(
     - **end_datetime_utc**: optional end datetime for the query.
     """
     gsps = await get_gsps(db, auth)
-    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
+    gsp_ids: list[int] | None = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {
         gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
         if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
@@ -409,8 +409,27 @@ async def get_truths_for_all_gsps(
             ),
         ]
 
+    elif len(gsp_ids) == 1:
+        # Get observations as a timeseries
+        values = await db.get_actual_generation(
+            location_uuid=next(iter(gsp_uuid_id_map.keys())),
+            window_start=start_datetime_utc,
+            window_end=end_datetime_utc,
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.GSP,
+            authdata={},
+            observer_name=f"pvlive_{regime}",
+        )
+        out = [
+            GSPYieldGroupByDatetime(
+                datetime_utc=v.valid_timestamp,
+                generation_kw_by_gsp_id={gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts},
+            )
+            for v in values
+        ]
+
     else:
-        # If specific GSP IDs are set, then return a 2d response of all timestamps for each GSP.
+        # If multiple GSP IDs are set, then return a 2d response of all timestamps for each GSP.
         # Looping over snapshots results in fewer calls than looping over GSPs
         tasks = []
         for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min"):
