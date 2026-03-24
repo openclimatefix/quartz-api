@@ -12,10 +12,10 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
+from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from .cache import key_builder
 from .endpoint_types import (
-    InputDataLastUpdated,
     Location,
     MLModel,
     ModelName,
@@ -163,7 +163,7 @@ async def get_national_forecast(
 )
 @limiter.limit("3600/hour")
 @limiter.limit("10/second")
-@cache(key_builder=key_builder)
+# @cache(key_builder=key_builder)
 async def get_national_pvlive(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
@@ -219,14 +219,3 @@ async def get_national_pvlive(
     return out
 
 
-def format_metadata(metadata: dict) -> InputDataLastUpdated:
-    """Format metadata dictionary into InputDataLastUpdated object."""
-    old = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
-    gsp = metadata.get("gsp_last_updated", old)
-    satellite = metadata.get("satellite_last_updated", old)
-
-    # the nwp keys could be nwp_ukv_last_updated, nwp_ecwmwf_last_updated, or nwp_last_updated
-    nwp = old
-    for nwp_key in [k for k in metadata if "nwp" in k]:
-        nwp = max([metadata.get(nwp_key, old)])
-    return InputDataLastUpdated(gsp=gsp, nwp=nwp, pv=old, satellite=satellite)

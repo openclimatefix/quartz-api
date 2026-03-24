@@ -13,7 +13,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 log = logging.getLogger(__name__)
 
 cache_dependent_scopes = ["read:intraday"]
-legacy_query_params = ["compact", "historic"]
+legacy_query_params = ["historic"]
 
 
 async def key_builder(
