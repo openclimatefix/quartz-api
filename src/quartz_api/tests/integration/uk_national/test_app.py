@@ -343,3 +343,18 @@ async def test_gsp_status_check_last_forecast_run(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, str)
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_system_details(
+    api_client_uk_national,
+    gsp_locations,  # noqa arg001
+    national_location,  # noqa arg001
+) -> None:
+    """Test a sample endpoint for system details."""
+
+    response = await api_client_uk_national.get("/v0/system/GB/gsp/?gsp_id=0")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+
