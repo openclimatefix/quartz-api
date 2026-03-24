@@ -63,6 +63,7 @@ async def check_last_forecast_run(
                                    location_type=LocationType.NATION,
                                    authdata={})
     national_location_uuid = sites[0].uuid
+    filtered_nations = [n for n in sites if n.name == "uk"]
 
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
