@@ -70,7 +70,12 @@ async def get_system_details(
     gsps = await get_gsps(db=db, auth={})
 
     if gsp_id is not None and gsp_id > 0:
-        out = [Location.from_location(gsp) for gsp in gsps if gsp.gsp_id == gsp_id]
+        out = [
+            Location.from_location(gsp)
+            for gsp in gsps
+            if "gsp_id" in gsp.metadata
+            and int(gsp.metadata["gsp_id"]) == gsp_id
+        ]
 
     if gsp_id is None:
         out.extend([Location.from_location(gsp) for gsp in gsps])
