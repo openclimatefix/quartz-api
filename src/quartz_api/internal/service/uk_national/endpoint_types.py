@@ -91,6 +91,8 @@ class Location(EnhancedBaseModel):
         """
         region_gsp_id = int(loc.metadata["gsp_id"])
         installed_capacity_mw = loc.capacity_kilowatts / 10**3
+        if "capacity_no_degradation_kw" in loc.metadata:
+            installed_capacity_mw = loc.metadata["capacity_no_degradation_kw"] / 10**3
         full_name = loc.metadata.get("full_name", loc.name)
         gsp_name = loc.name
         gsp_group = loc.metadata.get("gsp_group", gsp_name)
