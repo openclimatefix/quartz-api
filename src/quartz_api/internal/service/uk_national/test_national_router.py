@@ -1,7 +1,7 @@
 """ Test for format metadata"""
 import datetime as dt
 
-from .national_router import format_metadata
+from .metadata import format_metadata
 
 
 def test_format_metadata():

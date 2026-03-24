@@ -153,8 +153,8 @@ class Forecast(EnhancedBaseModel):
 
     location: Location = Field(..., description="The location object for this forecaster")
     model: MLModel = Field(..., description="The name of the model that made this forecast")
-    forecast_creation_time: dt.datetime = Field(
-        ...,
+    forecast_creation_time: dt.datetime | None = Field(
+        None,
         description="The time when the forecaster was made",
     )
     historic: bool = Field(
