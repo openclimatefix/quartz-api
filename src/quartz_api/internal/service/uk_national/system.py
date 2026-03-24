@@ -1,5 +1,7 @@
 """The 'system' FastAPI router object."""
 
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi_cache.decorator import cache
 from starlette import status
@@ -15,6 +17,7 @@ from .cache import get_gsps, key_builder
 from .endpoint_types import Location
 
 router = APIRouter(tags=["System"])
+log = logging.getLogger(__name__)
 
 
 @router.get(
@@ -63,11 +66,13 @@ async def get_system_details(
             installed_capacity_mw=installed_capacity_mw,
         )
         out.append(location)
+        log.info("Fetched national system details")
 
     if gsp_id is not None and gsp_id == 0:
         return out
 
     gsps = await get_gsps(db=db, auth={})
+    log.info(f"Fetched {len(gsps)} GSPs")
 
     if gsp_id is not None and gsp_id > 0:
         out = [

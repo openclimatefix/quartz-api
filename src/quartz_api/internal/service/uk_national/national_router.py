@@ -1,6 +1,7 @@
 """The 'national' FastAPI router object."""
 
 import datetime as dt
+import logging
 from typing import Annotated
 
 import pandas as pd
@@ -24,6 +25,8 @@ from .endpoint_types import (
     NationalYield,
 )
 from .time_utils import limit_end_datetime_by_permissions
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["National"])
 
@@ -113,6 +116,7 @@ async def get_national_forecast(
     if len(filtered_nations) != 1:
         raise ValueError("No nation with name 'uk' found in database.")
     nation = filtered_nations[0]
+    log.info("Fetched national location")
 
     pgvs = await db.get_predicted_generation(
         energy_type=models.EnergyType.SOLAR,
@@ -125,6 +129,7 @@ async def get_national_forecast(
         authdata={},
         location_uuid=nation.uuid,
     )
+    log.info(f"Fetched {len(pgvs)} predicted generation values")
 
     out: list[NationalForecastValue] = [
         NationalForecastValue(
@@ -207,6 +212,7 @@ async def get_national_pvlive(
     if len(filtered_nations) != 1:
         raise ValueError("No nation with name 'uk' found in database.")
     nation = filtered_nations[0]
+    log.info("Fetched national location")
 
     agvs = await db.get_actual_generation(
         location_uuid=nation.uuid,
@@ -217,6 +223,7 @@ async def get_national_pvlive(
         observer_name=f"pvlive_{regime}",
         authdata={},
     )
+    log.info(f"Fetched {len(agvs)} generation values")
 
     out: list[NationalYield] = [
         NationalYield(

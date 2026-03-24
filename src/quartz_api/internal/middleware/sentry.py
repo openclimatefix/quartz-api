@@ -3,12 +3,11 @@
 import logging
 from collections.abc import Awaitable, Callable
 
+import sentry_sdk
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from quartz_api.internal.middleware import auth
-
-log = logging.getLogger(__name__)
 
 
 class SentryUserMiddleware(BaseHTTPMiddleware):
@@ -36,8 +35,6 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
             try:
                 payload = await self.auth_instance.require_auth()(request)
                 if payload:
-                    import sentry_sdk
-
                     sentry_sdk.set_user(
                         {
                             "id": payload.get("sub"),
@@ -46,7 +43,7 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
                     )
             except Exception:
                 # silently fail to not break requests
-                log.debug("Could not extract user for Sentry")
+                logging.debug("Could not extract user for Sentry")
 
         response = await call_next(request)
         return response

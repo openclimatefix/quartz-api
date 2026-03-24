@@ -388,7 +388,6 @@ class StorageClient(models.StorageInterface):
         url: str,
         authdata: dict[str, str],
     ) -> None:
-        log.warning("Data Platform client does not support logging API calls to DB.")
         pass
 
     async def _check_user_access(
