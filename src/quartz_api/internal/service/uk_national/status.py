@@ -62,7 +62,8 @@ async def check_last_forecast_run(
     sites = await db.get_locations(energy_type=EnergyType.SOLAR,
                                    location_type=LocationType.NATION,
                                    authdata={})
-    national_location_uuid = sites[0].uuid
+    filtered_nations = [n for n in sites if n.name == "uk"]
+    national_location_uuid = filtered_nations[0].uuid
 
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
