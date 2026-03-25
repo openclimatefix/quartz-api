@@ -35,9 +35,12 @@ def get_user_key(request: Request) -> str:
             )
             if sub := payload.get("sub"):
                 return sub
+            
         except jwt.PyJWTError:
             log.debug("Failed to decode JWT for rate limiting, falling back to IP")
     return get_remote_address(request)
 
 
-limiter = Limiter(key_func=get_user_key)
+default_limits = ["3600/hour", "10/second"]
+
+limiter = Limiter(key_func=get_user_key, default_limits=default_limits, key_style='endpoint')
