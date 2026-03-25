@@ -192,7 +192,7 @@ async def test_gsp_pvlive(
     assert len(data) == 10
 
 
-# 4.3 Check GSP forecast route
+# 4.3 Check GSP forecast route — default (compact=false) returns one Forecast per GSP
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_forecast_all(
     api_client_uk_national,
@@ -200,20 +200,41 @@ async def test_gsp_forecast_all(
     make_forecasters,  # noqa arg001
     make_gsp_forecast_values,  # noqa arg001
 ) -> None:
-    """Test a sample endpoint for UK National forecast data."""
+    """Test that /forecast/all/ returns one Forecast object per GSP with multiple timesteps."""
 
     response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
 
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 1  # we only get one timestamp of data
+    assert len(data) == 10  # one Forecast per GSP
+    assert "location" in data[0]
+    assert "forecastValues" in data[0]
+    assert "model" in data[0]
+    assert len(data[0]["forecastValues"]) >= 1  # multiple timesteps per GSP
+
+
+# 4.3.1 Check GSP forecast route — compact=true returns time-first dict
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_compact(
+    api_client,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test that compact=true returns time-first OneDatetimeManyForecastValues format."""
+
+    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1  # multiple timestamps
     assert "datetimeUtc" in data[0]
     assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 10
+    assert len(data[0]["forecastValues"]) == 10  # all 10 GSPs at each timestamp
 
 
-# 4.3.1 Check GSP forecast route,
+# 4.3.2 Check GSP forecast route with gsp_ids filter (compact mode)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_forecast_all_gsp_ids(
     api_client_uk_national,
@@ -221,7 +242,7 @@ async def test_gsp_forecast_all_gsp_ids(
     make_forecasters,  # noqa arg001
     make_gsp_forecast_values,  # noqa arg001
 ) -> None:
-    """Test a sample endpoint for UK National forecast data."""
+    """Test gsp_ids filter with compact=true returns only requested GSPs at all timesteps."""
 
     url = "/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3&compact=true"
     response = await api_client_uk_national.get(url)
@@ -274,6 +295,38 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     assert "model" in data[0]
     assert "forecastValues" in data[0]
     assert len(data[0]["forecastValues"]) == 10
+
+
+# 4.3.4 Cache refresh endpoint returns 202 with valid token
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_refresh(
+    api_client_uk_national,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test that the cache refresh endpoint returns 202 with a valid token."""
+    import os
+    os.environ["CACHE_REFRESH_TOKEN"] = "test-secret"
+
+    response = await api_client_uk_national.post(
+        "/v0/solar/GB/gsp/forecast/all/refresh",
+        headers={"X-Refresh-Token": "test-secret"},
+    )
+    assert response.status_code == 202
+
+
+# 4.3.5 Cache refresh endpoint rejects wrong token
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_refresh_wrong_token(
+    api_client_uk_national,
+) -> None:
+    """Test that the cache refresh endpoint rejects an invalid token."""
+    response = await api_client_uk_national.post(
+        "/v0/solar/GB/gsp/forecast/all/refresh",
+        headers={"X-Refresh-Token": "wrong-token"},
+    )
+    assert response.status_code == 403
 
 
 # 4.4 Check GSP pvlive route
