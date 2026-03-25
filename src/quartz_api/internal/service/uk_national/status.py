@@ -3,7 +3,7 @@
 import datetime as dt
 import os
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi_cache.decorator import cache
 from sqlalchemy import create_engine, text
 from starlette import status
@@ -11,7 +11,7 @@ from starlette import status
 from quartz_api.internal.models import EnergyType, LocationType, StorageClientDependency
 
 from .cache import key_builder
-from .endpoint_types import Status
+from .endpoint_types import Status, gsp_id_map
 
 router = APIRouter()
 
@@ -54,16 +54,16 @@ async def check_last_forecast_run(
 
     This route is used to check the status of the last forecast run.
     """
-    sites = await db.get_locations(energy_type=EnergyType.SOLAR,
-                                   location_type=LocationType.NATION,
-                                   authdata={})
-    filtered_nations = [n for n in sites if n.name == "uk"]
-    national_location_uuid = filtered_nations[0].uuid
+    if 0 not in gsp_id_map:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        )
 
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
     forecast = await db.get_predicted_generation(
-        location_uuid=national_location_uuid,
+        location_uuid=gsp_id_map[0].uuid,
         location_type=LocationType.NATION,
         energy_type=EnergyType.SOLAR,
         window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=30),

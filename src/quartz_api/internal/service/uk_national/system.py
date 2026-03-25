@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
@@ -12,8 +12,8 @@ from quartz_api.internal.models import (
     StorageClientDependency,
 )
 
-from .cache import get_gsps, key_builder
-from .endpoint_types import Location
+from .cache import key_builder
+from .endpoint_types import Location, gsp_id_map
 
 router = APIRouter(tags=["System"])
 log = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder)
+@cache(key_builder=key_builder, expire=3600)
 async def get_system_details(
     request: Request,  # noqa: ARG001
     db: StorageClientDependency,
@@ -41,17 +41,23 @@ async def get_system_details(
     out: list[Location] = []
 
     if gsp_id is None or gsp_id == 0:
+        if 0 not in gsp_id_map:
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        )
+
         nations = await db.get_locations(
+            location_uuid=gsp_id_map[0].uuid,
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.NATION,
             authdata={},
         )
+        uk_national = nations[0]
 
-        uk_national = [n for n in nations if n.name == "uk"]
-        national = uk_national[0]
-        installed_capacity_mw = national.capacity_kilowatts / 1000
-        if "capacity_no_degradation_kw" in national.metadata:
-            installed_capacity_mw = national.metadata["capacity_no_degradation_kw"] / 1_000
+        installed_capacity_mw = uk_national.capacity_kilowatts / 1000
+        if "capacity_no_degradation_kw" in uk_national.metadata:
+            installed_capacity_mw = uk_national.metadata["capacity_no_degradation_kw"] / 1_000
 
         # Why not use from_location here?
         location = Location(
@@ -62,25 +68,28 @@ async def get_system_details(
             region_name="National",
             installed_capacity_mw=installed_capacity_mw,
         )
-        out.append(location)
+        out = [location]
         log.info("Fetched national system details")
 
     if gsp_id is not None and gsp_id == 0:
         return out
 
-    gsps = await get_gsps(db=db, auth={})
-    log.info(f"Fetched {len(gsps)} GSPs")
-
     if gsp_id is not None and gsp_id > 0:
         out = [
-            Location.from_location(gsp)
-            for gsp in gsps
-            if "gsp_id" in gsp.metadata
-            and int(gsp.metadata["gsp_id"]) == gsp_id
+            Location.from_location(gsp_id_map[gsp_id]),
         ]
+        return out
 
     if gsp_id is None:
-        out.extend([Location.from_location(gsp) for gsp in gsps])
+        # Get up to date gsp information and update the map
+        gsps = await db.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.GSP,
+            authdata={},
+        )
+        for gsp in gsps:
+            gsp_id_map[int(gsp.metadata["gsp_id"])] = gsp
+            out.append(Location.from_location(gsp))
 
     out.sort(key=lambda x: x.gsp_id)
 

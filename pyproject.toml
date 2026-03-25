@@ -54,7 +54,8 @@ dev = [
     "sqlalchemy-stubs>=0.4",
     "psycopg2-binary>=2.9.11",
     "freezegun>=1.5.5",
-
+    "ty>=0.0.25",
+    "pyinstrument>=5.1.2",
 ]
 
 [tool.uv.sources]

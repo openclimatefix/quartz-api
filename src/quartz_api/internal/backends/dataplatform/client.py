@@ -14,12 +14,12 @@ from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
 
 log = logging.getLogger("dataplatform.client")
 
-energy_type_map = {
+energy_type_map: dict[models.EnergyType, dp.EnergySource] = {
     models.EnergyType.SOLAR: dp.EnergySource.SOLAR,
     models.EnergyType.WIND: dp.EnergySource.WIND,
 }
 
-location_type_map = {
+location_type_map: dict[models.LocationType, dp.LocationType] = {
     models.LocationType.SITE: dp.LocationType.SITE,
     models.LocationType.GSP: dp.LocationType.GSP,
     models.LocationType.REGION: dp.LocationType.STATE,

@@ -22,6 +22,8 @@ from .endpoint_types import (
     NationalForecast,
     NationalForecastValue,
     NationalYield,
+    gsp_id_map,
+    model_names_external_to_internal,
 )
 from .time_utils import limit_end_datetime_by_permissions
 
@@ -29,14 +31,6 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["National"])
 
-model_names_external_to_internal = {
-    "blend": "blend",
-    "pvnet_intraday": "pvnet_v2",
-    "pvnet_day_ahead": "pvnet_day_ahead",
-    "pvnet_intraday_ecmwf_only": "pvnet_ecmwf",
-    "pvnet_intraday_met_office_only": "pvnet_ukv_only",
-    "pvnet_intraday_sat_only": "pvnet_sat_only",
-}
 
 # NOTE: We don't have to explicitly ask for UTC in the time parameters here,
 # we can simply enforce timezones and coerce from there (which is what we're doing).
@@ -48,7 +42,7 @@ model_names_external_to_internal = {
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEnd,
         Depends(limit_end_datetime_by_permissions),
@@ -99,21 +93,19 @@ async def get_national_forecast(
                 = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
 
     # get model name
-    model_name = model_names_external_to_internal[model_name]
+    model_name_str = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
-        model_name = model_name + "_adjust"
+        model_name_str = model_name + "_adjust"
 
-    # get national location UUID and and set forecast horizon
-    nations = await db.get_locations(
+    # get national location
+    locations = await db.get_locations(
+        location_uuid=gsp_id_map[0].uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
-        authdata=auth,
+        authdata={},
     )
-    filtered_nations = [n for n in nations if n.name == "uk"]
-    if len(filtered_nations) != 1:
-        raise ValueError("No nation with name 'uk' found in database.")
-    nation = filtered_nations[0]
-    log.info("Fetched national location")
+    uk_loc = locations[0]
+
 
     pgvs = await db.get_predicted_generation(
         energy_type=models.EnergyType.SOLAR,
@@ -122,9 +114,9 @@ async def get_national_forecast(
         window_end=end_datetime_utc,
         created_cutoff=creation_limit_utc,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
-        forecaster_name=model_name,
+        forecaster_name=model_name_str,
         authdata={},
-        location_uuid=nation.uuid,
+        location_uuid=uk_loc.uuid,
     )
     log.info(f"Fetched {len(pgvs)} predicted generation values")
 
@@ -155,7 +147,7 @@ async def get_national_forecast(
         version = pgvs[-1].metadata.get("app_version", pgvs[-1].forecaster_version)
 
         national_forecast = NationalForecast(
-            location=Location.from_location(nation),
+            location=Location.from_location(uk_loc),
             model=MLModel(
                 name=pgvs[0].forecaster_name,
                 version=version,
@@ -177,7 +169,7 @@ async def get_national_forecast(
 async def get_national_pvlive(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
@@ -198,19 +190,16 @@ async def get_national_pvlive(
 
     """
     # get national location UUID and and set forecast horizon
-    nations = await db.get_locations(
+    locations = await db.get_locations(
+        location_uuid=gsp_id_map[0].uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
-        authdata=auth,
+        authdata={},
     )
-    filtered_nations = [n for n in nations if n.name == "uk"]
-    if len(filtered_nations) != 1:
-        raise ValueError("No nation with name 'uk' found in database.")
-    nation = filtered_nations[0]
-    log.info("Fetched national location")
+    uk_loc = locations[0]
 
     agvs = await db.get_actual_generation(
-        location_uuid=nation.uuid,
+        location_uuid=uk_loc.uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
         window_start=pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2),

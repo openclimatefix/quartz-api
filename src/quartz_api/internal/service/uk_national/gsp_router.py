@@ -16,7 +16,7 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
-from .cache import get_gsps, key_builder
+from .cache import key_builder
 from .endpoint_types import (
     Forecast,
     ForecastValue,
@@ -26,6 +26,7 @@ from .endpoint_types import (
     MLModel,
     OneDatetimeManyForecastValuesMW,
     convert_list_of_gsp_ids,
+    gsp_id_map,
 )
 from .time_utils import (
     limit_end_datetime_by_permissions,
@@ -51,7 +52,7 @@ router = APIRouter(tags=["GSP"])
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: Annotated[
@@ -82,16 +83,13 @@ async def get_forecasts_for_a_specific_gsp(
     - **creation_utc_limit**: optional, only return forecasts made before this datetime.
     returns the latest forecast made 60 minutes before the target time)
     """
-    # get gsps
-    gsps = await get_gsps(db, auth)
-    filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
-    if len(filtered_gsps) != 1:
-        log.warning(f"GSP with gsp_id {gsp_id} not found")
+    if gsp_id not in gsp_id_map:
+        # According to the integration tests, we should return a 200 OK when getting a non-
+        # existent GSP - so that is what is replicated here. Seems odd to me.
         return []
-    gsp = filtered_gsps[0]
 
     pgvs = await db.get_predicted_generation(
-        location_uuid=gsp.uuid,
+        location_uuid=gsp_id_map[gsp_id].uuid,
         window_start=start_datetime_utc,
         window_end=end_datetime_utc,
         energy_type=models.EnergyType.SOLAR,
@@ -127,7 +125,7 @@ async def get_forecasts_for_a_specific_gsp(
 async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
@@ -153,18 +151,14 @@ async def get_truths_for_a_specific_gsp(
     Only 3 days of history is available. If you want to get more PVLive data,
     please use the [PVLive API](https://www.solar.sheffield.ac.uk/api/)
     """
-    gsps = await get_gsps(db, auth)
-    filtered_gsps = [g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id]
-    if len(filtered_gsps) != 1:
+    if gsp_id not in gsp_id_map:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"GSP with gsp_id {gsp_id} not found",
+            detail=f"GSP ID {gsp_id} not found",
         )
-    gsp = filtered_gsps[0]
-    log.info(f"Fetched GSP {gsp_id}")
 
     agvs = await db.get_actual_generation(
-        location_uuid=gsp.uuid,
+        location_uuid=gsp_id_map[gsp_id].uuid,
         window_start=start_datetime_utc,
         window_end=end_datetime_utc,
         energy_type=models.EnergyType.SOLAR,
@@ -197,7 +191,7 @@ async def get_truths_for_a_specific_gsp(
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     start_datetime_utc: Annotated[
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
@@ -210,7 +204,7 @@ async def get_all_available_forecasts(
     gsp_ids: str | None = None,
     compact: bool = False,
 
-) -> list[OneDatetimeManyForecastValuesMW | Forecast]:
+) -> list[OneDatetimeManyForecastValuesMW] | list[Forecast]:
     """### Get all forecasts for all GSPs.
 
     The return object contains a forecast object with system details and
@@ -230,19 +224,21 @@ async def get_all_available_forecasts(
     today's forecasts for all GSPs
     - **start_datetime_utc**: optional start datetime for the query. e.g '2023-08-12 10:00:00+00:00'
     """
-    gsps = await get_gsps(db, auth)
-    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
-    gsp_uuid_id_map: dict[UUID, int] = {
-        gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
-        if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
-    }
-    log.info(f"Fetched {len(gsp_uuid_id_map)} GSPs")
-
     # if gsp ids are not set, then we use snapshot method, which gets all gsps for one timestamp
     # if gsp_ids is set, then we loop over all gsp ids to get forecasts. The UI current needs this.
+    results: list[list[models.PredictedGenerationValue]]
+    # Don't include national by default
+    gsp_ids_ints: list[int] = convert_list_of_gsp_ids(gsp_ids) or [
+        k for k in gsp_id_map if k != 0
+    ]
+    gsps_to_convert: dict[int, models.Location] = {
+        k: v for k, v in gsp_id_map.items()
+        if k in gsp_ids_ints
+    }
+
     if gsp_ids is None:
         snapshot = await db.get_predicted_generation_snapshot(
-            location_uuids=gsp_uuid_id_map.keys(),
+            location_uuids=[loc.uuid for loc in gsps_to_convert.values()],
             snapshot_timestamp_utc=start_datetime_utc,
             energy_type=models.EnergyType.SOLAR,
             forecaster_name=GSP_FORECASTER_NAME,
@@ -251,12 +247,10 @@ async def get_all_available_forecasts(
         )
         results = [snapshot]
     else:
-        tasks = []
-        for gsp_uuid in gsp_uuid_id_map:
-            tasks.append(
+        tasks = [
                 asyncio.create_task(
                     db.get_predicted_generation(
-                        location_uuid=str(gsp_uuid),
+                        location_uuid=str(loc.uuid),
                         window_start=start_datetime_utc,
                         window_end=end_datetime_utc,
                         energy_type=models.EnergyType.SOLAR,
@@ -267,8 +261,9 @@ async def get_all_available_forecasts(
                         forecaster_name=GSP_FORECASTER_NAME,
                         forecaster_version=GSP_FORECASTER_VERSION,
                     ),
-                ),
-            )
+                )
+                for loc in gsps_to_convert.values()
+            ]
 
         results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
             *tasks, return_exceptions=True,
@@ -276,16 +271,20 @@ async def get_all_available_forecasts(
     log.info(f"Fetched predicted generation values for {len(results)} GSPs")
     # reorganize results by timestamp
     grouped_data: dict[dt.datetime, dict[int, float]] = defaultdict(dict)
-    gsp_ids = list(gsp_uuid_id_map.values())
 
     if compact:
         # We can zip these because the tasks will return in the same order as they were created
         for snapshot in results:
+            if isinstance(snapshot, Exception):
+                raise snapshot
             for predicted_generation_value in snapshot:
-
-                gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
-                grouped_data[predicted_generation_value.valid_timestamp][gsp_id] \
-                    = round(predicted_generation_value.power_kilowatts / 1000.0, 4)
+                gsp_id = next(
+                    k for k, v in gsps_to_convert.items()
+                    if v.uuid == predicted_generation_value.location_uuid
+                )
+                grouped_data[predicted_generation_value.valid_timestamp][gsp_id] = round(
+                    predicted_generation_value.power_kilowatts / 1000.0, 4,
+                )
 
         out: list[OneDatetimeManyForecastValuesMW] = [
             OneDatetimeManyForecastValuesMW(
@@ -303,8 +302,13 @@ async def get_all_available_forecasts(
         forecast_values_by_gsp_id: dict[int, list[ForecastValue]] = {}
         forecasts_by_gsp_id: dict[int, Forecast] = {}
         for snapshot in results:
+            if isinstance(snapshot, Exception):
+                raise snapshot
             for predicted_generation_value in snapshot:
-                gsp_id = gsp_uuid_id_map[predicted_generation_value.location_uuid]
+                gsp_id = next(
+                    k for k, v in gsps_to_convert.items()
+                    if v.uuid == predicted_generation_value.location_uuid
+                )
                 forecast_value = ForecastValue(
                     expected_power_generation_megawatts
                         =round(predicted_generation_value.power_kilowatts / 1000, 4),
@@ -314,19 +318,25 @@ async def get_all_available_forecasts(
 
                 if gsp_id not in forecasts_by_gsp_id:
 
-                    version = predicted_generation_value.metadata.get("app_version",
-                                                                      predicted_generation_value.forecaster_version)
+                    version = predicted_generation_value.metadata.get(
+                        "app_version",
+                        predicted_generation_value.forecaster_version,
+                    )
                     input_data = format_metadata(predicted_generation_value.metadata)
-                    gsp = next(g for g in gsps if int(g.metadata["gsp_id"]) == gsp_id)
-                    forecast_creation_time = predicted_generation_value.created_timestamp
+                    gsp = next(v for k, v in gsps_to_convert.items() if k == gsp_id)
+
+                    # Add the location's capacity based on what it was at time of the value
+                    location = Location.from_location(gsp)
+                    location.installed_capacity_mw = \
+                        predicted_generation_value.capacity_kilowatts / 1000.0
 
                     forecasts_by_gsp_id[gsp_id] = Forecast(
-                    location=Location.from_location(gsp),
+                    location=location,
                     model=MLModel(
                         name=predicted_generation_value.forecaster_name,
                         version=version,
                     ),
-                    forecast_creation_time=forecast_creation_time,
+                    forecast_creation_time=predicted_generation_value.created_timestamp,
                     initialization_datetime_utc=predicted_generation_value.init_timestamp,
                     # we will add to this later
                     forecast_values=[],
@@ -335,8 +345,7 @@ async def get_all_available_forecasts(
 
 
         forecasts: list[Forecast] = []
-        gsp_ids = sorted(gsp_uuid_id_map.values())
-        for gsp_id in gsp_ids:
+        for gsp_id in sorted(gsps_to_convert.keys()):
 
             gsp_forecast = forecasts_by_gsp_id[gsp_id]
             forecast_values = forecast_values_by_gsp_id[gsp_id]
@@ -357,7 +366,7 @@ async def get_all_available_forecasts(
 async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
@@ -381,20 +390,16 @@ async def get_truths_for_all_gsps(
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
     """
-    gsps = await get_gsps(db, auth)
+    # Why not just make the endpoint type list[int] and let fast API do this?
     gsp_ids: list[int] | None = convert_list_of_gsp_ids(gsp_ids)
-    gsp_uuid_id_map: dict[UUID, int] = {
-        gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps
-        if gsp_ids is None or int(gsp.metadata["gsp_id"]) in gsp_ids
-    }
-    log.info(f"Fetched {len(gsp_uuid_id_map)} GSPs")
-
     out: list[GSPYieldGroupByDatetime] = []
+
+    gsp_uuid_id_map: dict[UUID, int] = {v.uuid: k for k, v in gsp_id_map.items()}
 
     if gsp_ids is None:
         # Return a snapshot of the data at the start_datetime_utc for all gsps
         values = await db.get_actual_generation_snapshot(
-                location_uuids=list(gsp_uuid_id_map.keys()),
+                location_uuids=[loc.uuid for loc in gsp_id_map.values()],
                 snapshot_timestamp_utc=start_datetime_utc,
                 energy_type=models.EnergyType.SOLAR,
                 observer_name=f"pvlive_{regime}",
@@ -412,7 +417,7 @@ async def get_truths_for_all_gsps(
     elif len(gsp_ids) == 1:
         # Get observations as a timeseries
         values = await db.get_actual_generation(
-            location_uuid=next(iter(gsp_uuid_id_map.keys())),
+            location_uuid=gsp_id_map[gsp_ids[0]].uuid,
             window_start=start_datetime_utc,
             window_end=end_datetime_utc,
             energy_type=models.EnergyType.SOLAR,
