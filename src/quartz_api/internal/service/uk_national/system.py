@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder, expire=3600*24)
+@cache(key_builder=key_builder, expire=3600)
 async def get_system_details(
     request: Request,  # noqa: ARG001
     db: StorageClientDependency,
@@ -68,7 +68,7 @@ async def get_system_details(
             region_name="National",
             installed_capacity_mw=installed_capacity_mw,
         )
-        out.append(location)
+        out = [location]
         log.info("Fetched national system details")
 
     if gsp_id is not None and gsp_id == 0:
