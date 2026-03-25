@@ -7,6 +7,15 @@ from pydantic import BaseModel, Field, field_validator
 
 from quartz_api.internal import models
 
+# Feels like this could be put in the below map
+model_names_external_to_internal = {
+    "blend": "blend",
+    "pvnet_intraday": "pvnet_v2",
+    "pvnet_day_ahead": "pvnet_day_ahead",
+    "pvnet_intraday_ecmwf_only": "pvnet_ecmwf",
+    "pvnet_intraday_met_office_only": "pvnet_ukv_only",
+    "pvnet_intraday_sat_only": "pvnet_sat_only",
+}
 
 class ModelName(StrEnum):
     """Available model options for national forecasts."""
@@ -107,12 +116,32 @@ class Location(EnhancedBaseModel):
             installed_capacity_mw=installed_capacity_mw,
         )
 
+    def model_post_init(self, __context):
+        # Another hack to ensure the national locations matches the old datamodel-backed API.
+        if self.gsp_id == 0:
+            self.label = "National-GB"
+            self.gsp_name = "National"
+            self.gsp_group = "National"
+            self.region_name = " National" # Yes, the space was there before...
+
 
 class MLModel(EnhancedBaseModel):
     """ML model that is being used."""
 
     name: str | None = Field(..., description="The name of the model")
     version: str | None = Field(..., description="The version of the model")
+
+    def model_post_init(self, __context):
+        # Neither the external model name map, nore the Model enum, accurately captures
+        # the names returned by the old datamodel-backed API. So I hack them in here.
+        if self.name is not None:
+            self.name = self.name.rsplit("_adjust")[0]
+            rename_map: dict[str, str] = {
+                "pvnet_sat_only": "pvnet-sat-only",
+                "pvnet_ukv_only": "pvnet-ukv-only",
+            }
+            if self.name in rename_map:
+                self.name = rename_map[self.name]
 
 
 class ForecastValue(EnhancedBaseModel):
@@ -257,3 +286,6 @@ class Status(EnhancedBaseModel):
 
     status: str = Field(..., description="Status description")
     message: str = Field(..., description="Status Message")
+
+
+gsp_id_map: dict[int, models.Location] = {}

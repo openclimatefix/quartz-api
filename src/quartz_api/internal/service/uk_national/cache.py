@@ -5,10 +5,6 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import Request, Response
-from fastapi_cache.decorator import cache
-
-from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
 
 log = logging.getLogger(__name__)
 
@@ -55,27 +51,3 @@ async def key_builder(
 
     return key
 
-
-async def get_gsps(
-        db: models.StorageClientDependency, auth: AuthDependency) -> list[models.Location]:
-    """Get all solar gsps and convert dict to pydantic models."""
-    gsps = await get_gsps_cached(db, auth)
-    if isinstance(gsps[0], dict):
-        # the cache seems to return the list of pydantic elements as list of dicts
-        gsps = [models.Location(**gsp) for gsp in gsps]
-
-    return gsps
-
-
-@cache(expire=300)
-async def get_gsps_cached(
-    db: models.StorageClientDependency, auth: AuthDependency,
-) -> list[models.Location]:
-    """Get all solar gsps."""
-    gsps = await db.get_locations(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.GSP,
-        authdata=auth,
-    )
-
-    return gsps
