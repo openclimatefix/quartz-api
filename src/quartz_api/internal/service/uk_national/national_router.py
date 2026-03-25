@@ -5,7 +5,7 @@ import logging
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
@@ -42,7 +42,7 @@ router = APIRouter(tags=["National"])
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEnd,
         Depends(limit_end_datetime_by_permissions),
@@ -97,7 +97,7 @@ async def get_national_forecast(
     if trend_adjuster_on:
         model_name_str = model_name + "_adjust"
 
-    # get national location 
+    # get national location
     locations = await db.get_locations(
         location_uuid=gsp_id_map[0].uuid,
         energy_type=models.EnergyType.SOLAR,
@@ -105,7 +105,7 @@ async def get_national_forecast(
         authdata={},
     )
     uk_loc = locations[0]
-    
+
 
     pgvs = await db.get_predicted_generation(
         energy_type=models.EnergyType.SOLAR,
@@ -169,7 +169,7 @@ async def get_national_forecast(
 async def get_national_pvlive(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.

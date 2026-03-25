@@ -2,12 +2,14 @@
 
 import datetime as dt
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
+from typing_extensions import override
 
 from quartz_api.internal import models
 
-# Feels like this could be put in the below map
+# Feels like this could be put in the below map
 model_names_external_to_internal = {
     "blend": "blend",
     "pvnet_intraday": "pvnet_v2",
@@ -116,7 +118,8 @@ class Location(EnhancedBaseModel):
             installed_capacity_mw=installed_capacity_mw,
         )
 
-    def model_post_init(self, __context):
+    @override
+    def model_post_init(self, __context: Any) -> None:
         # Another hack to ensure the national locations matches the old datamodel-backed API.
         if self.gsp_id == 0:
             self.label = "National-GB"
@@ -131,7 +134,8 @@ class MLModel(EnhancedBaseModel):
     name: str | None = Field(..., description="The name of the model")
     version: str | None = Field(..., description="The version of the model")
 
-    def model_post_init(self, __context):
+    @override
+    def model_post_init(self, __context: Any) -> None:
         # Neither the external model name map, nore the Model enum, accurately captures
         # the names returned by the old datamodel-backed API. So I hack them in here.
         if self.name is not None:

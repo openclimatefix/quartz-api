@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
@@ -44,7 +44,7 @@ async def get_system_details(
         if 0 not in gsp_id_map:
             raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Location not found",
+            detail="Location not found",
         )
 
         nations = await db.get_locations(
@@ -76,7 +76,7 @@ async def get_system_details(
 
     if gsp_id is not None and gsp_id > 0:
         out = [
-            Location.from_location(gsp_id_map[gsp_id])
+            Location.from_location(gsp_id_map[gsp_id]),
         ]
 
     if gsp_id is None:
@@ -85,7 +85,7 @@ async def get_system_details(
                 Location.from_location(gsp)
                 for k, gsp in list(gsp_id_map.items())
                 if k != 0
-            ]
+            ],
         )
 
     out.sort(key=lambda x: x.gsp_id)

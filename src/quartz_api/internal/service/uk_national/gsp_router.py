@@ -52,7 +52,7 @@ router = APIRouter(tags=["GSP"])
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: Annotated[
@@ -126,7 +126,7 @@ async def get_forecasts_for_a_specific_gsp(
 async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
@@ -192,7 +192,7 @@ async def get_truths_for_a_specific_gsp(
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     start_datetime_utc: Annotated[
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
@@ -271,10 +271,10 @@ async def get_all_available_forecasts(
             if isinstance(snapshot, Exception):
                 raise snapshot
             for predicted_generation_value in snapshot:
-                gsp_id = [
+                gsp_id = next(
                     k for k, v in gsp_id_map.items()
                     if v == predicted_generation_value.location_uuid
-                ][0]
+                )
                 grouped_data[predicted_generation_value.valid_timestamp][gsp_id] = round(
                     predicted_generation_value.power_kilowatts / 1000.0, 4,
                 )
@@ -298,10 +298,10 @@ async def get_all_available_forecasts(
             if isinstance(snapshot, Exception):
                 raise snapshot
             for predicted_generation_value in snapshot:
-                gsp_id = [
+                gsp_id = next(
                     k for k, v in gsp_id_map.items()
                     if v.uuid == predicted_generation_value.location_uuid
-                ][0]
+                )
                 forecast_value = ForecastValue(
                     expected_power_generation_megawatts
                         =round(predicted_generation_value.power_kilowatts / 1000, 4),
@@ -335,7 +335,7 @@ async def get_all_available_forecasts(
 
 
         forecasts: list[Forecast] = []
-        for gsp_id in sorted(list(gsp_id_map.keys())):
+        for gsp_id in sorted(gsp_id_map.keys()):
 
             gsp_forecast = forecasts_by_gsp_id[gsp_id]
             forecast_values = forecast_values_by_gsp_id[gsp_id]
@@ -356,7 +356,7 @@ async def get_all_available_forecasts(
 async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",

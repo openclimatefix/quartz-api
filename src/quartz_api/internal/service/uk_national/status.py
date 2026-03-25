@@ -3,7 +3,7 @@
 import datetime as dt
 import os
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi_cache.decorator import cache
 from sqlalchemy import create_engine, text
 from starlette import status
@@ -54,11 +54,10 @@ async def check_last_forecast_run(
 
     This route is used to check the status of the last forecast run.
     """
-
     if 0 not in gsp_id_map:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Location not found",
+            detail="Location not found",
         )
 
     # Get the national forecast,
