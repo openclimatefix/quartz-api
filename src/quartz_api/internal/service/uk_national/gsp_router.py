@@ -227,9 +227,18 @@ async def get_all_available_forecasts(
     # if gsp ids are not set, then we use snapshot method, which gets all gsps for one timestamp
     # if gsp_ids is set, then we loop over all gsp ids to get forecasts. The UI current needs this.
     results: list[list[models.PredictedGenerationValue]]
+    # Don't include national by default
+    gsp_ids_ints: list[int] = convert_list_of_gsp_ids(gsp_ids) or [
+        k for k in gsp_id_map if k != 0
+    ]
+    gsps_to_convert: dict[int, models.Location] = {
+        k: v for k, v in gsp_id_map.items()
+        if k in gsp_ids_ints
+    }
+
     if gsp_ids is None:
         snapshot = await db.get_predicted_generation_snapshot(
-            location_uuids=[loc.uuid for loc in gsp_id_map.values()],
+            location_uuids=[loc.uuid for loc in gsps_to_convert.values()],
             snapshot_timestamp_utc=start_datetime_utc,
             energy_type=models.EnergyType.SOLAR,
             forecaster_name=GSP_FORECASTER_NAME,
@@ -238,9 +247,7 @@ async def get_all_available_forecasts(
         )
         results = [snapshot]
     else:
-        tasks = []
-        for loc in gsp_id_map.values():
-            tasks.append(
+        tasks = [
                 asyncio.create_task(
                     db.get_predicted_generation(
                         location_uuid=str(loc.uuid),
@@ -254,8 +261,9 @@ async def get_all_available_forecasts(
                         forecaster_name=GSP_FORECASTER_NAME,
                         forecaster_version=GSP_FORECASTER_VERSION,
                     ),
-                ),
-            )
+                )
+                for loc in gsps_to_convert.values()
+            ]
 
         results: list[list[models.PredictedGenerationValue] | Exception]  = await asyncio.gather(
             *tasks, return_exceptions=True,
@@ -271,7 +279,7 @@ async def get_all_available_forecasts(
                 raise snapshot
             for predicted_generation_value in snapshot:
                 gsp_id = next(
-                    k for k, v in gsp_id_map.items()
+                    k for k, v in gsps_to_convert.items()
                     if v.uuid == predicted_generation_value.location_uuid
                 )
                 grouped_data[predicted_generation_value.valid_timestamp][gsp_id] = round(
@@ -298,7 +306,7 @@ async def get_all_available_forecasts(
                 raise snapshot
             for predicted_generation_value in snapshot:
                 gsp_id = next(
-                    k for k, v in gsp_id_map.items()
+                    k for k, v in gsps_to_convert.items()
                     if v.uuid == predicted_generation_value.location_uuid
                 )
                 forecast_value = ForecastValue(
@@ -315,7 +323,7 @@ async def get_all_available_forecasts(
                         predicted_generation_value.forecaster_version,
                     )
                     input_data = format_metadata(predicted_generation_value.metadata)
-                    gsp = next(v for k, v in gsp_id_map.items() if k == gsp_id)
+                    gsp = next(v for k, v in gsps_to_convert.items() if k == gsp_id)
                     forecast_creation_time = predicted_generation_value.created_timestamp
 
                     forecasts_by_gsp_id[gsp_id] = Forecast(
@@ -334,7 +342,7 @@ async def get_all_available_forecasts(
 
 
         forecasts: list[Forecast] = []
-        for gsp_id in sorted(gsp_id_map.keys()):
+        for gsp_id in sorted(gsps_to_convert.keys()):
 
             gsp_forecast = forecasts_by_gsp_id[gsp_id]
             forecast_values = forecast_values_by_gsp_id[gsp_id]
