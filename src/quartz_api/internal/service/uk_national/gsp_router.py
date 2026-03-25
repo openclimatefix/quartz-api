@@ -84,10 +84,9 @@ async def get_forecasts_for_a_specific_gsp(
     returns the latest forecast made 60 minutes before the target time)
     """
     if gsp_id not in gsp_id_map:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"GSP ID {gsp_id} not found",
-        )
+        # According to the integration tests, we should return a 200 OK when getting a non-
+        # existent GSP - so that is what is replicated here. Seems odd to me.
+        return []
 
     pgvs = await db.get_predicted_generation(
         location_uuid=gsp_id_map[gsp_id].uuid,
@@ -240,11 +239,11 @@ async def get_all_available_forecasts(
         results = [snapshot]
     else:
         tasks = []
-        for gsp_uuid in gsp_id_map.values():
+        for loc in gsp_id_map.values():
             tasks.append(
                 asyncio.create_task(
                     db.get_predicted_generation(
-                        location_uuid=str(gsp_uuid),
+                        location_uuid=str(loc.uuid),
                         window_start=start_datetime_utc,
                         window_end=end_datetime_utc,
                         energy_type=models.EnergyType.SOLAR,
@@ -273,7 +272,7 @@ async def get_all_available_forecasts(
             for predicted_generation_value in snapshot:
                 gsp_id = next(
                     k for k, v in gsp_id_map.items()
-                    if v == predicted_generation_value.location_uuid
+                    if v.uuid == predicted_generation_value.location_uuid
                 )
                 grouped_data[predicted_generation_value.valid_timestamp][gsp_id] = round(
                     predicted_generation_value.power_kilowatts / 1000.0, 4,
