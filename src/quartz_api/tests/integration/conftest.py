@@ -13,6 +13,9 @@ from grpclib.client import Channel
 from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
 
+from quartz_api.internal import models
+from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+
 
 @pytest_asyncio.fixture(scope="session")
 async def dp_client() -> dp.DataPlatformDataServiceStub:
@@ -137,5 +140,14 @@ async def national_location(dp_client: dp.DataPlatformDataServiceStub) -> dp.Cre
     metadata = Struct(fields={"gsp_id": Value(number_value=0)})
     create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
     create_location_response = await dp_client.create_location(create_location_request)
+
+    gsp_id_map[0] = models.Location(
+        uuid=UUID(create_location_response.location_uuid),
+        metadata={"gsp_id": 0},
+        name="uk",
+        latitude=0,
+        longitude=0,
+        capacity_kilowatts=create_location_response.effective_capacity_watts / 1000,
+    )
 
     return create_location_response
