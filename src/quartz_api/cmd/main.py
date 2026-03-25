@@ -104,21 +104,24 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             )
             client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
             storage = DataPlatformStorage.from_dp(dp_client=client)
-            # Populate the GSP ID to UUID mapping
-            resp = await storage.get_locations(
-                    location_type=models.LocationType.GSP,
-                    energy_type=models.EnergyType.SOLAR,
-                    authdata={},
+
+            if 'uk_national' in conf.get_string("api.routers").split(","):
+                # Populate the GSP ID to UUID mapping
+                resp = await storage.get_locations(
+                        location_type=models.LocationType.GSP,
+                        energy_type=models.EnergyType.SOLAR,
+                        authdata={},
+                    )
+                resp += await storage.get_locations(
+                        location_type=models.LocationType.NATION,
+                        energy_type=models.EnergyType.SOLAR,
+                        authdata={},
                 )
-            resp += await storage.get_locations(
-                    location_type=models.LocationType.NATION,
-                    energy_type=models.EnergyType.SOLAR,
-                    authdata={},
-            )
-            for loc in resp:
-                if "gsp_id" in loc.metadata:
-                    gsp_id_map[int(loc.metadata["gsp_id"])] = loc
-            log.info(f"Populated GSP ID map with {len(gsp_id_map)} entries")
+                for loc in resp:
+                    if "gsp_id" in loc.metadata:
+                        gsp_id_map[int(loc.metadata["gsp_id"])] = loc
+                log.info(f"Populated GSP ID map with {len(gsp_id_map)} entries")
+
         case _ as backend_type:
             raise ValueError(f"Unknown backend: {backend_type}")
 

@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
     "/gsp/",
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder)
+@cache(key_builder=key_builder, expire=3600*24)
 async def get_system_details(
     request: Request,  # noqa: ARG001
     db: StorageClientDependency,
@@ -78,15 +78,18 @@ async def get_system_details(
         out = [
             Location.from_location(gsp_id_map[gsp_id]),
         ]
+        return out
 
     if gsp_id is None:
-        out.extend(
-            [
-                Location.from_location(gsp)
-                for k, gsp in list(gsp_id_map.items())
-                if k != 0
-            ],
+        # Get up to date gsp information and update the map
+        gsps = await db.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.GSP,
+            authdata={},
         )
+        for gsp in gsps:
+            gsp_id_map[int(gsp.metadata["gsp_id"])] = gsp
+            out.append(Location.from_location(gsp))
 
     out.sort(key=lambda x: x.gsp_id)
 
