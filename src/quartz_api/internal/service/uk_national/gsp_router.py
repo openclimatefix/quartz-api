@@ -324,16 +324,19 @@ async def get_all_available_forecasts(
                     )
                     input_data = format_metadata(predicted_generation_value.metadata)
                     gsp = next(v for k, v in gsps_to_convert.items() if k == gsp_id)
-                    forecast_creation_time = predicted_generation_value.created_timestamp
+
+                    # Add the location's capacity based on what it was at time of the value
+                    location = Location.from_location(gsp)
+                    location.installed_capacity_mw = \
+                        predicted_generation_value.capacity_kilowatts / 1000.0
 
                     forecasts_by_gsp_id[gsp_id] = Forecast(
-                    # This should be modified as the capacity etc is on the forecast values now.
-                    location=Location.from_location(gsp),
+                    location=location,
                     model=MLModel(
                         name=predicted_generation_value.forecaster_name,
                         version=version,
                     ),
-                    forecast_creation_time=forecast_creation_time,
+                    forecast_creation_time=predicted_generation_value.created_timestamp,
                     initialization_datetime_utc=predicted_generation_value.init_timestamp,
                     # we will add to this later
                     forecast_values=[],

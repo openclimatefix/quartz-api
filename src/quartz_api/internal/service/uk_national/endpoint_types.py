@@ -292,4 +292,5 @@ class Status(EnhancedBaseModel):
     message: str = Field(..., description="Status Message")
 
 
+# This gets populated by the data platform storage backend at API startup.
 gsp_id_map: dict[int, models.Location] = {}
