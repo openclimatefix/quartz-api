@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
@@ -138,6 +139,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Register rate limiter
     server.state.limiter = ratelimit.limiter
     server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_middleware(SlowAPIMiddleware)
 
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
