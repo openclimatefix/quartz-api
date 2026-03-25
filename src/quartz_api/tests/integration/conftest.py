@@ -130,6 +130,15 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
         res = await dp_client.create_location(create_location_request)
         location_uuids.append(res.location_uuid)
 
+        gsp_id_map[i] = models.Location(
+            uuid=UUID(res.location_uuid),
+            metadata={"gsp_id": i},
+            name="uk",
+            latitude=0,
+            longitude=0,
+            capacity_kilowatts=res.effective_capacity_watts / 1000,
+        )
+
     return location_uuids
 
 
