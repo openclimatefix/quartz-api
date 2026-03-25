@@ -7,26 +7,27 @@ from quartz_api.internal.service.uk_national.endpoint_types import InputDataLast
 def format_metadata(metadata: dict) -> InputDataLastUpdated:
     """Format metadata dictionary into InputDataLastUpdated object."""
     old = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
-    gsp = metadata.get("gsp_last_updated", old)
+    if "gsp_last_updated" in metadata:
+        gsp = dt.datetime.fromisoformat(metadata.get("gsp_last_updated"))
+        if gsp.tzinfo is None:
+            gsp = gsp.replace(tzinfo=dt.UTC)
+    else:
+        gsp = old
 
     # there can be two satellite keys, the 9 degree and the 0 degree
     satellite = old
     for satellite_key in [k for k in metadata if "satellite" in k]:
-        satellite = max([metadata.get(satellite_key, old)])
+        new_satellite = dt.datetime.fromisoformat(metadata.get(satellite_key))
+        if new_satellite.tzinfo is None:
+            new_satellite = new_satellite.replace(tzinfo=dt.UTC)
+        satellite = max([new_satellite, satellite])
 
     # the nwp keys could be nwp_ukv_last_updated, nwp_ecwmwf_last_updated, or nwp_last_updated
     nwp = old
     for nwp_key in [k for k in metadata if "nwp" in k]:
-        nwp = max([metadata.get(nwp_key, old)])
-
-    # make sure they all have timezones
-    if gsp.tzinfo is None:
-        gsp = gsp.replace(tzinfo=dt.UTC)
-
-    if satellite.tzinfo is None:
-        satellite = satellite.replace(tzinfo=dt.UTC)
-
-    if nwp.tzinfo is None:
-        nwp = nwp.replace(tzinfo=dt.UTC)
+        new_nwp = dt.datetime.fromisoformat(metadata.get(nwp_key))
+        if new_nwp.tzinfo is None:
+            new_nwp = new_nwp.replace(tzinfo=dt.UTC)
+        nwp = max([new_nwp, nwp])
 
     return InputDataLastUpdated(gsp=gsp, nwp=nwp, pv=old, satellite=satellite)
