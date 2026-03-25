@@ -182,6 +182,9 @@ async def get_truths_for_a_specific_gsp(
         for v in agvs
     ]
 
+    # lets make sure the latest timestamps are first
+    out.sort(key=lambda x: x.datetime_utc, reverse=True)
+
     return out
 
 
