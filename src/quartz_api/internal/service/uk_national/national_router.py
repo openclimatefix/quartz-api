@@ -31,6 +31,9 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["National"])
 
+FORECASTER_VERSION_BLEND = "1.3.0"
+FORECASTER_VERSION_PVNET = "2.8.0"
+
 
 # NOTE: We don't have to explicitly ask for UTC in the time parameters here,
 # we can simply enforce timezones and coerce from there (which is what we're doing).
@@ -115,6 +118,8 @@ async def get_national_forecast(
         created_cutoff=creation_limit_utc,
         forecast_horizon_minutes=forecast_horizon_minutes or 0,
         forecaster_name=model_name_str,
+        forecaster_version=FORECASTER_VERSION_BLEND \
+            if model_name == ModelName.blend else FORECASTER_VERSION_PVNET,
         authdata={},
         location_uuid=uk_loc.uuid,
     )

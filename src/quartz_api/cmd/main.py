@@ -250,7 +250,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         allow_headers=["*"],
     )
     server.add_middleware(audit.RequestLoggerMiddleware)
-    server.add_middleware(trace.TracerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
     # update description
@@ -267,6 +266,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             log_response_body=True,
             capture_logs=True,
         )
+
+    server.add_middleware(trace.TracerMiddleware)
 
     return server
 
