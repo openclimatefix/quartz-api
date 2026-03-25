@@ -18,4 +18,15 @@ def format_metadata(metadata: dict) -> InputDataLastUpdated:
     nwp = old
     for nwp_key in [k for k in metadata if "nwp" in k]:
         nwp = max([metadata.get(nwp_key, old)])
+
+    # make sure they all have timezones
+    if gsp.tzinfo is None:
+        gsp = gsp.replace(tzinfo=dt.UTC)
+
+    if satellite.tzinfo is None:
+        satellite = satellite.replace(tzinfo=dt.UTC)
+
+    if nwp.tzinfo is None:
+        nwp = nwp.replace(tzinfo=dt.UTC)
+
     return InputDataLastUpdated(gsp=gsp, nwp=nwp, pv=old, satellite=satellite)
