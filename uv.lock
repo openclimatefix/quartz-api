@@ -1743,7 +1743,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.4.32.post1+git.b7710097"
+version = "0.4.32"
 source = { editable = "." }
 dependencies = [
     { name = "apitally", extra = ["fastapi"] },

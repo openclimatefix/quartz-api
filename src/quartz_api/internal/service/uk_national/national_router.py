@@ -98,7 +98,7 @@ async def get_national_forecast(
     # get model name
     model_name_str = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
-        model_name_str = model_name + "_adjust"
+        model_name_str += "_adjust"
 
     # get national location
     locations = await db.get_locations(
