@@ -69,7 +69,8 @@ def validate_window_size(
             status_code=422,
             detail=(
                 f"Requested time window of {window_hours:.0f} hours exceeds "
-                f"the maximum allowed window of {MAX_WINDOW_DAYS * 24} hours ({MAX_WINDOW_DAYS} days)."
+                f"the maximum allowed window of {MAX_WINDOW_DAYS * 24} hours "
+                f"({MAX_WINDOW_DAYS} days)."
             ),
         )
 
