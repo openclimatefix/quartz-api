@@ -14,7 +14,6 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from .cache import get_gsps, key_builder
@@ -48,8 +47,6 @@ router = APIRouter(tags=["GSP"])
     "/{gsp_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("3600/hour")
-@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -126,8 +123,6 @@ async def get_forecasts_for_a_specific_gsp(
     "/{gsp_id}/pvlive",
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("3600/hour")
-@limiter.limit("10/second")
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -195,8 +190,6 @@ async def get_truths_for_a_specific_gsp(
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=False,
 )
-@limiter.limit("3600/hour")
-@limiter.limit("10/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
@@ -357,8 +350,6 @@ async def get_all_available_forecasts(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
-@limiter.limit("3600/hour")
-@limiter.limit("10/second")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
