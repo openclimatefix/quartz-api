@@ -228,6 +228,9 @@ async def get_national_pvlive(
         for v in agvs
     ]
 
+    # lets make sure the latest timestamps are first
+    out.sort(key=lambda x: x.datetime_utc, reverse=True)
+
     return out
 
 
