@@ -122,7 +122,7 @@ async def test_national_pvlive(
     assert "solarGenerationKw" in data[0]
 
     # lets make sure the top results is the latest timestamp
-    assert data[0]["datetimeUtc"] > data[-1]["datetimeUtc"] 
+    assert data[0]["datetimeUtc"] > data[-1]["datetimeUtc"]
 
 
 # 3.2 Test the National PVlive route
