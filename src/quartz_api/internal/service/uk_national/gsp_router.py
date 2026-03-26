@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import logging
 import os
+import traceback
 from collections import defaultdict
 from typing import Annotated
 from uuid import UUID
@@ -223,9 +224,9 @@ def _build_forecast_response(
     creation_time: dt.datetime,
 ) -> list[Forecast]:
     """Reorganise results as one Forecast object per GSP with all timesteps."""
-    per_gsp: dict[int, list[ForecastValue]] = defaultdict(list)
-    # Capture model/creation info from first pgv per GSP (constant across timestamps).
-    first_pgv: dict[int, models.PredictedGenerationValue] = {}
+    fvs_per_gsp: dict[int, list[ForecastValue]] = defaultdict(list)
+    # Capture pgv info per GSP.
+    gsp_pgv_map: dict[int, models.PredictedGenerationValue] = {}
     # Update input_data on every pgv so each GSP gets its own metadata.
     input_data_by_gsp: dict[int, InputDataLastUpdated] = {}
 
@@ -235,14 +236,14 @@ def _build_forecast_response(
             continue
         for pgv in snapshot:
             gsp_id = gsp_uuid_id_map[pgv.location_uuid]
-            per_gsp[gsp_id].append(
+            fvs_per_gsp[gsp_id].append(
                 ForecastValue(
                     target_time=pgv.valid_timestamp,
                     expected_power_generation_megawatts=round(pgv.power_kilowatts / 1000.0, 4),
                 ),
             )
-            if gsp_id not in first_pgv:
-                first_pgv[gsp_id] = pgv
+            if gsp_id not in gsp_pgv_map:
+                gsp_pgv_map[gsp_id] = pgv
             input_data_by_gsp[gsp_id] = format_metadata(pgv.metadata)
 
     # Fallback for any GSP with no data at all.
@@ -252,10 +253,13 @@ def _build_forecast_response(
 
     forecasts = []
     for gsp_id in gsp_uuid_id_map.values():
-        pgv = first_pgv.get(gsp_id)
+        pgv = gsp_pgv_map.get(gsp_id)
+        location = Location.from_location(gsp_id_map[gsp_id])
+        location.installed_capacity_mw = \
+            pgv.capacity_kilowatts / 1000.0
         forecasts.append(
             Forecast(
-                location=Location.from_location(gsp_id_map[gsp_id]),
+                location=location,
                 model=MLModel(
                     name=pgv.forecaster_name if pgv else GSP_FORECASTER_NAME,
                     version=(
@@ -267,7 +271,7 @@ def _build_forecast_response(
                 initialization_datetime_utc=pgv.init_timestamp if pgv else None,
                 historic=True,
                 forecast_values=sorted(
-                    per_gsp.get(gsp_id, []),
+                    fvs_per_gsp.get(gsp_id, []),
                     key=lambda fv: fv.target_time,
                 ),
                 input_data_last_updated=input_data_by_gsp.get(gsp_id, stub_input_data),
@@ -424,7 +428,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
                  f"{base_key}[]:[]",
                  f"{base_key}[('compact', 'true')]:[]")
     except Exception:
-        log.exception("GSP forecast all cache warm failed: %s", )
+        log.exception("GSP forecast all cache warm failed: %s", traceback.format_exc())
 
 
 @router.post(
