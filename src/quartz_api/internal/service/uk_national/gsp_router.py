@@ -369,8 +369,16 @@ async def get_all_available_forecasts(
 
     gsp_uuid_id_map = {v.uuid: k for k, v in gsps_to_convert.items()}
     if compact:
-        return _build_compact_response(results, gsp_uuid_id_map)
-    return _build_forecast_response(results, gsps_to_convert, gsp_uuid_id_map, start_datetime_utc)
+        return _build_compact_response(
+            results=results,
+            gsp_uuid_id_map=gsp_uuid_id_map,
+        )
+    return _build_forecast_response(
+        results=results,
+        gsp_id_map=gsps_to_convert,
+        gsp_uuid_id_map=gsp_uuid_id_map,
+        creation_time=start_datetime_utc,
+    )
 
 
 async def _warm_forecast_all_cache(app: FastAPI) -> None:
@@ -415,13 +423,21 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
         forecast_value = json.dumps(
-            jsonable_encoder(_build_forecast_response(results,
-                                                      {k:v for k,v in gsp_id_map.items() if v != 0},
-                                                      gsp_uuid_id_map, start)),
+            jsonable_encoder(
+                _build_forecast_response(
+                    results=results,
+                    gsp_id_map={k:v for k,v in gsp_id_map.items() if v != 0},
+                    gsp_uuid_id_map=gsp_uuid_id_map,
+                    creation_time=start,
+                ),
+            ),
         ).encode()
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
         compact_value = json.dumps(
-            jsonable_encoder(_build_compact_response(results, gsp_uuid_id_map)),
+            jsonable_encoder(_build_compact_response(
+                results=results,
+                gsp_uuid_id_map=gsp_uuid_id_map,
+            )),
         ).encode()
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
