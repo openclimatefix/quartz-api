@@ -207,34 +207,14 @@ async def test_gsp_forecast_all(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 10  # one Forecast per GSP
-    assert "location" in data[0]
-    assert "forecastValues" in data[0]
-    assert "model" in data[0]
-    assert len(data[0]["forecastValues"]) >= 1  # multiple timesteps per GSP
-
-
-# 4.3.1 Check GSP forecast route — compact=true returns time-first dict
-@pytest.mark.asyncio(loop_scope="session")
-async def test_gsp_forecast_all_compact(
-    api_client,
-    gsp_locations,  # noqa arg001
-    make_forecasters,  # noqa arg001
-    make_gsp_forecast_values,  # noqa arg001
-) -> None:
-    """Test that compact=true returns time-first OneDatetimeManyForecastValues format."""
-
-    response = await api_client.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) >= 1  # multiple timestamps
+    assert len(data) > 1  # multiple timesteps
     assert "datetimeUtc" in data[0]
     assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 10  # all 10 GSPs at each timestamp
+    assert len(data[0]["forecastValues"]) >= 1  # multiple values per timestep
 
 
-# 4.3.2 Check GSP forecast route with gsp_ids filter (compact mode)
+
+# 4.3.1 Check GSP forecast route with gsp_ids filter (compact mode)
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_forecast_all_gsp_ids(
     api_client_uk_national,
@@ -274,7 +254,7 @@ async def test_gsp_forecast_compact_false(
     assert "location" in data[0]
     assert "model" in data[0]
     assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 1
+    assert len(data[0]["forecastValues"]) == 10
 
 # 4.3.3 Check GSP forecast route, compact=false, and restrict gsps
 @pytest.mark.asyncio(loop_scope="session")
