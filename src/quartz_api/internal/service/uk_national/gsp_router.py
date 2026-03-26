@@ -298,7 +298,6 @@ async def get_all_available_forecasts(
         dt.datetime,
         Depends(limit_end_datetime_by_permissions),
     ],
-    creation_utc_limit: models.UTCDatetime | None = None,
     gsp_ids: str | None = None,
     compact: bool = False,
 ) -> list[OneDatetimeManyForecastValuesMW] | list[Forecast]:
@@ -329,6 +328,16 @@ async def get_all_available_forecasts(
     }
 
     if gsp_ids is None:
+        if ((start_datetime_utc != pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+            or (end_datetime_utc is not None)
+            )
+                and start_datetime_utc != end_datetime_utc
+            ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_datetime_utc and end_datetime_utc must be set to the same value when "
+                       "gsp_ids is not set",
+            )
         # Parallel snapshot per timestamp — O(T) gRPC calls vs O(GSPs) for the per-GSP path
         tasks = [
             asyncio.create_task(
