@@ -392,7 +392,11 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         start = now.floor("30min").to_pydatetime().replace(tzinfo=dt.UTC)
         end = now.floor("6h").to_pydatetime().replace(tzinfo=dt.UTC) + dt.timedelta(days=2)
 
-        gsp_uuid_id_map: dict = {gsp.uuid: gsp_id for gsp_id, gsp in gsp_id_map.items() if gsp_id != 0}
+        gsp_uuid_id_map: dict = {
+            gsp.uuid: gsp_id
+            for gsp_id, gsp in gsp_id_map.items()
+            if gsp_id != 0
+        }
         tasks = [
             asyncio.create_task(
                 db.get_predicted_generation_snapshot(
