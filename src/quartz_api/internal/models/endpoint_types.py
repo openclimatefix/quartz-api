@@ -35,7 +35,7 @@ UTCDatetimeDefaultNowWindowStart = Annotated[
     UTCDatetime,
     Query(
         default_factory=lambda: (
-            pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+            pd.Timestamp.utcnow().ceil("30min").to_pydatetime()
         ),
     ),
 ]
