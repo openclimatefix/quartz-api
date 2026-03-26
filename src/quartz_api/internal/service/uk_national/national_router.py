@@ -58,7 +58,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
                                 ],
                             },
                             "With metadata (include_metadata=true)": {
-                                "summary": "Full NationalForecast object with location and model info",
+                                "summary": "Full NationalForecast object with location and model info", # noqa: E501
                                 "value": {
                                     "location": {"label": "national", "gspId": 0},
                                     "model": {"name": "blend_adjust", "version": "1.3.0"},
