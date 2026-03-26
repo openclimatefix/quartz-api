@@ -284,6 +284,7 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster.forecaster_version,
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
+                metadata=struct_to_dict(v.metadata),
             )
             for v in resp.values
         ]
