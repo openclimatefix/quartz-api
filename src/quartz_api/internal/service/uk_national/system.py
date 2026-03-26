@@ -15,7 +15,7 @@ from quartz_api.internal.models import (
 from .cache import key_builder
 from .endpoint_types import Location, gsp_id_map
 
-router = APIRouter(tags=["System"])
+router = APIRouter()
 log = logging.getLogger(__name__)
 
 

@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
 
-router = APIRouter(tags=["GSP"])
+router = APIRouter()
 
 
 

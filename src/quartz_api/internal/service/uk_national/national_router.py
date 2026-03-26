@@ -29,7 +29,7 @@ from .time_utils import limit_end_datetime_by_permissions
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(tags=["National"])
+router = APIRouter()
 
 FORECASTER_VERSION_BLEND = "1.3.0"
 FORECASTER_VERSION_PVNET = "2.8.0"
