@@ -391,12 +391,8 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         now = pd.Timestamp.utcnow()
         start = now.floor("30min").to_pydatetime().replace(tzinfo=dt.UTC)
         end = now.floor("6h").to_pydatetime().replace(tzinfo=dt.UTC) + dt.timedelta(days=2)
-        gsps = await db.get_locations(
-            energy_type=models.EnergyType.SOLAR,
-            location_type=models.LocationType.GSP,
-            authdata={},
-        )
-        gsp_uuid_id_map: dict = {gsp.uuid: int(gsp.metadata["gsp_id"]) for gsp in gsps}
+
+        gsp_uuid_id_map: dict = {gsp.uuid: gsp_id for gsp_id, gsp in gsp_id_map.items() if gsp_id != 0}
         tasks = [
             asyncio.create_task(
                 db.get_predicted_generation_snapshot(
@@ -415,7 +411,9 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
         forecast_value = json.dumps(
-            jsonable_encoder(_build_forecast_response(results, gsp_uuid_id_map, gsps, start)),
+            jsonable_encoder(_build_forecast_response(results,
+                                                      {k:v for k,v in gsp_id_map.items() if v != 0},
+                                                      gsp_uuid_id_map, start)),
         ).encode()
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
         compact_value = json.dumps(
