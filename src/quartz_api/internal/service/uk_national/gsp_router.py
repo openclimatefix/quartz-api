@@ -378,7 +378,6 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
     Cache keys are derived from key_builder's output for a default GET with no params:
       "{prefix}::get:{path}:{params}:{permissions}"
     """
-
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
@@ -436,6 +435,7 @@ async def refresh_forecast_all_cache(
     x_refresh_token: Annotated[str, Header()],
 ) -> Response:
     """Trigger a background cache refresh for /forecast/all/.
+
     Called by Airflow at the end of the GSP forecast DAG to pre-warm the in-memory cache,
     preventing ~45s cold-start latency on the first user request after a new forecast run.
     Requires X-Refresh-Token header matching the CACHE_REFRESH_TOKEN environment variable.
