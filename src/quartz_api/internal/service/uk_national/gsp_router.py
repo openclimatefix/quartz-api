@@ -46,6 +46,7 @@ router = APIRouter(tags=["GSP"])
 
 @router.get(
     "/{gsp_id}/forecast",
+    response_model=list[ForecastValue],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
@@ -119,6 +120,7 @@ async def get_forecasts_for_a_specific_gsp(
 
 @router.get(
     "/{gsp_id}/pvlive",
+    response_model=list[GSPYield],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)

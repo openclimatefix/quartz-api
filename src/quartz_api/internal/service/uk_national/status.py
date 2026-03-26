@@ -23,6 +23,7 @@ if db_url is not None:
 
 @router.get(
     "",
+    response_model=Status,
     status_code=status.HTTP_200_OK,
 )
 async def get_status(request: Request) -> Status:  # noqa: ARG001

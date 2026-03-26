@@ -39,6 +39,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
 # we can simply enforce timezones and coerce from there (which is what we're doing).
 @router.get(
     "/forecast",
+    response_model=list[NationalForecastValue] | NationalForecast,
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
@@ -168,6 +169,7 @@ async def get_national_forecast(
 
 @router.get(
     "/pvlive",
+    response_model=list[NationalYield],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
