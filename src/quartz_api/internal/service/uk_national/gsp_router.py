@@ -329,7 +329,7 @@ async def get_all_available_forecasts(
 
     if gsp_ids is None:
         if ((start_datetime_utc != pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-            or (end_datetime_utc is not None)
+            or (end_datetime_utc != pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2))
             )
                 and start_datetime_utc != end_datetime_utc
             ):
