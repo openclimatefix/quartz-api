@@ -362,7 +362,6 @@ async def get_all_available_forecasts(
                     energy_type=models.EnergyType.SOLAR,
                     location_type=models.LocationType.GSP,
                     authdata={},
-                    created_cutoff=creation_utc_limit,
                     forecast_horizon_minutes=0,
                     forecaster_name=GSP_FORECASTER_NAME,
                     forecaster_version=GSP_FORECASTER_VERSION,
