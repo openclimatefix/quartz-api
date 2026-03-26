@@ -1,5 +1,6 @@
 """API providing access to OCF's Quartz Forecasts."""
 
+import asyncio
 import functools
 import importlib
 import importlib.metadata
@@ -127,7 +128,15 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     server.dependency_overrides[models.get_storage_client] = lambda: storage
 
+    warm_task = None
+    if "uk_national" in conf.get_string("api.routers"):
+        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
+        warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
+
     yield
+
+    if warm_task is not None:
+        warm_task.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
