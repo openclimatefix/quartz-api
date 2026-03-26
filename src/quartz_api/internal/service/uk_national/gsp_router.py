@@ -6,7 +6,8 @@ import json
 import logging
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated
+from uuid import UUID
 
 import pandas as pd
 from fastapi import (
@@ -45,9 +46,6 @@ from .endpoint_types import (
 from .time_utils import (
     limit_end_datetime_by_permissions,
 )
-
-if TYPE_CHECKING:
-    from uuid import UUID
 
 log = logging.getLogger(__name__)
 
