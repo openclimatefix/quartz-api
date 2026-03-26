@@ -284,7 +284,7 @@ def _build_forecast_response(
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=60 * 60)
-async def get_all_available_forecasts(  # noqa: ANN201
+async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
