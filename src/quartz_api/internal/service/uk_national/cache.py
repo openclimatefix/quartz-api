@@ -13,7 +13,7 @@ legacy_query_params = ["historic"]
 
 
 async def key_builder(
-    func: Callable[..., Any],  # noqa: ARG001
+    func: Callable[..., Any],
     namespace: str = "",
     *,
     request: Request,
