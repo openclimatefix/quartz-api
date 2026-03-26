@@ -15,12 +15,13 @@ from quartz_api.internal.models import (
 from .cache import key_builder
 from .endpoint_types import Location, gsp_id_map
 
-router = APIRouter(tags=["System"])
+router = APIRouter()
 log = logging.getLogger(__name__)
 
 
 @router.get(
     "/gsp/",
+    response_model=list[Location],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder, expire=3600)
