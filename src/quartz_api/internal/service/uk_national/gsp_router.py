@@ -53,12 +53,13 @@ log = logging.getLogger(__name__)
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
 
-router = APIRouter(tags=["GSP"])
+router = APIRouter()
 
 
 
 @router.get(
     "/{gsp_id}/forecast",
+    response_model=list[ForecastValue],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
@@ -132,6 +133,7 @@ async def get_forecasts_for_a_specific_gsp(
 
 @router.get(
     "/{gsp_id}/pvlive",
+    response_model=list[GSPYield],
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
