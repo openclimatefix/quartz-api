@@ -13,7 +13,7 @@ legacy_query_params = ["historic"]
 
 
 async def key_builder(
-    func: Callable[..., Any],  # noqa: ARG001
+    func: Callable[..., Any],
     namespace: str = "",
     *,
     request: Request,
@@ -35,6 +35,11 @@ async def key_builder(
 
     params = [
         (k, v) for k, v in request.query_params.items() if k not in [*legacy_query_params, "UI"]
+    ]
+
+    # only store parameters that are in the function's signature
+    params = [
+        (k, v) for k, v in request.query_params.items() if k in list(func.__code__.co_varnames)
     ]
 
     key = ":".join(
