@@ -39,8 +39,51 @@ FORECASTER_VERSION_PVNET = "2.8.0"
 # we can simply enforce timezones and coerce from there (which is what we're doing).
 @router.get(
     "/forecast",
-    response_model=list[NationalForecastValue] | NationalForecast,
+    response_model=NationalForecast | list[NationalForecastValue],
     status_code=status.HTTP_200_OK,
+    openapi_extra={
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "Default (include_metadata=false)": {
+                                "summary": "List of forecast values (default)",
+                                "value": [
+                                    {
+                                        "targetTime": "2026-03-26T12:00:00+00:00",
+                                        "expectedPowerGenerationMegawatts": 4.2,
+                                        "plevels": {"plevel_10": 3.8, "plevel_90": 4.6},
+                                    },
+                                ],
+                            },
+                            "With metadata (include_metadata=true)": {
+                                "summary": "Full NationalForecast object with location and model info",
+                                "value": {
+                                    "location": {"label": "national", "gspId": 0},
+                                    "model": {"name": "blend_adjust", "version": "1.3.0"},
+                                    "forecastCreationTime": "2026-03-26T06:00:00+00:00",
+                                    "forecastValues": [
+                                        {
+                                            "targetTime": "2026-03-26T12:00:00+00:00",
+                                            "expectedPowerGenerationMegawatts": 4.2,
+                                            "plevels": {"plevel_10": 3.8, "plevel_90": 4.6},
+                                        },
+                                    ],
+                                    "inputDataLastUpdated": {
+                                        "gsp": "2026-03-26T05:30:00+00:00",
+                                        "nwp": "2026-03-26T04:00:00+00:00",
+                                        "pv": "1970-01-01T00:00:00+00:00",
+                                        "satellite": "2026-03-26T05:45:00+00:00",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
 )
 @cache(key_builder=key_builder)
 async def get_national_forecast(
