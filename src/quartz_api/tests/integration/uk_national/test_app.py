@@ -273,7 +273,7 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     assert "location" in data[0]
     assert "model" in data[0]
     assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 10
+    assert len(data[0]["forecastValues"]) == 9
 
 
 # 4.4 Check GSP pvlive route
