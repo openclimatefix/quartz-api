@@ -44,7 +44,7 @@ def setup_json_logging(level: int = logging.INFO) -> None:
     root.setLevel(level)
     root.handlers[:] = [handler]
 
-    for logger in [
+    for logger_name in [
             "gunicorn",
             "gunicorn.error",
             "gunicorn.access",
@@ -52,8 +52,8 @@ def setup_json_logging(level: int = logging.INFO) -> None:
             "uvicorn.error",
             "uvicorn.access",
         ]:
-        l = logging.getLogger(logger)
-        l.handlers = [handler]
-        l.setLevel(level)
-        l.propagate = False
+        logger = logging.getLogger(logger_name)
+        logger.handlers = [handler]
+        logger.setLevel(level)
+        logger.propagate = False
 
