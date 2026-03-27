@@ -5,6 +5,7 @@ import functools
 import importlib
 import importlib.metadata
 import logging
+import os
 import pathlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -12,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 import sentry_sdk
-import uvicorn
 from apitally.fastapi import ApitallyMiddleware
 from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
@@ -145,6 +145,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
 def _create_server(conf: ConfigTree) -> FastAPI:
     """Configure FastAPI app instance with routes, dependencies, and middleware."""
+    setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
     description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
         version=importlib.metadata.version("quartz_api"),
@@ -280,24 +281,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     return server
 
+conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
+server = _create_server(conf)
 
 def run() -> None:
     """Run the API using a uvicorn server."""
     # Get the application configuration from the environment
-    conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
-    setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
 
-    server = _create_server(conf=conf)
+    cmd = [
+        "gunicorn",
+        "quartz_api.cmd.main:server",
+        "--workers", str(conf.get_int("api.workers")),
+        "--worker-class", "uvicorn.workers.UvicornWorker",
+        "--bind", f"0.0.0.0:{conf.get_int('api.port')}",
+    ]
 
-    # Run the server with uvicorn
-    uvicorn.run(
-        server,
-        host="0.0.0.0",  # noqa: S104
-        workers=conf.get_int("api.workers"),
-        port=conf.get_int("api.port"),
-        log_level=conf.get_string("api.loglevel"),
-    )
-
+    os.execvp("gunicorn", cmd) # noqa: S606 S607
 
 if __name__ == "__main__":
     run()
