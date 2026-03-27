@@ -402,6 +402,8 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
       "{prefix}::get:{path}:{params}:{permissions}"
     """
     try:
+        # Wait to let the server finish starting up before hitting gRPC.
+        await asyncio.sleep(5)
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
             log.warning("GSP forecast cache warm skipped: storage client not configured")
