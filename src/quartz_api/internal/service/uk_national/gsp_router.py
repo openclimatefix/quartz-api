@@ -2,7 +2,6 @@
 
 import asyncio
 import datetime as dt
-import json
 import logging
 import traceback
 from collections import defaultdict
@@ -20,10 +19,9 @@ from fastapi import (
     Response,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.encoders import jsonable_encoder
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
-from pydantic import AfterValidator
+from pydantic import AfterValidator, TypeAdapter
 from starlette import status
 
 from quartz_api.internal import models
@@ -53,6 +51,9 @@ GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
 
 router = APIRouter()
+
+_forecast_adapter = TypeAdapter(list[Forecast])
+_compact_adapter = TypeAdapter(list[OneDatetimeManyForecastValuesMW])
 
 
 
@@ -448,7 +449,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             creation_time=start,
         )
         forecast_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(forecast_response)).encode(),
+            _forecast_adapter.dump_json, forecast_response,
         )
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
         compact_response = _build_compact_response(
@@ -456,7 +457,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
         compact_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(compact_response)).encode(),
+            _compact_adapter.dump_json, compact_response,
         )
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
