@@ -218,7 +218,7 @@ async def test_gsp_forecast_all_cache_hit(
     prefix = FastAPICache.get_prefix()
     base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
 
-    cached_forecast = b'[{"location": {"label": "GSP 1", "gspId": 1}, "model": {"name": "blend", "version": "1.3.0"}, "forecastValues": [{"targetTime": "2026-01-01T00:00:00Z", "expectedPowerGenerationMegawatts": 1.23}]}]'
+    cached_forecast = b'[{"location": {"label": "GSP 1", "gspId": 1}, "model": {"name": "blend", "version": "1.3.0"}, "forecastValues": [{"targetTime": "2026-01-01T00:00:00Z", "expectedPowerGenerationMegawatts": 1.23}]}]'  # noqa: E501
     cached_compact = b'[{"datetimeUtc": "2026-01-01T00:00:00Z", "forecastValues": {"1": 1.23}}]'
     await backend.set(f"{base_key}[]:[]", cached_forecast, expire=60)
     await backend.set(f"{base_key}[('compact', 'true')]:[]", cached_compact, expire=60)
