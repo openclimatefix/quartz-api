@@ -4,7 +4,6 @@ import asyncio
 import datetime as dt
 import json
 import logging
-import os
 import traceback
 from collections import defaultdict
 from typing import Annotated
@@ -16,11 +15,11 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     FastAPI,
-    Header,
     HTTPException,
     Request,
     Response,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
@@ -402,6 +401,8 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
       "{prefix}::get:{path}:{params}:{permissions}"
     """
     try:
+        # Wait to let the server finish starting up before hitting gRPC.
+        await asyncio.sleep(5)
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
             log.warning("GSP forecast cache warm skipped: storage client not configured")
@@ -416,43 +417,53 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             for gsp_id, gsp in gsp_id_map.items()
             if gsp_id != 0
         }
-        tasks = [
-            asyncio.create_task(
-                db.get_predicted_generation_snapshot(
+        # Fetch timestamps sequentially with a short pause between each so the event loop
+        # stays free for "real" requests. Fine if this pre-warm takes a few minutes.
+        timestamps = list(pd.date_range(start=start, end=end, freq="30min"))
+        total = len(timestamps)
+        results: list[list[models.PredictedGenerationValue] | Exception] = []
+        for i, ts in enumerate(timestamps):
+            try:
+                result = await db.get_predicted_generation_snapshot(
                     location_uuids=list(gsp_uuid_id_map.keys()),
                     snapshot_timestamp_utc=ts.to_pydatetime(),
                     energy_type=models.EnergyType.SOLAR,
                     forecaster_name=GSP_FORECASTER_NAME,
                     forecaster_version=GSP_FORECASTER_VERSION,
                     authdata={},
-                ),
-            )
-            for ts in pd.date_range(start=start, end=end, freq="30min")
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                )
+            except Exception as e:
+                result = e
+            results.append(result)
+            if (i + 1) % 10 == 0 or (i + 1) == total:
+                log.info("Cache warm progress: %d/%d timestamps fetched", i + 1, total)
+            await asyncio.sleep(0.5)
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
-        forecast_value = json.dumps(
-            jsonable_encoder(
-                _build_forecast_response(
-                    results=results,
-                    gsp_id_map={k:v for k,v in gsp_id_map.items() if v != 0},
-                    gsp_uuid_id_map=gsp_uuid_id_map,
-                    creation_time=start,
-                ),
-            ),
-        ).encode()
+        forecast_response = _build_forecast_response(
+            results=results,
+            gsp_id_map={k: v for k, v in gsp_id_map.items() if v != 0},
+            gsp_uuid_id_map=gsp_uuid_id_map,
+            creation_time=start,
+        )
+        forecast_value = await run_in_threadpool(
+            lambda: json.dumps(jsonable_encoder(forecast_response)).encode(),
+        )
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
-        compact_value = json.dumps(
-            jsonable_encoder(_build_compact_response(
-                results=results,
-                gsp_uuid_id_map=gsp_uuid_id_map,
-            )),
-        ).encode()
+        compact_response = _build_compact_response(
+            results=results,
+            gsp_uuid_id_map=gsp_uuid_id_map,
+        )
+        compact_value = await run_in_threadpool(
+            lambda: json.dumps(jsonable_encoder(compact_response)).encode(),
+        )
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
+        log.info("GSP forecast all cache set with keys: %s and %s",
+                 f"{base_key}[]:[]",
+                 f"{base_key}[('compact', 'true')]:[]")
     except Exception:
         log.exception("GSP forecast all cache warm failed: %s", traceback.format_exc())
 
@@ -465,7 +476,8 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
 async def refresh_forecast_all_cache(
     background_tasks: BackgroundTasks,
     request: Request,
-    x_refresh_token: Annotated[str, Header()],
+    auth: AuthDependency,
+    # x_refresh_token: Annotated[str, Header()],
 ) -> Response:
     """Trigger a background cache refresh for /forecast/all/.
 
@@ -473,12 +485,17 @@ async def refresh_forecast_all_cache(
     preventing ~45s cold-start latency on the first user request after a new forecast run.
     Requires X-Refresh-Token header matching the CACHE_REFRESH_TOKEN environment variable.
     """
-    expected = os.environ.get("CACHE_REFRESH_TOKEN", "")
-    if not expected or x_refresh_token != expected:
+    # Check auth has ocf:admin role
+    permissions = auth.get("permissions", [])
+    log.info("Permissions: %s", permissions)
+    if "ocf:admin" not in permissions:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing refresh token",
+            detail="Insufficient permissions to refresh cache",
         )
+    else:
+        log.info("OCF admin permission confirmed. Refreshing forecast all cache...")
+
     background_tasks.add_task(_warm_forecast_all_cache, request.app)
     return Response(status_code=status.HTTP_202_ACCEPTED)
 

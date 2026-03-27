@@ -277,34 +277,26 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     assert len(data[0]["forecastValues"]) == 10
 
 
-# 4.3.4 Cache refresh endpoint returns 202 with valid token
+# 4.3.4 Cache refresh endpoint returns 202 for ocf:admin user
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_forecast_all_refresh(
-    api_client_uk_national,
-    gsp_locations,  # noqa arg001
-    make_forecasters,  # noqa arg001
-    make_gsp_forecast_values,  # noqa arg001
+    api_client_uk_national_admin,
 ) -> None:
-    """Test that the cache refresh endpoint returns 202 with a valid token."""
-    import os
-    os.environ["CACHE_REFRESH_TOKEN"] = "test-secret"
-
-    response = await api_client_uk_national.post(
+    """Test that the cache refresh endpoint returns 202 for an admin user."""
+    response = await api_client_uk_national_admin.post(
         "/v0/solar/GB/gsp/forecast/all/refresh",
-        headers={"X-Refresh-Token": "test-secret"},
     )
     assert response.status_code == 202
 
 
-# 4.3.5 Cache refresh endpoint rejects wrong token
+# 4.3.5 Cache refresh endpoint returns 403 for non-admin user
 @pytest.mark.asyncio(loop_scope="session")
-async def test_gsp_forecast_all_refresh_wrong_token(
-    api_client_uk_national,
+async def test_gsp_forecast_all_refresh_non_admin(
+    api_client_uk_national_non_admin,
 ) -> None:
-    """Test that the cache refresh endpoint rejects an invalid token."""
-    response = await api_client_uk_national.post(
+    """Test that the cache refresh endpoint rejects a non-admin user."""
+    response = await api_client_uk_national_non_admin.post(
         "/v0/solar/GB/gsp/forecast/all/refresh",
-        headers={"X-Refresh-Token": "wrong-token"},
     )
     assert response.status_code == 403
 
