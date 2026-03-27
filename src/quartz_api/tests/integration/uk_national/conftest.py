@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import typing
 from uuid import UUID
 
 import pandas as pd
@@ -13,7 +14,10 @@ from pyhocon import ConfigFactory, ConfigTree
 from quartz_api.cmd.main import _create_server
 from quartz_api.internal import models
 from quartz_api.internal.backends import DataPlatformStorage
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.tests.integration.conftest import forecast
+
+auth_dep = typing.get_args(AuthDependency)[1].dependency
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -41,6 +45,32 @@ async def api_client_uk_national(
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture(scope="module")
+async def api_client_uk_national_admin(
+    config_uk_national: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
+) -> AsyncClient:
+    """Test client with ocf:admin permissions."""
+    app = _create_server(config_uk_national)
+    db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
+    app.dependency_overrides[models.get_storage_client] = lambda: db_instance
+    app.dependency_overrides[auth_dep] = lambda: {"sub": "admin|123", "permissions": ["ocf:admin"]}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture(scope="module")
+async def api_client_uk_national_non_admin(
+    config_uk_national: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
+) -> AsyncClient:
+    """Test client without admin permissions."""
+    app = _create_server(config_uk_national)
+    db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
+    app.dependency_overrides[models.get_storage_client] = lambda: db_instance
+    app.dependency_overrides[auth_dep] = lambda: {"sub": "user|456", "permissions": []}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
