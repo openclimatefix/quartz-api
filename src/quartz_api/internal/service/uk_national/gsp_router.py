@@ -496,15 +496,9 @@ async def refresh_forecast_all_cache(
             detail="Insufficient permissions to refresh cache",
         )
     else:
-        log.info("OCF admin, yay! Refreshing forecast all cache")
+        log.info("OCF admin permission confirmed. Refreshing forecast all cache...")
 
-    # expected = os.environ.get("CACHE_REFRESH_TOKEN", "")
-    # if not expected or x_refresh_token != expected:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Invalid or missing refresh token",
-    #     )
-    # background_tasks.add_task(_warm_forecast_all_cache, request.app)
+    background_tasks.add_task(_warm_forecast_all_cache, request.app)
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
