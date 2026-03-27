@@ -51,6 +51,7 @@ log = logging.getLogger(__name__)
 
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
+GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 24 # 1 day
 
 router = APIRouter()
 
@@ -286,7 +287,7 @@ def _build_forecast_response(
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder, expire=24 * 60* 60) # 1 day
+@cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS) # 1 day
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
@@ -450,7 +451,11 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         forecast_value = await run_in_threadpool(
             lambda: json.dumps(jsonable_encoder(forecast_response)).encode(),
         )
-        await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
+        await backend.set(
+            f"{base_key}[]:[]",
+            forecast_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+        )
         compact_response = _build_compact_response(
             results=results,
             gsp_uuid_id_map=gsp_uuid_id_map,
@@ -458,7 +463,11 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         compact_value = await run_in_threadpool(
             lambda: json.dumps(jsonable_encoder(compact_response)).encode(),
         )
-        await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
+        await backend.set(
+            f"{base_key}[('compact', 'true')]:[]",
+            compact_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+        )
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
         log.info("GSP forecast all cache set with keys: %s and %s",
