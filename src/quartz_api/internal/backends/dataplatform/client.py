@@ -66,7 +66,7 @@ class StorageClient(models.StorageInterface):
         forecaster_name: str | None,
         forecaster_version: str | None,
     ) -> list[models.PredictedGenerationValue]:
-        """Sync snapshot fetch via grpc-requests"""
+        """Sync snapshot fetch via grpc-requests."""
         svc = self._sync_client.service(_DP_SERVICE)
 
         if forecaster_version is None:
