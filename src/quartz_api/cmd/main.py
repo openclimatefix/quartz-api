@@ -1,6 +1,5 @@
 """API providing access to OCF's Quartz Forecasts."""
 
-import asyncio
 import functools
 import importlib
 import importlib.metadata
@@ -21,6 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from grpclib.client import Channel
+from grpc import insecure_channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from slowapi import _rate_limit_exceeded_handler
@@ -129,9 +129,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     server.dependency_overrides[models.get_storage_client] = lambda: storage
 
     warm_task = None
-    if "uk_national" in conf.get_string("api.routers"):
-        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
-        warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
+    # if "uk_national" in conf.get_string("api.routers"):
+    #     from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
+    #     warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
     yield
 
@@ -294,7 +294,7 @@ def run() -> None:
     uvicorn.run(
         server,
         host="0.0.0.0",  # noqa: S104
-        workers=conf.get_int("api.workers"),
+        # workers=conf.get_int("api.workers"),
         port=conf.get_int("api.port"),
         log_level=conf.get_string("api.loglevel"),
     )
