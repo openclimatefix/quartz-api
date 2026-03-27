@@ -14,6 +14,15 @@ class TraceIdFilter(logging.Filter):
         record.trace_id = get_trace_id()
         return True
 
+class APITallyFilter(logging.Filter):
+    """Reduces level of httpx API tally post logs to DEBUG."""
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if record.name.startswith("httpx") and all(p in message for p in ["apitally", "POST", "202"]):
+            record.levelname = "DEBUG"
+            record.levelno = logging.DEBUG
+        return True
 
 class JsonFormatter(logging.Formatter):
     """Custom JSON formatter for log records."""
@@ -37,6 +46,7 @@ class JsonFormatter(logging.Formatter):
 
 def setup_json_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(APITallyFilter())
     handler.setFormatter(JsonFormatter())
     handler.addFilter(TraceIdFilter())
 
