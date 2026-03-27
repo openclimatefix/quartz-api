@@ -258,7 +258,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    server.add_middleware(audit.RequestLoggerMiddleware)
+    if conf.get_string("backend.source") != "dataplatform":
+        server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
     # update description
