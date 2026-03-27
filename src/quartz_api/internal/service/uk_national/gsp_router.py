@@ -21,6 +21,7 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
@@ -418,40 +419,46 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             for gsp_id, gsp in gsp_id_map.items()
             if gsp_id != 0
         }
-        tasks = [
-            asyncio.create_task(
-                db.get_predicted_generation_snapshot(
+        # Fetch timestamps sequentially with a short pause between each so the event loop
+        # stays free for "real" requests. Fine if this pre-warm takes a few minutes.
+        timestamps = list(pd.date_range(start=start, end=end, freq="30min"))
+        total = len(timestamps)
+        results: list[list[models.PredictedGenerationValue] | Exception] = []
+        for i, ts in enumerate(timestamps):
+            try:
+                result = await db.get_predicted_generation_snapshot(
                     location_uuids=list(gsp_uuid_id_map.keys()),
                     snapshot_timestamp_utc=ts.to_pydatetime(),
                     energy_type=models.EnergyType.SOLAR,
                     forecaster_name=GSP_FORECASTER_NAME,
                     forecaster_version=GSP_FORECASTER_VERSION,
                     authdata={},
-                ),
-            )
-            for ts in pd.date_range(start=start, end=end, freq="30min")
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                )
+            except Exception as e:
+                result = e
+            results.append(result)
+            if (i + 1) % 10 == 0 or (i + 1) == total:
+                log.info("Cache warm progress: %d/%d timestamps fetched", i + 1, total)
+            await asyncio.sleep(0.5)
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
-        loop = asyncio.get_running_loop()
         forecast_response = _build_forecast_response(
             results=results,
             gsp_id_map={k: v for k, v in gsp_id_map.items() if v != 0},
             gsp_uuid_id_map=gsp_uuid_id_map,
             creation_time=start,
         )
-        forecast_value = await loop.run_in_executor(
-            None, lambda: json.dumps(jsonable_encoder(forecast_response)).encode()
+        forecast_value = await run_in_threadpool(
+            lambda: json.dumps(jsonable_encoder(forecast_response)).encode()
         )
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
         compact_response = _build_compact_response(
             results=results,
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
-        compact_value = await loop.run_in_executor(
-            None, lambda: json.dumps(jsonable_encoder(compact_response)).encode()
+        compact_value = await run_in_threadpool(
+            lambda: json.dumps(jsonable_encoder(compact_response)).encode()
         )
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
