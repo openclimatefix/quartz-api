@@ -4,7 +4,6 @@ import asyncio
 import datetime as dt
 import json
 import logging
-import os
 import traceback
 from collections import defaultdict
 from typing import Annotated
@@ -16,7 +15,6 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     FastAPI,
-    Header,
     HTTPException,
     Request,
     Response,
@@ -450,7 +448,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             creation_time=start,
         )
         forecast_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(forecast_response)).encode()
+            lambda: json.dumps(jsonable_encoder(forecast_response)).encode(),
         )
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
         compact_response = _build_compact_response(
@@ -458,7 +456,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
         compact_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(compact_response)).encode()
+            lambda: json.dumps(jsonable_encoder(compact_response)).encode(),
         )
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
@@ -478,7 +476,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
 async def refresh_forecast_all_cache(
     background_tasks: BackgroundTasks,
     request: Request,
-    auth: AuthDependency,  # noqa: ARG001
+    auth: AuthDependency,
     # x_refresh_token: Annotated[str, Header()],
 ) -> Response:
     """Trigger a background cache refresh for /forecast/all/.
