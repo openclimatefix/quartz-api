@@ -202,16 +202,19 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         sentry_sdk.set_tag("version", importlib.metadata.version("quartz_api"))
 
     # Add routers to the server according to configuration
-    for r in conf.get_string("api.routers").split(","):
-        try:
-            mod = importlib.import_module(service.__name__ + f".{r}")
-            server.include_router(mod.router)
+    if conf.get_string("api.routers") == "":
+        log.warning("No routers configured. The API will not have any endpoints.")
+    else:
+        for r in conf.get_string("api.routers").split(","):
+            try:
+                mod = importlib.import_module(service.__name__ + f".{r}")
+                server.include_router(mod.router)
 
-            mod_description = getattr(mod, "__doc__", f"TODO: Add description for {r}")
-            description = mod_description
+                mod_description = getattr(mod, "__doc__", f"TODO: Add description for {r}")
+                description = mod_description
 
-        except ModuleNotFoundError as e:
-            raise OSError(f"No such router router '{r}'") from e
+            except ModuleNotFoundError as e:
+                raise OSError(f"No such router router '{r}'") from e
 
     # Customize the OpenAPI schema
     server.openapi = lambda: _custom_openapi(server)
