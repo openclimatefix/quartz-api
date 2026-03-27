@@ -90,10 +90,10 @@ class StorageClient(models.StorageInterface):
         if not resp.get("values"):
             return []
 
-        valid_ts = dt.datetime.fromisoformat(resp["timestamp_utc"].rstrip("Z")).replace(tzinfo=dt.UTC)
+        valid_ts = dt.datetime.fromisoformat(resp["timestamp_utc"].rstrip("Z")).replace(tzinfo=dt.UTC)  # noqa: E501
         return [
             models.PredictedGenerationValue(
-                power_kilowatts=float(v.get("value_fraction", 0)) * float(v["effective_capacity_watts"]) / 1000,
+                power_kilowatts=float(v.get("value_fraction", 0)) * float(v["effective_capacity_watts"]) / 1000,  # noqa: E501
                 valid_timestamp=valid_ts,
                 location_uuid=UUID(v["location_uuid"]),
                 capacity_kilowatts=float(v["effective_capacity_watts"]) / 1000,
