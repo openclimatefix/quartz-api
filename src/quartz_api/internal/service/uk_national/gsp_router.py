@@ -287,7 +287,7 @@ def _build_forecast_response(
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder, expire=60 * 60)
+@cache(key_builder=key_builder, expire=24 * 60* 60) # 1 day
 async def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
