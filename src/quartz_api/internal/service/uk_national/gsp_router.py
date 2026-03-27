@@ -433,23 +433,24 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
-        forecast_value = json.dumps(
-            jsonable_encoder(
-                _build_forecast_response(
-                    results=results,
-                    gsp_id_map={k:v for k,v in gsp_id_map.items() if v != 0},
-                    gsp_uuid_id_map=gsp_uuid_id_map,
-                    creation_time=start,
-                ),
-            ),
-        ).encode()
+        loop = asyncio.get_running_loop()
+        forecast_response = _build_forecast_response(
+            results=results,
+            gsp_id_map={k: v for k, v in gsp_id_map.items() if v != 0},
+            gsp_uuid_id_map=gsp_uuid_id_map,
+            creation_time=start,
+        )
+        forecast_value = await loop.run_in_executor(
+            None, lambda: json.dumps(jsonable_encoder(forecast_response)).encode()
+        )
         await backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
-        compact_value = json.dumps(
-            jsonable_encoder(_build_compact_response(
-                results=results,
-                gsp_uuid_id_map=gsp_uuid_id_map,
-            )),
-        ).encode()
+        compact_response = _build_compact_response(
+            results=results,
+            gsp_uuid_id_map=gsp_uuid_id_map,
+        )
+        compact_value = await loop.run_in_executor(
+            None, lambda: json.dumps(jsonable_encoder(compact_response)).encode()
+        )
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
@@ -468,7 +469,8 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
 async def refresh_forecast_all_cache(
     background_tasks: BackgroundTasks,
     request: Request,
-    x_refresh_token: Annotated[str, Header()],
+    auth: AuthDependency,  # noqa: ARG001
+    # x_refresh_token: Annotated[str, Header()],
 ) -> Response:
     """Trigger a background cache refresh for /forecast/all/.
 
@@ -476,13 +478,24 @@ async def refresh_forecast_all_cache(
     preventing ~45s cold-start latency on the first user request after a new forecast run.
     Requires X-Refresh-Token header matching the CACHE_REFRESH_TOKEN environment variable.
     """
-    expected = os.environ.get("CACHE_REFRESH_TOKEN", "")
-    if not expected or x_refresh_token != expected:
+    # Check auth has ocf:admin role
+    permissions = auth.get("permissions", [])
+    log.info("Permissions: %s", permissions)
+    if "ocf:admin" not in permissions:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing refresh token",
+            detail="Insufficient permissions to refresh cache",
         )
-    background_tasks.add_task(_warm_forecast_all_cache, request.app)
+    else:
+        log.info("OCF admin, yay! Refreshing forecast all cache")
+
+    # expected = os.environ.get("CACHE_REFRESH_TOKEN", "")
+    # if not expected or x_refresh_token != expected:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Invalid or missing refresh token",
+    #     )
+    # background_tasks.add_task(_warm_forecast_all_cache, request.app)
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
