@@ -45,4 +45,5 @@ COPY --from=build-app /opt/app/.venv /opt/app/.venv
 # Health check and entrypoint
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:${PORT}/health || exit 1
-ENTRYPOINT ["/opt/app/.venv/bin/quartz-api"]
+ENV PATH="/opt/app/.venv/bin:$PATH"
+ENTRYPOINT ["quartz-api"]
