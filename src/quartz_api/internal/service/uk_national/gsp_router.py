@@ -454,7 +454,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         await backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
-        log.info("GSP forecast all cache set with keys: %s",
+        log.info("GSP forecast all cache set with keys: %s and %s",
                  f"{base_key}[]:[]",
                  f"{base_key}[('compact', 'true')]:[]")
     except Exception:
