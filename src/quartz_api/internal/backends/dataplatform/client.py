@@ -244,7 +244,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend does not yet support writing generation")
 
     @override
-    async def get_predicted_generation_snapshot(
+    def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -253,12 +253,15 @@ class StorageClient(models.StorageInterface):
         forecaster_name: str | None = None,
         forecaster_version: str | None = None,
     ) -> list[models.PredictedGenerationValue]:
+        
+        print(snapshot_timestamp_utc)
+
         if forecaster_version is None:
             req = dp.ListForecastersRequest(
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
-            resp = await self.dpc.list_forecasters(req)
+            resp = self.dpc.list_forecasters(req)
             forecaster = resp.forecasters[0]
         else:
             forecaster = dp.Forecaster(
@@ -268,25 +271,48 @@ class StorageClient(models.StorageInterface):
 
         req = dp.GetForecastAtTimestampRequest(
             location_uuids=[str(uuid) for uuid in location_uuids],
-            energy_source=energy_type_map[energy_type],
+            # energy_source=energy_type_map[energy_type],
             timestamp_utc=snapshot_timestamp_utc,
             forecaster=forecaster,
         )
-        resp = await self.dpc.get_forecast_at_timestamp(req)
+
+        from grpc_requests import Client
+
+        client = Client.get_by_endpoint('localhost:50051')
+        client  = client.service("ocf.dp.DataPlatformDataService")
+
+        # req = req.SerializeToString()
+        req = req.to_dict()
+        req['energy_source'] = energy_type_map[energy_type].value
+        # req.s
+        # req['energy_source'] = dp.EnergySource.SOLAR
+        resp = client.GetForecastAtTimestamp(req)
+        # print(resp.keys())
+        # print(resp['values'][0])
+        # print(dp.GetForecastAtTimestampResponseValue().from_dict(resp['values'][0]))
+
+        # resp = dp.GetForecastAtTimestampResponse().from_dict(resp)
+
+        # stub = 
+
+        # resp = self.dpc.get_forecast_at_timestamp(req)
+
+        if 'values' not in resp.keys():
+            return []
 
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
-                power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
-                valid_timestamp=resp.timestamp_utc,
-                location_uuid=UUID(v.location_uuid),
-                capacity_kilowatts=v.effective_capacity_watts / 1000,
+                power_kilowatts=float(v['value_fraction']) * float(v['effective_capacity_watts']) / 1000 if 'value_fraction' in v.keys() else 0,
+                valid_timestamp=resp['timestamp_utc'],
+                location_uuid=UUID(v['location_uuid']),
+                capacity_kilowatts=float(v['effective_capacity_watts'])/ 1000,
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
-                metadata=struct_to_dict(v.metadata),
+                created_timestamp=v['created_timestamp_utc'],
+                init_timestamp=v['initialization_timestamp_utc'],
+                metadata=v['metadata'],
             )
-            for v in resp.values
+            for v in resp['values']
         ]
 
         return out

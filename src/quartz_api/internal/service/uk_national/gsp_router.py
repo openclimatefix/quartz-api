@@ -288,7 +288,7 @@ def _build_forecast_response(
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=24 * 60* 60) # 1 day
-async def get_all_available_forecasts(
+def get_all_available_forecasts(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -329,21 +329,26 @@ async def get_all_available_forecasts(
         if k in gsp_ids_ints
     }
 
+    # end_datetime_utc = start_datetime_utc + dt.timedelta(hours=2)
+
+
+
     if gsp_ids is None:
-        if ((start_datetime_utc != pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-            or (end_datetime_utc != pd.Timestamp.utcnow().floor("6h").to_pydatetime()
-                + dt.timedelta(days=2))
-            )
-                and start_datetime_utc != end_datetime_utc
-            ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_datetime_utc and end_datetime_utc must be set to the same value when "
-                       "gsp_ids is not set",
-            )
-        # Parallel snapshot per timestamp — O(T) gRPC calls vs O(GSPs) for the per-GSP path
+        # if ((start_datetime_utc != pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+        #     or (end_datetime_utc != pd.Timestamp.utcnow().floor("6h").to_pydatetime()
+        #         + dt.timedelta(days=2))
+        #     )
+        #         and start_datetime_utc != end_datetime_utc
+        #     ):
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         detail="start_datetime_utc and end_datetime_utc must be set to the same value when "
+        #                "gsp_ids is not set",
+        #     )
+        # Parallel snapshot per timestamp — O(T) gRPC calls vs O(GSPs) for the per-GSP pat
+    
+
         tasks = [
-            asyncio.create_task(
                 db.get_predicted_generation_snapshot(
                     location_uuids=[loc.uuid for loc in gsps_to_convert.values()],
                     snapshot_timestamp_utc=ts.to_pydatetime(),
@@ -351,14 +356,15 @@ async def get_all_available_forecasts(
                     forecaster_name=GSP_FORECASTER_NAME,
                     forecaster_version=GSP_FORECASTER_VERSION,
                     authdata={},
-                ),
-            )
+                )
             for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min")
         ]
     else:
+        from starlette.concurrency import run_in_threadpool
         tasks = [
-            asyncio.create_task(
-                db.get_predicted_generation(
+            run_in_threadpool(
+                db.get_predicted_generation,
+                    **dict(
                     location_uuid=str(loc.uuid),
                     window_start=start_datetime_utc,
                     window_end=end_datetime_utc,
@@ -368,14 +374,16 @@ async def get_all_available_forecasts(
                     forecast_horizon_minutes=0,
                     forecaster_name=GSP_FORECASTER_NAME,
                     forecaster_version=GSP_FORECASTER_VERSION,
-                ),
+                )
             )
             for loc in gsps_to_convert.values()
         ]
 
-    results: list[list[models.PredictedGenerationValue] | Exception] = await asyncio.gather(
-        *tasks, return_exceptions=True,
-    )
+
+    # results: list[list[models.PredictedGenerationValue] | Exception] = await asyncio.gather(
+    #     *tasks, return_exceptions=True,
+    # )
+    results = tasks
     log.info(f"Fetched predicted generation values for {len(results)} GSPs")
 
     gsp_uuid_id_map = {v.uuid: k for k, v in gsps_to_convert.items()}
