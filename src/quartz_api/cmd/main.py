@@ -294,6 +294,7 @@ def run() -> None:
     uvicorn.run(
         server,
         host="0.0.0.0",  # noqa: S104
+        workers=conf.get_int("api.workers"),
         port=conf.get_int("api.port"),
         log_level=conf.get_string("api.loglevel"),
     )
