@@ -16,10 +16,11 @@ class TraceIdFilter(logging.Filter):
 
 class APITallyFilter(logging.Filter):
     """Reduces level of httpx API tally post logs to DEBUG."""
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        if record.name.startswith("httpx") and all(p in message for p in ["apitally", "POST", "202"]):
+        if record.name.startswith("httpx")\
+            and all(p in message for p in ["apitally", "POST", "202"]):
             record.levelname = "DEBUG"
             record.levelno = logging.DEBUG
         return True
