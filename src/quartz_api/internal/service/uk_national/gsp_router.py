@@ -50,8 +50,11 @@ log = logging.getLogger(__name__)
 
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
+GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 24 # 1 day
 
 router = APIRouter()
+
+_cache_warming: bool = False
 
 
 
@@ -285,11 +288,12 @@ def _build_forecast_response(
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder, expire=24 * 60* 60) # 1 day
+@cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS) # 1 day
 def get_all_available_forecasts(
-    request: Request,  # noqa: ARG001
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: models.StorageClientDependency,
-    auth: AuthDependency, # noqa: ARG001
+    auth: AuthDependency,  # noqa: ARG001
     start_datetime_utc: Annotated[
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
@@ -315,71 +319,43 @@ def get_all_available_forecasts(
     - **gsp_ids**: optional comma-separated GSP IDs to filter results.
     - **start_datetime_utc**: optional start datetime for the query.
     """
-    # if gsp ids are not set, then we use snapshot method, which gets all gsps for one timestamp
-    # if gsp_ids is set, then we loop over all gsp ids to get forecasts. The UI current needs this.
-    results: list[list[models.PredictedGenerationValue]]
-    # Don't include national by default
-    gsp_ids_ints: list[int] = convert_list_of_gsp_ids(gsp_ids) or [
-        k for k in gsp_id_map if k != 0
-    ]
+    # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
+    # trigger a warm in the background and ask the client to retry.
+    if gsp_ids is None:
+        global _cache_warming
+        if not _cache_warming:
+            background_tasks.add_task(_warm_forecast_all_cache, request.app)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            headers={"Retry-After": "60"},
+            detail="Forecast cache is being populated, please retry in 60 seconds.",
+        )
+
+    # gsp_ids path: custom query, fetch live.
     gsps_to_convert: dict[int, models.Location] = {
         k: v for k, v in gsp_id_map.items()
-        if k in gsp_ids_ints
+        if k in convert_list_of_gsp_ids(gsp_ids)
     }
-
-    if gsp_ids is None:
-        if ((start_datetime_utc != pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-            or (end_datetime_utc != pd.Timestamp.utcnow().floor("6h").to_pydatetime()
-                + dt.timedelta(days=2))
-            )
-                and start_datetime_utc != end_datetime_utc
-            ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_datetime_utc and end_datetime_utc must be set to the same value when "
-                       "gsp_ids is not set",
-            )
-        # Parallel snapshot per timestamp — O(T) gRPC calls vs O(GSPs) for the per-GSP path
-        tasks = [
-            # asyncio.create_task(
-                db.get_predicted_generation_snapshot(
-                    location_uuids=[loc.uuid for loc in gsps_to_convert.values()],
-                    snapshot_timestamp_utc=ts.to_pydatetime(),
-                    energy_type=models.EnergyType.SOLAR,
-                    forecaster_name=GSP_FORECASTER_NAME,
-                    forecaster_version=GSP_FORECASTER_VERSION,
-                    authdata={},
-                )
-            # )
-            for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min")
-        ]
-    else:
-        tasks = [
-            # asyncio.create_task(
-                db.get_predicted_generation(
-                    location_uuid=str(loc.uuid),
-                    window_start=start_datetime_utc,
-                    window_end=end_datetime_utc,
-                    energy_type=models.EnergyType.SOLAR,
-                    location_type=models.LocationType.GSP,
-                    authdata={},
-                    forecast_horizon_minutes=0,
-                    forecaster_name=GSP_FORECASTER_NAME,
-                    forecaster_version=GSP_FORECASTER_VERSION,
-                # ),
-            )
-            for loc in gsps_to_convert.values()
-        ]
-
+    tasks = [
+            db.get_predicted_generation(
+                location_uuid=str(loc.uuid),
+                window_start=start_datetime_utc,
+                window_end=end_datetime_utc,
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.GSP,
+                authdata={},
+                forecast_horizon_minutes=0,
+                forecaster_name=GSP_FORECASTER_NAME,
+                forecaster_version=GSP_FORECASTER_VERSION,
+        )
+        for loc in gsps_to_convert.values()
+    ]
     results = tasks
     log.info(f"Fetched predicted generation values for {len(results)} GSPs")
 
     gsp_uuid_id_map = {v.uuid: k for k, v in gsps_to_convert.items()}
     if compact:
-        return _build_compact_response(
-            results=results,
-            gsp_uuid_id_map=gsp_uuid_id_map,
-        )
+        return _build_compact_response(results=results, gsp_uuid_id_map=gsp_uuid_id_map)
     return _build_forecast_response(
         results=results,
         gsp_id_map=gsps_to_convert,
@@ -397,6 +373,8 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
     Cache keys are derived from key_builder's output for a default GET with no params:
       "{prefix}::get:{path}:{params}:{permissions}"
     """
+    global _cache_warming
+    _cache_warming = True
     try:
         # Wait to let the server finish starting up before hitting gRPC.
         # time.sleep(5)
@@ -445,13 +423,23 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
             creation_time=start,
         )
         forecast_value = json.dumps(jsonable_encoder(forecast_response)).encode()
-        backend.set(f"{base_key}[]:[]", forecast_value, expire=60 * 30)
+        backend.set(
+            f"{base_key}[]:[]",
+            forecast_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+        )
         compact_response = _build_compact_response(
             results=results,
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
+
         compact_value =  json.dumps(jsonable_encoder(compact_response)).encode()
-        backend.set(f"{base_key}[('compact', 'true')]:[]", compact_value, expire=60 * 30)
+        backend.set(
+            f"{base_key}[('compact', 'true')]:[]",
+            compact_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+        )
+
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
         log.info("GSP forecast all cache set with keys: %s and %s",
@@ -459,6 +447,8 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
                  f"{base_key}[('compact', 'true')]:[]")
     except Exception:
         log.exception("GSP forecast all cache warm failed: %s", traceback.format_exc())
+    finally:
+        _cache_warming = False
 
 
 @router.post(
@@ -480,7 +470,7 @@ def refresh_forecast_all_cache(
     """
     # Check auth has ocf:admin role
     permissions = auth.get("permissions", [])
-    log.info("Permissions: %s", permissions)
+
     if "ocf:admin" not in permissions:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -489,8 +479,19 @@ def refresh_forecast_all_cache(
     else:
         log.info("OCF admin permission confirmed. Refreshing forecast all cache...")
 
-    background_tasks.add_task(_warm_forecast_all_cache, request.app)
-    return Response(status_code=status.HTTP_202_ACCEPTED)
+    if _cache_warming:
+        log.warning("Forecast all cache warm already in progress")
+        return Response(
+            status_code=status.HTTP_202_ACCEPTED,
+            content="Forecast all cache warm already in progress",
+        )
+    else:
+        background_tasks.add_task(_warm_forecast_all_cache, request.app)
+        return Response(
+            status_code=status.HTTP_202_ACCEPTED,
+            content="Forecast all cache refresh triggered successfully",
+        )
+
 
 
 @router.get(
