@@ -28,7 +28,6 @@ def set_trace_id(trace_id: str) -> None:
     """Set the trace_id for the current context."""
     _trace_id_ctx.set(trace_id)
 
-
 class TracerMiddleware(BaseHTTPMiddleware):
     """Middleware to add tracing information to API requests."""
 
@@ -66,3 +65,4 @@ class TracerMiddleware(BaseHTTPMiddleware):
         response.headers[CORR_HEADER] = trace_id
 
         return response
+

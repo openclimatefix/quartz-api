@@ -58,7 +58,7 @@ async def get_system_details(
 
         installed_capacity_mw = uk_national.capacity_kilowatts / 1000
         if "capacity_no_degradation_kw" in uk_national.metadata:
-            installed_capacity_mw = uk_national.metadata["capacity_no_degradation_kw"] / 1_000
+            installed_capacity_mw = int(uk_national.metadata["capacity_no_degradation_kw"]) / 1_000
 
         # Why not use from_location here?
         location = Location(

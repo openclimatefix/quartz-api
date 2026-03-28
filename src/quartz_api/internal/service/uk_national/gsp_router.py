@@ -207,7 +207,7 @@ def _build_compact_response(
             log.warning("Snapshot call failed, skipping: %s", snapshot)
             continue
         for pgv in snapshot:
-            gsp_id = gsp_uuid_id_map.get(pgv.location_uuid)
+            gsp_id = int(gsp_uuid_id_map[pgv.location_uuid])
             grouped[pgv.valid_timestamp][gsp_id] = round(pgv.power_kilowatts / 1000.0, 4)
     return [
         OneDatetimeManyForecastValuesMW(
@@ -236,7 +236,7 @@ def _build_forecast_response(
             log.warning("Snapshot call failed, skipping: %s", snapshot)
             continue
         for pgv in snapshot:
-            gsp_id = gsp_uuid_id_map.get(pgv.location_uuid)
+            gsp_id = int(gsp_uuid_id_map[pgv.location_uuid])
             fvs_per_gsp[gsp_id].append(
                 ForecastValue(
                     target_time=pgv.valid_timestamp,
@@ -254,7 +254,7 @@ def _build_forecast_response(
 
     forecasts = []
     for gsp_id in gsp_uuid_id_map.values():
-        pgv = gsp_pgv_map.get(gsp_id)
+        pgv = gsp_pgv_map[gsp_id]
         location = Location.from_location(gsp_id_map[gsp_id])
         location.installed_capacity_mw = \
             pgv.capacity_kilowatts / 1000.0

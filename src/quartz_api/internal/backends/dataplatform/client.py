@@ -1,12 +1,11 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
-
 import datetime as dt
 import logging
-from struct import Struct
 from uuid import UUID
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -26,6 +25,42 @@ location_type_map: dict[models.LocationType, dp.LocationType] = {
     models.LocationType.NATION: dp.LocationType.NATION,
     models.LocationType.SUBSTATION: dp.LocationType.PRIMARY_SUBSTATION,
 }
+
+def _parse_grpc_timeseries(
+        resp_values: list[dp.GetForecastAsTimeseriesResponseValue],
+        location_uuid: UUID,
+        forecaster: dp.Forecaster,
+) -> list[models.PredictedGenerationValue]:
+    """Map DataPlatform response to API internal model format."""
+
+    fname = forecaster.forecaster_name
+    fversion = forecaster.forecaster_version
+
+    out = []
+    for v in resp_values:
+        stats = v.other_statistics_fractions
+        p10_val = int(v.effective_capacity_watts * stats["p10"] / 1000.0) if "p10" in stats else None
+        p90_val = int(v.effective_capacity_watts * stats["p90"] / 1000.0) if "p90" in stats else None
+
+        plevels: dict[str, float] = {}
+        if p10_val is not None and p90_val is not None:
+            plevels = {"p10": p10_val, "p90": p90_val}
+
+        out.append(
+            models.PredictedGenerationValue(
+                power_kilowatts=int(v.effective_capacity_watts * v.p50_value_fraction / 1000),
+                valid_timestamp=v.target_timestamp_utc,
+                location_uuid=location_uuid,
+                capacity_kilowatts=int(v.effective_capacity_watts / 1000),
+                created_timestamp=v.created_timestamp_utc,
+                init_timestamp=v.initialization_timestamp_utc,
+                forecaster_name=forecaster.forecaster_name,
+                forecaster_version=forecaster.forecaster_version,
+                plevels_kilowatts=plevels,
+                metadata=v.metadata,
+            )
+        )
+    return out
 
 
 class StorageClient(models.StorageInterface):
@@ -149,33 +184,12 @@ class StorageClient(models.StorageInterface):
                 v.location_uuid = location_uuid
                 v.effective_capacity_watts = location.effective_capacity_watts
 
-        out: list[models.PredictedGenerationValue] = [
-            models.PredictedGenerationValue(
-                power_kilowatts=int(
-                    v.effective_capacity_watts * v.p50_value_fraction / 1000,
-                ),
-                valid_timestamp=v.target_timestamp_utc,
-                location_uuid=location_uuid,
-                capacity_kilowatts=int(v.effective_capacity_watts / 1000),
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
-                forecaster_name=forecaster.forecaster_name,
-                forecaster_version=forecaster.forecaster_version,
-                plevels_kilowatts={
-                    "p10": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p10"] / 1000.0,
-                    ),
-                    "p90": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p90"] / 1000.0,
-                    ),
-                }
-                if "p10" in v.other_statistics_fractions and "p90" in v.other_statistics_fractions
-                else {},
-                metadata=struct_to_dict(v.metadata),
-            )
-            for v in resp.values
-        ]
-        return out
+        return await run_in_threadpool(
+                _parse_grpc_timeseries,
+                resp_values=resp.values,
+                location_uuid=location_uuid if isinstance(location_uuid, UUID) else UUID(location_uuid),
+                forecaster=forecaster,
+        )
 
     @override
     async def put_predicted_generation(
@@ -284,7 +298,7 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster.forecaster_version,
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
-                metadata=struct_to_dict(v.metadata),
+                metadata=v.metadata,
             )
             for v in resp.values
         ]
@@ -362,12 +376,12 @@ class StorageClient(models.StorageInterface):
         resp = await self.dpc.list_locations(req)
         out: list[models.Location] = [
             models.Location(
-                uuid=loc.location_uuid,
+                uuid=UUID(loc.location_uuid),
                 name=loc.location_name,
                 capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
-                metadata=struct_to_dict(loc.metadata),
+                metadata=loc.metadata,
             )
             for loc in resp.locations
         ]
@@ -414,60 +428,11 @@ class StorageClient(models.StorageInterface):
         loc = resp.locations[0]
 
         return models.Location(
-            uuid=loc.location_uuid,
+            uuid=UUID(loc.location_uuid),
             name=loc.location_name,
             capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
-            metadata=struct_to_dict(loc.metadata),
+            metadata=loc.metadata,
         )
 
-
-# @override
-# async def get_latest_forecast(
-#     self,
-#     authdata: dict[str, str],
-#     location_uuid: UUID,
-#     forecaster_name: str | None = None,
-# ) -> models.Forecast:
-#     """Get the latest forecast for a site."""
-#     # get forecasters
-#     request = dp.GetLatestForecastsRequest(
-#         location_uuid=str(location_uuid),
-#         energy_source=dp.EnergySource.SOLAR,
-#     )
-#     response = await self.dp.get_latest_forecasts(request)
-
-#     # reduce to forecaster_name
-#     if forecaster_name is not None:
-#         response.forecasts = [
-#             f for f in response.forecasts
-#             if f.forecaster.forecaster_name == forecaster_name
-#         ]
-
-#     # shouldnt need this but just incase
-#     response.forecasts.sort(
-#         key=lambda f: f.created_timestamp_utc,
-#         reverse=True,
-#     )
-
-#     return models.Forecast(
-#         created_time=response.forecasts[0].created_timestamp_utc,
-#         name=response.forecasts[0].forecaster.forecaster_name,
-#         version=response.forecasts[0].forecaster.forecaster_version,
-#     )
-
-
-def struct_to_dict(values: Struct) -> dict:
-    """Converts a Struct to a dictionary."""
-    d = values.to_dict()
-
-    # change any number_values to float
-    for key, value in d.items():
-        if isinstance(value, dict):
-            if "numberValue" in value:
-                d[key] = float(value["numberValue"])
-            if "stringValue" in value:
-                d[key] = str(value["stringValue"])
-
-    return d

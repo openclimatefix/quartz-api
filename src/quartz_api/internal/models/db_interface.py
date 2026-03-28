@@ -50,7 +50,7 @@ class PredictedGenerationValue(GenerationValue):
     plevels_kilowatts: dict[str, float] = Field(default_factory=dict)
 
     # metadata: Additional metadata about the forecast
-    metadata: dict[str, str | float] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class ActualGenerationValue(GenerationValue):
@@ -67,7 +67,7 @@ class Location(BaseModel):
     latitude: float
     longitude: float
     capacity_kilowatts: float
-    metadata: dict[str, str | int | float] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class StorageInterface(abc.ABC):

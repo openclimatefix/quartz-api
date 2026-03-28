@@ -514,14 +514,14 @@ wheels = [
 
 [[package]]
 name = "dp-sdk"
-version = "0.23.0"
-source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.23.0/dp_sdk-0.23.0-py3-none-any.whl" }
+version = "0.25.0"
+source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 dependencies = [
     { name = "betterproto" },
     { name = "grpcio" },
 ]
 wheels = [
-    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.23.0/dp_sdk-0.23.0-py3-none-any.whl", hash = "sha256:372c899030063363d0126d8b4e63fc9625b6341d429370529f7ba003585accee" },
+    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl", hash = "sha256:28d10078b310b57bc6cd1136e2f56529df9109c1e2f666bcbf04ee00e03d0411" },
 ]
 
 [package.metadata]
@@ -1755,7 +1755,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.4.39"
+version = "0.4.44"
 source = { editable = "." }
 dependencies = [
     { name = "apitally", extra = ["fastapi"] },
@@ -1803,7 +1803,7 @@ requires-dist = [
     { name = "apitally", extras = ["fastapi"], specifier = ">=0.22.3" },
     { name = "auth0-fastapi-api", specifier = ">=1.0.0b5" },
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.23.0/dp_sdk-0.23.0-py3-none-any.whl" },
+    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "fastapi-cache2", extras = ["memcache"], specifier = ">=0.2.2" },
     { name = "gunicorn", specifier = ">=25.3.0" },
