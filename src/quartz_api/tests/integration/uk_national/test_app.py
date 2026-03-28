@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+from fastapi_cache import FastAPICache
 
 
 # 1. Does the app start up, and can we use health
@@ -192,26 +193,46 @@ async def test_gsp_pvlive(
     assert len(data) == 10
 
 
-# 4.3 Check GSP forecast route — default (compact=false) returns one Forecast per GSP
+# 4.3 Default /forecast/all/ (no gsp_ids) returns 503 with Retry-After on cache miss
 @pytest.mark.asyncio(loop_scope="session")
-async def test_gsp_forecast_all(
+async def test_gsp_forecast_all_cache_miss(
     api_client_uk_national,
-    gsp_locations,  # noqa arg001
-    make_forecasters,  # noqa arg001
-    make_gsp_forecast_values,  # noqa arg001
 ) -> None:
-    """Test that /forecast/all/ returns one Forecast object per GSP with multiple timesteps."""
+    """Cache miss on /forecast/all/ should return 503 with Retry-After: 60."""
+    for url in [
+        "/v0/solar/GB/gsp/forecast/all/",
+        "/v0/solar/GB/gsp/forecast/all/?compact=true",
+    ]:
+        response = await api_client_uk_national.get(url)
+        assert response.status_code == 503
+        assert response.headers.get("retry-after") == "60"
 
-    response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
 
+# 4.3.0 Populated cache returns 200
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_cache_hit(
+    api_client_uk_national,
+) -> None:
+    """Pre-populating the cache should result in a 200 rather than a 503."""
+    backend = FastAPICache.get_backend()
+    prefix = FastAPICache.get_prefix()
+    base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
+
+    cached_forecast = b'[{"location": {"label": "GSP 1", "gspId": 1}, "model": {"name": "blend", "version": "1.3.0"}, "forecastValues": [{"targetTime": "2026-01-01T00:00:00Z", "expectedPowerGenerationMegawatts": 1.23}], "inputDataLastUpdated": {"gsp": "2026-01-01T00:00:00Z", "nwp": "2026-01-01T00:00:00Z", "pv": "2026-01-01T00:00:00Z", "satellite": "2026-01-01T00:00:00Z"}}]'  # noqa: E501
+    cached_compact = b'[{"datetimeUtc": "2026-01-01T00:00:00Z", "forecastValues": {"1": 1.23}}]'
+    await backend.set(f"{base_key}[]:[]", cached_forecast, expire=60)
+    await backend.set(f"{base_key}[('compact', 'true')]:[]", cached_compact, expire=60)
+
+    response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/")
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) > 1  # multiple timesteps
-    assert "datetimeUtc" in data[0]
-    assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) >= 1  # multiple values per timestep
+    assert data[0]["model"]["name"] == "blend"
+    assert data[0]["forecastValues"][0]["expectedPowerGenerationMegawatts"] == 1.23
 
+    response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?compact=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["forecastValues"]["1"] == 1.23
 
 
 # 4.3.1 Check GSP forecast route with gsp_ids filter (compact mode)
@@ -235,26 +256,6 @@ async def test_gsp_forecast_all_gsp_ids(
     assert "forecastValues" in data[0]
     assert len(data[0]["forecastValues"]) == 3
 
-
-# 4.3.2 Check GSP forecast route, compact=false
-@pytest.mark.asyncio(loop_scope="session")
-async def test_gsp_forecast_compact_false(
-    api_client_uk_national,
-    gsp_locations,  # noqa arg001
-    make_forecasters,  # noqa arg001
-    make_gsp_forecast_values,  # noqa arg001
-) -> None:
-    """Test a sample endpoint for UK National forecast data."""
-
-    response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 10
-    assert "location" in data[0]
-    assert "model" in data[0]
-    assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 10
 
 # 4.3.3 Check GSP forecast route, compact=false, and restrict gsps
 @pytest.mark.asyncio(loop_scope="session")
