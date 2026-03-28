@@ -21,6 +21,7 @@ from fastapi import (
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import Value
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
@@ -439,10 +440,10 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
             creation_time=start,
         )
         forecast_value = json.dumps(jsonable_encoder(forecast_response)).encode()
-        backend.set(
-            f"{base_key}[]:[]",
+        backend._store[
+            f"{base_key}[]:[]"] = Value(
             forecast_value,
-            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+            backend._now + GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
         )
         compact_response = _build_compact_response(
             results=results,
@@ -450,10 +451,10 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
         )
 
         compact_value =  json.dumps(jsonable_encoder(compact_response)).encode()
-        backend.set(
-            f"{base_key}[('compact', 'true')]:[]",
+        backend._store[
+            f"{base_key}[('compact', 'true')]:[]"] = Value(
             compact_value,
-            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+            backend._now + GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
         )
 
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
