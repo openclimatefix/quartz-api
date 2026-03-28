@@ -79,7 +79,7 @@ async def test_get_substation_by_uuid(
     data = response.json()
     assert data["substation_name"] == name
     assert data["substation_type"] == "primary"
-    assert data["metadata"]["gsp_id"] == gsp_id
+    assert data["metadata"]["gsp_id"] == str(gsp_id)
     assert "latitude" in data
     assert "longitude" in data
     assert "capacity_kW" in data
@@ -110,7 +110,7 @@ async def test_get_all_substations_by_uuid(
 
         data = response.json()
         assert data["substation_name"] == name
-        assert data["metadata"]["gsp_id"] == gsp_id
+        assert data["metadata"]["gsp_id"] == str(gsp_id)
 
 
 # 4.1 Test getting forecast for a specific substation
