@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
-GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 24 # 1 day
+GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 2 # 2 hours
 
 router = APIRouter()
 
