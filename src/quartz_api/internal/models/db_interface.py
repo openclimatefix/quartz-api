@@ -1,7 +1,6 @@
 """Defines the domain interface for interacting with a backend."""
-import dataclasses
-
 import abc
+import dataclasses
 import datetime as dt
 from enum import Enum
 from typing import Annotated
@@ -28,7 +27,7 @@ class LocationType(Enum):
 
 
 @dataclasses.dataclass(slots=True)
-class GenerationValue():
+class GenerationValue:
     """Base class for generation values."""
 
     power_kilowatts: float
@@ -63,7 +62,7 @@ class ActualGenerationValue(GenerationValue):
 
 
 @dataclasses.dataclass(slots=True)
-class Location():
+class Location:
     """A location that has tracked or forecasted generation data."""
 
     uuid: UUID

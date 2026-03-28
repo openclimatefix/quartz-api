@@ -32,15 +32,13 @@ def _parse_grpc_timeseries(
         forecaster: dp.Forecaster,
 ) -> list[models.PredictedGenerationValue]:
     """Map DataPlatform response to API internal model format."""
-
-    fname = forecaster.forecaster_name
-    fversion = forecaster.forecaster_version
-
     out = []
     for v in resp_values:
         stats = v.other_statistics_fractions
-        p10_val = int(v.effective_capacity_watts * stats["p10"] / 1000.0) if "p10" in stats else None
-        p90_val = int(v.effective_capacity_watts * stats["p90"] / 1000.0) if "p90" in stats else None
+        p10_val = int(v.effective_capacity_watts * stats["p10"] / 1000.0)\
+            if "p10" in stats else None
+        p90_val = int(v.effective_capacity_watts * stats["p90"] / 1000.0)\
+            if "p90" in stats else None
 
         plevels: dict[str, float] = {}
         if p10_val is not None and p90_val is not None:
@@ -58,7 +56,7 @@ def _parse_grpc_timeseries(
                 forecaster_version=forecaster.forecaster_version,
                 plevels_kilowatts=plevels,
                 metadata=v.metadata,
-            )
+            ),
         )
     return out
 
@@ -100,7 +98,8 @@ class StorageClient(models.StorageInterface):
             created_cutoff = dt.datetime.now(tz=dt.UTC) - \
                 dt.timedelta(minutes=forecast_horizon_minutes)
 
-        oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"])\
+            if authdata != {} else None
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
@@ -186,7 +185,8 @@ class StorageClient(models.StorageInterface):
         return await run_in_threadpool(
                 _parse_grpc_timeseries,
                 resp_values=resp.values,
-                location_uuid=location_uuid if isinstance(location_uuid, UUID) else UUID(location_uuid),
+                location_uuid=location_uuid\
+                    if isinstance(location_uuid, UUID) else UUID(location_uuid),
                 forecaster=forecaster,
         )
 
