@@ -4,7 +4,6 @@ import unittest
 import uuid
 from unittest.mock import AsyncMock, patch
 
-from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
 
@@ -39,12 +38,10 @@ def mock_list_locations(
                 effective_capacity_watts=capacity,
                 location_type=req.location_type_filter,
                 latlng=dp.LatLng(51.5, -0.1),
-                metadata=Struct(
-                    fields={
-                        "orientation": Value(number_value=180.0),
-                        "tilt": Value(number_value=30.0),
-                    },
-                ),
+                metadata={
+                    "orientation": "180",
+                    "tilt": "30",
+                },
             ),
         ],
     )
@@ -65,7 +62,7 @@ def mock_get_forecast(
                 created_timestamp_utc=TEST_TIMESTAMP_UTC
                 - dt.timedelta(hours=1, minutes=req.horizon_mins),
                 other_statistics_fractions={"p90": 0.9, "p10": 0.1},
-                metadata=Struct(fields={}),
+                metadata={},
             )
             for i in range(5)
         ],

@@ -6,7 +6,6 @@ from uuid import UUID
 
 import pandas as pd
 import pytest_asyncio
-from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
 from httpx import ASGITransport, AsyncClient
 from pyhocon import ConfigFactory, ConfigTree
@@ -55,7 +54,7 @@ def make_substation_location(
 
     The substation is a point within the GSP polygon.
     """
-    metadata = Struct(fields={"gsp_id": Value(number_value=gsp_id)})
+    metadata = {"gsp_id": str(gsp_id)}
 
     return dp.CreateLocationRequest(
         location_name=name,

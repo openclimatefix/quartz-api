@@ -7,7 +7,6 @@ from importlib.metadata import version
 from uuid import UUID
 
 import pytest_asyncio
-from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
 from grpclib.client import Channel
 from testcontainers.core.container import DockerContainer
@@ -69,7 +68,11 @@ async def make_forecasters(dp_client: dp.DataPlatformDataServiceStub) -> None:
         _ = await dp_client.create_forecaster(create_forecaster_request)
 
 
-def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.CreateForecastRequest:
+def forecast(
+    location_uuid: str,
+    name: str,
+    init_time_utc: datetime.datetime,
+) -> dp.CreateForecastRequest:
     """Create a forecast request."""
     return dp.CreateForecastRequest(
         location_uuid=location_uuid,
@@ -84,7 +87,7 @@ def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.Creat
             )
             for i in range(10)
         ],
-        metadata=Struct(fields={"app_version": Value(string_value="1.2.3")}),
+        metadata={"app_version": "1.2.3"},
     )
 
 
@@ -120,7 +123,7 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
     # add location gsp 1 to 10
     location_uuids = []
     for i in range(1, 11):
-        metadata = Struct(fields={"gsp_id": Value(number_value=i)})
+        metadata = {"gsp_id": str(i)}
         create_location_request = make_location(
             name=f"gsp_{i}",
             gsp_id=i,
@@ -132,7 +135,7 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
 
         gsp_id_map[i] = models.Location(
             uuid=UUID(res.location_uuid),
-            metadata={"gsp_id": i},
+            metadata={"gsp_id": str(i)},
             name="uk",
             latitude=0,
             longitude=0,
@@ -146,7 +149,7 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
 async def national_location(dp_client: dp.DataPlatformDataServiceStub) -> dp.CreateLocationResponse:
     """Make national location."""
     # add location gsp 0
-    metadata = Struct(fields={"gsp_id": Value(number_value=0)})
+    metadata = {"gsp_id": "0"}
     create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
     create_location_response = await dp_client.create_location(create_location_request)
 
