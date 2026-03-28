@@ -62,7 +62,6 @@ def _parse_grpc_timeseries(
         )
     return out
 
-
 class StorageClient(models.StorageInterface):
     """Defines a data platform conneciton that conforms to the StorageInterface."""
 
@@ -120,7 +119,7 @@ class StorageClient(models.StorageInterface):
         if location_type == models.LocationType.SUBSTATION:
             # Get the GSP the substation belongs to
             req = dp.ListLocationsRequest(
-                enclosed_location_uuid_filter=[str(location_uuid)],
+                enclosed_location_uuid_filter=str(location_uuid),
                 location_type_filter=dp.LocationType.GSP,
                 user_oauth_id_filter=oauth_id,
             )
@@ -218,7 +217,8 @@ class StorageClient(models.StorageInterface):
 
         if authdata != {}:
             _ = await self._check_user_access(
-                location_uuid=location_uuid,
+                location_uuid=UUID(location_uuid)\
+                    if isinstance(location_uuid, str) else location_uuid,
                 energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
                 oauth_id=get_oauth_id_from_sub(authdata["sub"]),
@@ -238,7 +238,8 @@ class StorageClient(models.StorageInterface):
             models.ActualGenerationValue(
                 valid_timestamp=value.timestamp_utc,
                 power_kilowatts=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
-                location_uuid=str(location_uuid),
+                location_uuid=UUID(location_uuid)\
+                    if isinstance(location_uuid, str) else location_uuid,
                 capacity_kilowatts=int(value.effective_capacity_watts / 1000.0),
                 observer_name=observer_name,
             )

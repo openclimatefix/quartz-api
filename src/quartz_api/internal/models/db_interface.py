@@ -1,4 +1,5 @@
 """Defines the domain interface for interacting with a backend."""
+import dataclasses
 
 import abc
 import datetime as dt
@@ -7,7 +8,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
 
 
 class EnergyType(Enum):
@@ -27,7 +27,8 @@ class LocationType(Enum):
     NATION = 5
 
 
-class GenerationValue(BaseModel):
+@dataclasses.dataclass(slots=True)
+class GenerationValue():
     """Base class for generation values."""
 
     power_kilowatts: float
@@ -36,30 +37,33 @@ class GenerationValue(BaseModel):
     capacity_kilowatts: float
 
 
+@dataclasses.dataclass(slots=True)
 class PredictedGenerationValue(GenerationValue):
     """Predicted generation value with additional metadata."""
 
-    created_timestamp: dt.datetime | None = None
-    init_timestamp: dt.datetime | None = None
     forecaster_name: str
     forecaster_version: str
+    created_timestamp: dt.datetime | None = None
+    init_timestamp: dt.datetime | None = None
     """Dictionary of probabilistic levels for the forecast.
 
     Keys are the level names (e.g., 'p10', 'p50', 'p90'),
     and values are the corresponding power values in kW."""
-    plevels_kilowatts: dict[str, float] = Field(default_factory=dict)
+    plevels_kilowatts: dict[str, float] = dataclasses.field(default_factory=dict)
 
     # metadata: Additional metadata about the forecast
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
+@dataclasses.dataclass(slots=True)
 class ActualGenerationValue(GenerationValue):
     """Generation value recorded by an observer."""
 
     observer_name: str
 
 
-class Location(BaseModel):
+@dataclasses.dataclass(slots=True)
+class Location():
     """A location that has tracked or forecasted generation data."""
 
     uuid: UUID
@@ -67,7 +71,7 @@ class Location(BaseModel):
     latitude: float
     longitude: float
     capacity_kilowatts: float
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 class StorageInterface(abc.ABC):
