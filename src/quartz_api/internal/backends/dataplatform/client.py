@@ -49,6 +49,7 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         location_type: models.LocationType,
         authdata: dict[str, str],
+
         created_cutoff: dt.datetime | None = None,
         forecast_horizon_minutes: int = 0,
         forecaster_name: str | None = None,
