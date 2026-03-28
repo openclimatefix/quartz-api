@@ -36,7 +36,7 @@ from quartz_api.internal.backends import (
     EnrichedChannel,
     QuartzStorage,
 )
-from quartz_api.internal.middleware import audit, auth, ratelimit, sentry, trace
+from quartz_api.internal.middleware import auth, ratelimit, sentry, trace
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
 
 from ._logging import setup_json_logging
@@ -262,8 +262,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    if conf.get_string("backend.source") != "dataplatform":
-        server.add_middleware(audit.RequestLoggerMiddleware)
     server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
 
     # update description
