@@ -26,7 +26,7 @@ if db_url is not None:
     response_model=Status,
     status_code=status.HTTP_200_OK,
 )
-async def get_status(request: Request) -> Status:  # noqa: ARG001
+def get_status(request: Request) -> Status:  # noqa: ARG001
     """### Get status for the database and forecasts.
 
     Occasionally there may be a small problem or interruption with the forecast. This
@@ -47,7 +47,7 @@ async def get_status(request: Request) -> Status:  # noqa: ARG001
 
 @router.get("/check_last_forecast_run", include_in_schema=False)
 @cache(key_builder=key_builder)
-async def check_last_forecast_run(
+def check_last_forecast_run(
     request: Request,  # noqa: ARG001
     db: StorageClientDependency, model_name: str | None = "blend_adjust",
 ) -> dt.datetime:
@@ -63,7 +63,7 @@ async def check_last_forecast_run(
 
     # Get the national forecast,
     # but just get it for one datestamp (to make it quick)
-    forecast = await db.get_predicted_generation(
+    forecast = db.get_predicted_generation(
         location_uuid=gsp_id_map[0].uuid,
         location_type=LocationType.NATION,
         energy_type=EnergyType.SOLAR,
@@ -77,6 +77,6 @@ async def check_last_forecast_run(
 
 
 @router.get("/update_last_data", include_in_schema=False)
-async def update_last_data(request: Request) -> None:
+def update_last_data(request: Request) -> None:
     """Update the last data. This is a legacy route, and should not be used."""
     raise NotImplementedError()

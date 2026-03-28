@@ -1,6 +1,5 @@
 """API providing access to OCF's Quartz Forecasts."""
 
-import asyncio
 import functools
 import importlib
 import importlib.metadata
@@ -14,12 +13,12 @@ from zoneinfo import ZoneInfo
 
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
-from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
+from grpc_requests import Client
 from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
@@ -33,7 +32,6 @@ from quartz_api.internal import models, service
 from quartz_api.internal.backends import (
     DataPlatformStorage,
     DummyStorage,
-    EnrichedChannel,
     QuartzStorage,
 )
 from quartz_api.internal.middleware import audit, auth, ratelimit, sentry, trace
@@ -99,21 +97,26 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             storage = DummyStorage()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            grpc_channel = EnrichedChannel(
-                host=conf.get_string("backend.dataplatform.host"),
-                port=conf.get_int("backend.dataplatform.port"),
-            )
-            client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
+            # grpc_channel = EnrichedChannel(
+            #     host=conf.get_string("backend.dataplatform.host"),
+            #     port=conf.get_int("backend.dataplatform.port"),
+            # )
+            # client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
+            # storage = DataPlatformStorage.from_dp(dp_client=client)
+            host=conf.get_string("backend.dataplatform.host")
+            port=conf.get_int("backend.dataplatform.port")
+            client = Client.get_by_endpoint(f"{host}:{port}")
+            client  = client.service("ocf.dp.DataPlatformDataService")
             storage = DataPlatformStorage.from_dp(dp_client=client)
 
             if "uk_national" in conf.get_string("api.routers").split(","):
                 # Populate the GSP ID to UUID mapping
-                resp = await storage.get_locations(
+                resp = storage.get_locations(
                         location_type=models.LocationType.GSP,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
                     )
-                resp += await storage.get_locations(
+                resp += storage.get_locations(
                         location_type=models.LocationType.NATION,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
@@ -129,9 +132,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     server.dependency_overrides[models.get_storage_client] = lambda: storage
 
     warm_task = None
-    if "uk_national" in conf.get_string("api.routers"):
-        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
-        warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
+    # if "uk_national" in conf.get_string("api.routers"):
+    #     from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
+    #     warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
     yield
 
@@ -148,6 +151,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
     description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
+        debug=True,
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",

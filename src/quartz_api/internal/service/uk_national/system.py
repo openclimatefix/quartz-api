@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder, expire=3600)
-async def get_system_details(
+def get_system_details(
     request: Request,  # noqa: ARG001
     db: StorageClientDependency,
     auth: AuthDependency,  # noqa
@@ -48,7 +48,7 @@ async def get_system_details(
             detail="Location not found",
         )
 
-        nations = await db.get_locations(
+        nations = db.get_locations(
             location_uuid=gsp_id_map[0].uuid,
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.NATION,
@@ -83,7 +83,7 @@ async def get_system_details(
 
     if gsp_id is None:
         # Get up to date gsp information and update the map
-        gsps = await db.get_locations(
+        gsps = db.get_locations(
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.GSP,
             authdata={},

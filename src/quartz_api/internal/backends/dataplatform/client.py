@@ -7,6 +7,7 @@ from uuid import UUID
 
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from grpc_requests import client
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -34,14 +35,14 @@ class StorageClient(models.StorageInterface):
     dpc: dp.DataPlatformDataServiceStub
 
     @classmethod
-    def from_dp(cls, dp_client: dp.DataPlatformDataServiceStub) -> "StorageClient":
+    def from_dp(cls, dp_client: client.ServiceClient) -> "StorageClient":
         """Class method to create a new Data Platform storage client."""
         instance = cls()
         instance.dpc = dp_client
         return instance
 
     @override
-    async def get_predicted_generation(
+    def get_predicted_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -73,7 +74,16 @@ class StorageClient(models.StorageInterface):
             location_type_filter=location_type_map[location_type],
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dpc.list_locations(req)
+        req = self.format_req(req)
+        resp = self.dpc.ListLocations(req)
+
+        # formating things, should tidy up
+        resp["locations"][0]["energy_source"] = "SOLAR"
+        resp["locations"][0]["location_type"] \
+            = resp["locations"][0]["location_type"].replace("LOCATION_TYPE_", "")
+
+        resp = dp.ListLocationsResponse.from_dict(resp)
+
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
@@ -85,11 +95,24 @@ class StorageClient(models.StorageInterface):
         if location_type == models.LocationType.SUBSTATION:
             # Get the GSP the substation belongs to
             req = dp.ListLocationsRequest(
-                enclosed_location_uuid_filter=[str(location_uuid)],
+                # TODO something is not right here, to do with enclosed_location_uuid_filter
+                # it looks like we have defined is as None | str, but it should be a list
+                # enclosed_location_uuid_filter=[str(location_uuid)],
                 location_type_filter=dp.LocationType.GSP,
                 user_oauth_id_filter=oauth_id,
             )
-            gsps = await self.dpc.list_locations(req)
+            req = self.format_req(req)
+            # TODO something is not right here, to do with enclosed_location_uuid_filter
+            gsps = self.dpc.ListLocations(req)
+
+            # TODO tidy up
+            if "locations" in gsps:
+                    for i in range(len(gsps["locations"])):
+                        gsps["locations"][i]["energy_source"] = "SOLAR"
+                        gsps["locations"][i]["location_type"] \
+                            = gsps["locations"][i]["location_type"].replace("LOCATION_TYPE_", "")
+
+            gsps = dp.ListLocationsResponse.from_dict(gsps)
             if len(gsps.locations) == 0:
                 raise HTTPException(
                     status_code=404,
@@ -109,7 +132,7 @@ class StorageClient(models.StorageInterface):
                 energy_source=energy_type_map[energy_type],
                 pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
             )
-            resp = await self.dpc.get_latest_forecasts(req)
+            resp = self.dpc.get_latest_forecasts(req)
             if len(resp.forecasts) == 0:
                 return []
             resp.forecasts.sort(
@@ -122,7 +145,9 @@ class StorageClient(models.StorageInterface):
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
-            resp = await self.dpc.list_forecasters(req)
+            req = self.format_req(req)
+            resp = self.dpc.ListForecasters(req)
+            resp = dp.ListForecastersResponse.from_dict(resp)
             forecaster = resp.forecasters[0]
         else:
             forecaster = dp.Forecaster(
@@ -141,7 +166,9 @@ class StorageClient(models.StorageInterface):
             forecaster=forecaster,
             pivot_timestamp_utc=created_cutoff,
         )
-        resp = await self.dpc.get_forecast_as_timeseries(req)
+        req = self.format_req(req)
+        resp = self.dpc.GetForecastAsTimeseries(req)
+        resp = dp.GetForecastAsTimeseriesResponse.from_dict(resp)
 
         if location_type == models.LocationType.SUBSTATION:
             # Spoof the forecast values so that the capacity and id corresponds to the substation
@@ -178,7 +205,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
-    async def put_predicted_generation(
+    def put_predicted_generation(
         self,
         generation_values: list[models.PredictedGenerationValue],
         location_type: models.LocationType,
@@ -188,7 +215,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend doesn't support forecast input yet.")
 
     @override
-    async def get_actual_generation(
+    def get_actual_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -203,7 +230,7 @@ class StorageClient(models.StorageInterface):
             raise ValueError("Observer must be specified for data platform backend.")
 
         if authdata != {}:
-            _ = await self._check_user_access(
+            _ = self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
@@ -219,7 +246,10 @@ class StorageClient(models.StorageInterface):
                 end_timestamp_utc=window_end,
             ),
         )
-        resp = await self.dpc.get_observations_as_timeseries(req)
+        req = self.format_req(req)
+        resp = self.dpc.GetObservationsAsTimeseries(req)
+        resp = dp.GetObservationsAsTimeseriesResponse.from_dict(resp)
+
         out: list[models.ActualGenerationValue] = [
             models.ActualGenerationValue(
                 valid_timestamp=value.timestamp_utc,
@@ -234,7 +264,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
-    async def put_actual_generation(
+    def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
         energy_type: models.EnergyType,
@@ -244,7 +274,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend does not yet support writing generation")
 
     @override
-    async def get_predicted_generation_snapshot(
+    def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -258,7 +288,9 @@ class StorageClient(models.StorageInterface):
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
-            resp = await self.dpc.list_forecasters(req)
+            req = self.format_req(req)
+            resp = self.dpc.ListForecasters(req)
+            resp = dp.ListForecastersResponse.from_dict(resp)
             forecaster = resp.forecasters[0]
         else:
             forecaster = dp.Forecaster(
@@ -272,7 +304,9 @@ class StorageClient(models.StorageInterface):
             timestamp_utc=snapshot_timestamp_utc,
             forecaster=forecaster,
         )
-        resp = await self.dpc.get_forecast_at_timestamp(req)
+        req = self.format_req(req)
+        resp = self.dpc.GetForecastAtTimestamp(req)
+        resp = dp.GetForecastAtTimestampResponse().from_dict(resp)
 
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
@@ -292,7 +326,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
-    async def get_actual_generation_snapshot(
+    def get_actual_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -309,7 +343,9 @@ class StorageClient(models.StorageInterface):
             timestamp_utc=snapshot_timestamp_utc,
             observer_name=observer_name,
         )
-        resp = await self.dpc.get_observations_at_timestamp(req)
+        req = self.format_req(req)
+        resp = self.dpc.GetObservationsAtTimestamp(req)
+        resp = dp.GetObservationsAtTimestampResponse().from_dict(resp)
 
         out: list[models.ActualGenerationValue] = [
             models.ActualGenerationValue(
@@ -327,8 +363,23 @@ class StorageClient(models.StorageInterface):
 
         return out
 
+    def format_req(self, req): #noqa
+
+        req_dict = req.to_dict()
+
+        if "energySourceFilter" in req_dict and req_dict["energySourceFilter"] is not None:
+            req_dict["energySourceFilter"] = dp.EnergySource[req_dict["energySourceFilter"]].value
+
+        if "energySource" in req_dict and req_dict["energySource"] is not None:
+            req_dict["energySource"] = dp.EnergySource[req_dict["energySource"]].value
+
+        if "locationTypeFilter" in req_dict and req_dict["locationTypeFilter"] is not None:
+            req_dict["locationTypeFilter"] = dp.LocationType[req_dict["locationTypeFilter"]].value
+
+        return req_dict
+
     @override
-    async def get_locations(
+    def get_locations(
         self,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
@@ -359,7 +410,21 @@ class StorageClient(models.StorageInterface):
             user_oauth_id_filter=oauth_id,
             location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
         )
-        resp = await self.dpc.list_locations(req)
+        # resp = self.dpc.list_locations(req)
+
+        req = self.format_req(req)
+        resp = self.dpc.ListLocations(req)
+        if "locations" not in resp:
+            return []
+
+         # formating things, should tidy up
+        for i in range(len(resp["locations"])):
+            resp["locations"][i]["energy_source"] = "SOLAR"
+            resp["locations"][i]["location_type"] \
+                = resp["locations"][i]["location_type"].replace("LOCATION_TYPE_", "")
+
+        resp = dp.ListLocationsResponse().from_dict(resp)
+
         out: list[models.Location] = [
             models.Location(
                 uuid=loc.location_uuid,
@@ -374,7 +439,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
-    async def put_location(
+    def put_location(
         self,
         location: models.Location,
         location_type: models.LocationType,
@@ -384,14 +449,14 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend doesn't yet support location writing.")
 
     @override
-    async def log_api_call(
+    def log_api_call(
         self,
         url: str,
         authdata: dict[str, str],
     ) -> None:
         pass
 
-    async def _check_user_access(
+    def _check_user_access(
         self,
         location_uuid: UUID,
         energy_source: dp.EnergySource,
@@ -405,7 +470,8 @@ class StorageClient(models.StorageInterface):
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
         )
-        resp = await self.dpc.list_locations(req)
+        req = self.format_req(req)
+        resp = self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,

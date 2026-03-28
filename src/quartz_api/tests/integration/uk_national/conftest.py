@@ -42,6 +42,14 @@ async def api_client_uk_national(
     """Returns a TestClient for the FastAPI application."""
     app = _create_server(config_uk_national)
 
+
+    from grpc_requests import Client
+    host = os.environ["DATA_PLATFORM_HOST"]
+    port = os.environ["DATA_PLATFORM_PORT"]
+
+    client = Client.get_by_endpoint(f"{host}:{port}")
+    dp_client = client.service("ocf.dp.DataPlatformDataService")
+
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 

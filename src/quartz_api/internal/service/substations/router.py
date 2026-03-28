@@ -34,7 +34,7 @@ async def get_substations(
 
     Note that currently only 'primary' substations are supported.
     """
-    locs = await db.get_locations(
+    locs = db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.SUBSTATION,
         authdata={},
@@ -64,7 +64,7 @@ async def get_substation(
     _: AuthDependency,
 ) -> SubstationProperties:
     """Get a substation by UUID."""
-    locs = await db.get_locations(
+    locs = db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_uuid=substation_uuid,
         location_type=models.LocationType.SUBSTATION,
@@ -97,7 +97,7 @@ async def get_substation_forecast(
     tz: models.TZDependency,
 ) -> list[PredictedPower]:
     """Get forecasted generation values of a substation."""
-    forecast = await db.get_predicted_generation(
+    forecast = db.get_predicted_generation(
         location_uuid=substation_uuid,
         window_start=pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2),
         window_end=pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2),
@@ -137,7 +137,7 @@ async def get_all_substation_forecast_at_one_timestamp(
 ) -> OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""
     # Fetch all the substations
-    substations = await db.get_locations(
+    substations = db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.SUBSTATION,
         authdata={},
@@ -145,7 +145,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     gsp_ids = sorted({loc.metadata["gsp_id"] for loc in substations})
 
     # Fetch all the GSPs and filter to those relevant to substations
-    gsps = await db.get_locations(
+    gsps = db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.GSP,
         authdata={},
@@ -167,7 +167,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     }
 
     # Fetch the forecast snapshot for the gsps
-    snapshot = await db.get_predicted_generation_snapshot(
+    snapshot = db.get_predicted_generation_snapshot(
         location_uuids=gsp_uuids,
         snapshot_timestamp_utc=datetime_utc,
         energy_type=models.EnergyType.SOLAR,

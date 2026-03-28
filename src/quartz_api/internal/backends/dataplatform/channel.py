@@ -1,5 +1,6 @@
 """GRPC channel with enriched metadata."""
 
+from grpc_requests import Client
 from grpclib.client import Channel, Stream
 from grpclib.const import Cardinality
 from grpclib.metadata import Deadline, _MetadataLike
@@ -32,6 +33,11 @@ class EnrichedChannel(Channel):
         if metadata is None:
             metadata = {}
         metadata["traceid"] = trace_id
+
+        client = Client.get_by_endpoint("localhost:50051")
+
+        return client
+
 
         return super().request(
             name=name,
