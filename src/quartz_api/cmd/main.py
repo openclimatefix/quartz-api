@@ -132,9 +132,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     server.dependency_overrides[models.get_storage_client] = lambda: storage
 
     warm_task = None
-    # if "uk_national" in conf.get_string("api.routers"):
-    #     from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
-    #     warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
+    if "uk_national" in conf.get_string("api.routers"):
+        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
+        warm_task = _warm_forecast_all_cache(server)
 
     yield
 
