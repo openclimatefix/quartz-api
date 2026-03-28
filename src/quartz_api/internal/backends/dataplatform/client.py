@@ -78,9 +78,11 @@ class StorageClient(models.StorageInterface):
         resp = self.dpc.ListLocations(req)
 
         # formating things, should tidy up
-        resp["locations"][0]["energy_source"] = "SOLAR"
-        resp["locations"][0]["location_type"] \
-            = resp["locations"][0]["location_type"].replace("LOCATION_TYPE_", "")
+        if "locations" in resp:
+            resp["locations"][0]["energy_source"] = "SOLAR"
+            if "location_type" in resp["locations"][0]:
+                resp["locations"][0]["location_type"] \
+                = resp["locations"][0]["location_type"].replace("LOCATION_TYPE_", "")
 
         resp = dp.ListLocationsResponse.from_dict(resp)
 
@@ -95,7 +97,7 @@ class StorageClient(models.StorageInterface):
         if location_type == models.LocationType.SUBSTATION:
             # Get the GSP the substation belongs to
             req = dp.ListLocationsRequest(
-                # TODO something is not right here, to do with enclosed_location_uuid_filter
+                # TODO something is not right here, enclosed_location_uuid_filter
                 # it looks like we have defined is as None | str, but it should be a list
                 # enclosed_location_uuid_filter=[str(location_uuid)],
                 location_type_filter=dp.LocationType.GSP,
@@ -107,8 +109,9 @@ class StorageClient(models.StorageInterface):
 
             # TODO tidy up
             if "locations" in gsps:
-                    for i in range(len(gsps["locations"])):
-                        gsps["locations"][i]["energy_source"] = "SOLAR"
+                for i in range(len(gsps["locations"])):
+                    gsps["locations"][i]["energy_source"] = "SOLAR"
+                    if "location_type" in gsps["locations"][i]:
                         gsps["locations"][i]["location_type"] \
                             = gsps["locations"][i]["location_type"].replace("LOCATION_TYPE_", "")
 
@@ -132,7 +135,9 @@ class StorageClient(models.StorageInterface):
                 energy_source=energy_type_map[energy_type],
                 pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
             )
-            resp = self.dpc.get_latest_forecasts(req)
+            req = self.format_req(req)
+            resp = self.dpc.GetLatestForecast(req)
+            resp = dp.GetLatestForecastsResponse.from_dict(resp)
             if len(resp.forecasts) == 0:
                 return []
             resp.forecasts.sort(
@@ -420,8 +425,9 @@ class StorageClient(models.StorageInterface):
          # formating things, should tidy up
         for i in range(len(resp["locations"])):
             resp["locations"][i]["energy_source"] = "SOLAR"
-            resp["locations"][i]["location_type"] \
-                = resp["locations"][i]["location_type"].replace("LOCATION_TYPE_", "")
+            if "location_type" in resp["locations"][i]:
+                resp["locations"][i]["location_type"] \
+                    = resp["locations"][i]["location_type"].replace("LOCATION_TYPE_", "")
 
         resp = dp.ListLocationsResponse().from_dict(resp)
 
@@ -472,6 +478,7 @@ class StorageClient(models.StorageInterface):
         )
         req = self.format_req(req)
         resp = self.dpc.ListLocations(req)
+        resp = dp.ListLocationsResponse().from_dict(resp)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
