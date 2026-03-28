@@ -35,6 +35,7 @@ dependencies = [
     "fastapi-cache2[memcache]>=0.2.2",
     "slowapi>=0.1.9",
     "gunicorn>=25.3.0",
+    "grpc-requests>=0.1.21",
 ]
 
 [dependency-groups]
