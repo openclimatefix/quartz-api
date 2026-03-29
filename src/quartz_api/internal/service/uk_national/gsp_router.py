@@ -258,6 +258,8 @@ def _build_forecast_response(
     forecasts = []
     for gsp_id in gsp_uuid_id_map.values():
         pgv = gsp_pgv_map.get(gsp_id)
+        if pgv is None:
+            continue
         location = Location.from_location(gsp_id_map[gsp_id])
         location.installed_capacity_mw = \
             pgv.capacity_kilowatts / 1000.0
@@ -322,7 +324,7 @@ async def get_all_available_forecasts(
     """
     # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
     # trigger a warm in the background and ask the client to retry.
-    if gsp_ids is None:
+    if gsp_ids is None and (start_datetime_utc != end_datetime_utc):
         global _cache_warming
         if not _cache_warming:
             background_tasks.add_task(_warm_forecast_all_cache, request.app)
@@ -331,28 +333,36 @@ async def get_all_available_forecasts(
             headers={"Retry-After": "60"},
             detail="Forecast cache is being populated, please retry in 60 seconds.",
         )
-
-    # gsp_ids path: custom query, fetch live.
-    gsps_to_convert: dict[int, models.Location] = {
-        k: v for k, v in gsp_id_map.items()
-        if k in convert_list_of_gsp_ids(gsp_ids)
-    }
-    tasks = [
-        asyncio.create_task(
-            db.get_predicted_generation(
-                location_uuid=str(loc.uuid),
-                window_start=start_datetime_utc,
-                window_end=end_datetime_utc,
-                energy_type=models.EnergyType.SOLAR,
-                location_type=models.LocationType.GSP,
+    
+    if gsp_ids is None:
+        gsps_to_convert = gsp_id_map
+        tasks = [
+            db.get_predicted_generation_snapshot(
+                location_uuids=[v.uuid for _,v in gsp_id_map.items()],
+                snapshot_timestamp_utc=start_datetime_utc,
                 authdata={},
-                forecast_horizon_minutes=0,
-                forecaster_name=GSP_FORECASTER_NAME,
-                forecaster_version=GSP_FORECASTER_VERSION,
             ),
-        )
-        for loc in gsps_to_convert.values()
-    ]
+        ]
+    else:
+        # gsp_ids path: custom query, fetch live.
+        gsps_to_convert: dict[int, models.Location] = {
+            k: v for k, v in gsp_id_map.items()
+            if k in convert_list_of_gsp_ids(gsp_ids)
+        }
+        tasks = [
+                db.get_predicted_generation(
+                    location_uuid=str(loc.uuid),
+                    window_start=start_datetime_utc,
+                    window_end=end_datetime_utc,
+                    energy_type=models.EnergyType.SOLAR,
+                    location_type=models.LocationType.GSP,
+                    authdata={},
+                    forecast_horizon_minutes=0,
+                    forecaster_name=GSP_FORECASTER_NAME,
+                    forecaster_version=GSP_FORECASTER_VERSION,
+            )
+            for loc in gsps_to_convert.values()
+        ]
     results: list[list[models.PredictedGenerationValue] | Exception] = await asyncio.gather(
         *tasks, return_exceptions=True,
     )
