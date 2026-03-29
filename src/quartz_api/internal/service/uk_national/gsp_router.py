@@ -341,6 +341,11 @@ async def get_all_available_forecasts(
                 location_uuids=[v.uuid for _,v in gsp_id_map.items()],
                 snapshot_timestamp_utc=start_datetime_utc,
                 authdata={},
+                energy_type=models.EnergyType.SOLAR,
+                forecaster_name=GSP_FORECASTER_NAME,
+                forecaster_version=GSP_FORECASTER_VERSION,
+
+
             ),
         ]
     else:
