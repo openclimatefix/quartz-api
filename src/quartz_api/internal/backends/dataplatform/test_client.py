@@ -1,8 +1,9 @@
 import dataclasses
 import datetime as dt
+import os
 import unittest
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
@@ -49,6 +50,27 @@ def mock_list_locations(
         ],
     )
 
+
+def mock_get_forecast_sync(
+    req: dict,
+    metadata: object | None = None,  # noqa: ARG001
+) -> dict:
+    return {
+        "values": [
+            {
+                "target_timestamp_utc": TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
+                "p50_value_fraction": 0.5,
+                "effective_capacity_watts": 1e6,
+                "initialization_timestamp_utc": TEST_TIMESTAMP_UTC
+                - dt.timedelta(minutes=req["horizon_mins"]),
+                "created_timestamp_utc": TEST_TIMESTAMP_UTC
+                - dt.timedelta(hours=1, minutes=req["horizon_mins"]),
+                "other_statistics_fractions": {"p90": 0.9, "p10": 0.1},
+                "metadata": {},
+            }
+            for i in range(5)
+        ],
+    }
 
 def mock_get_forecast(
     req: dp.GetForecastAsTimeseriesRequest,
@@ -163,10 +185,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
+        client.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
             client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
+            client.svc.GetForecastAsTimeseries = Mock(side_effect=mock_get_forecast_sync)
 
             with self.subTest(tc.name):
                 if tc.should_error:
@@ -369,10 +393,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
+        client.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
             client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
+            client.svc.GetForecastAsTimeseries = Mock(side_effect=mock_get_forecast_sync)
 
             with self.subTest(tc.name):
                 if tc.should_error:
