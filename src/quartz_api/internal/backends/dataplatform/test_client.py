@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from betterproto.lib.google.protobuf import Struct, Value
 from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from grpc_requests import Client
 
 from quartz_api.internal import models
 
@@ -160,7 +161,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(resp), tc.expected_num_locations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_site_forecast(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
+    @patch("grpc_requests.Client")
+    async def test_get_site_forecast(
+        self,
+        client_mock: dp.DataPlatformDataServiceStub,
+        _: Client,
+    ) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
@@ -359,9 +365,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(resp), tc.number_of_locations)
 
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("grpc_requests.Client")
     async def test_get_substation_forecast(
         self,
         client_mock: dp.DataPlatformDataServiceStub,
+        _: Client,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
