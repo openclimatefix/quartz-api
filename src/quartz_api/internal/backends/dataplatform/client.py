@@ -196,21 +196,64 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster_version,
             )
 
-        req = dp.GetForecastAsTimeseriesRequest(
-            location_uuid=str(location_uuid),
-            energy_source=energy_type_map[energy_type],
-            horizon_mins=forecast_horizon_minutes,
-            time_window=dp.TimeWindow(
-                start_timestamp_utc=window_start,
-                end_timestamp_utc=window_end,
-            ),
-            forecaster=forecaster,
-            pivot_timestamp_utc=created_cutoff,
-        )
-        resp = await self.dpc.get_forecast_as_timeseries(req)
+        req = {
+            "location_uuid": str(location_uuid),
+            "energy_source": energy_type_map[energy_type].value,
+            "horizon_mins": forecast_horizon_minutes,
+            "time_window": {
+                "start_timestamp_utc": window_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end_timestamp_utc": window_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            "forecaster": forecaster.to_dict(),
+            "pivot_timestamp_utc": created_cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+        if self._sync_client is not None:
+            svc = self._sync_client.service(_DP_SERVICE)
+            resp = svc.GetForecastAsTimeseries(req)
+
+            if location_type == models.LocationType.SUBSTATION:
+            # Spoof the forecast values so that the capacity and id corresponds to the substation
+                for v in resp["values"]:
+                    v["location_uuid"] = location_uuid
+                    v["effective_capacity_watts"] = location.effective_capacity_watts
+
+            out: list[models.PredictedGenerationValue] = [
+                models.PredictedGenerationValue(
+                    power_kilowatts=int(
+                        float(v["effective_capacity_watts"]) \
+                            * float(v.get("p50_value_fraction", 0)) / 1000,
+                    ),
+                    valid_timestamp=v["target_timestamp_utc"],
+                    location_uuid=location_uuid,
+                    capacity_kilowatts=int(float(v["effective_capacity_watts"]) / 1000),
+                    created_timestamp=v["created_timestamp_utc"],
+                    init_timestamp=v["initialization_timestamp_utc"],
+                    forecaster_name=forecaster.forecaster_name,
+                    forecaster_version=forecaster.forecaster_version,
+                    plevels_kilowatts={
+                        "p10": int(
+                            float(v["effective_capacity_watts"]) \
+                                * float(v["other_statistics_fractions"].get("p10", 0)) / 1000.0,
+                        ),
+                        "p90": int(
+                            float(v["effective_capacity_watts"]) \
+                                * float(v["other_statistics_fractions"].get("p90", 0)) / 1000.0,
+                        ),
+                    }
+                    if "p10" in v.get("other_statistics_fractions", {}) and \
+                        "p90" in v.get("other_statistics_fractions", {})
+                    else {},
+                    metadata=v["metadata"],
+                )
+                for v in resp["values"]
+            ]
+            return out
+
+        # TODO we should properly remove this
+        resp = await self.dpc.get_forecast_as_timeseries(dp.GetForecastAsTimeseriesRequest(**req))
 
         if location_type == models.LocationType.SUBSTATION:
-            # Spoof the forecast values so that the capacity and id corresponds to the substation
             for v in resp.values:
                 v.location_uuid = location_uuid
                 v.effective_capacity_watts = location.effective_capacity_watts
