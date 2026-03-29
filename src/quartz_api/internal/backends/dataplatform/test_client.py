@@ -185,7 +185,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
-        client.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
+        client.set_sync_client("localhost", '50051')
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
@@ -393,7 +393,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
-        client.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
+        client.set_sync_client("localhost", '50051')
         for tc in testcases:
             client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
             client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
