@@ -333,7 +333,7 @@ async def get_all_available_forecasts(
             headers={"Retry-After": "60"},
             detail="Forecast cache is being populated, please retry in 60 seconds.",
         )
-    
+
     if gsp_ids is None:
         gsps_to_convert = gsp_id_map
         tasks = [
@@ -344,8 +344,6 @@ async def get_all_available_forecasts(
                 energy_type=models.EnergyType.SOLAR,
                 forecaster_name=GSP_FORECASTER_NAME,
                 forecaster_version=GSP_FORECASTER_VERSION,
-
-
             ),
         ]
     else:
