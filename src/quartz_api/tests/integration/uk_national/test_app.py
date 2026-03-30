@@ -302,6 +302,46 @@ async def test_gsp_forecast_all_refresh_non_admin(
     assert response.status_code == 403
 
 
+# 4.3.6 Get forecast/all with for one timestamp
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_for_one_timestamp(
+    api_client_uk_national,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test that the cache refresh endpoint rejects a non-admin user."""
+    now = (pd.Timestamp.utcnow().ceil("30min").to_pydatetime()).strftime("%Y-%m-%dT%H:00:00Z")
+    response = await api_client_uk_national.get(
+        f"/v0/solar/GB/gsp/forecast/all/?start_datetime_utc={now}&end_datetime_utc={now}",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 10 # 10 gsps
+
+# 4.3.7 Get forecast/all with for one timestamp, compact=true
+@pytest.mark.asyncio(loop_scope="session")
+async def test_gsp_forecast_all_for_one_timestamp_compact(
+    api_client_uk_national,
+    gsp_locations,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_gsp_forecast_values,  # noqa arg001
+) -> None:
+    """Test that the cache refresh endpoint rejects a non-admin user."""
+    now = (pd.Timestamp.utcnow().ceil("30min").to_pydatetime()).strftime("%Y-%m-%dT%H:00:00Z")
+    response = await api_client_uk_national.get(
+        f"/v0/solar/GB/gsp/forecast/all/?start_datetime_utc={now}&end_datetime_utc={now}&compact=true",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+
+
+
+
+
 # 4.4 Check GSP pvlive route
 @pytest.mark.asyncio(loop_scope="session")
 async def test_gsp_pvlive_all(

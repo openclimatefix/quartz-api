@@ -36,6 +36,7 @@ dependencies = [
     "slowapi>=0.1.9",
     "grpc-requests>=0.1.21",
     "gunicorn>=25.3.0",
+    "jinja2>=3.1.6",
 ]
 
 [dependency-groups]

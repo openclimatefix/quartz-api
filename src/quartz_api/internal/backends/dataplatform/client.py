@@ -55,7 +55,7 @@ class StorageClient(models.StorageInterface):
         from grpc_requests import Client
         self._sync_client = Client.get_by_endpoint(f"{host}:{port}")
         # Pre-warm service discovery so the first real call isn't slow.
-        self._sync_client.service(_DP_SERVICE)
+        self.svc = self._sync_client.service(_DP_SERVICE)
         log.info("grpc-requests sync client initialised at %s:%s", host, port)
 
     def _sync_snapshot(
@@ -90,7 +90,7 @@ class StorageClient(models.StorageInterface):
         if not resp.get("values"):
             return []
 
-        valid_ts = dt.datetime.fromisoformat(resp["timestamp_utc"].rstrip("Z")).replace(tzinfo=dt.UTC)  # noqa: E501
+        valid_ts = dt.datetime.fromisoformat(resp["timestamp_utc"])
         return [
             models.PredictedGenerationValue(
                 power_kilowatts=float(v.get("value_fraction", 0)) * float(v["effective_capacity_watts"]) / 1000,  # noqa: E501
@@ -99,8 +99,8 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=float(v["effective_capacity_watts"]) / 1000,
                 forecaster_name=forecaster_name,
                 forecaster_version=forecaster_version,
-                created_timestamp=dt.datetime.fromisoformat(v["created_timestamp_utc"].rstrip("Z")).replace(tzinfo=dt.UTC),
-                init_timestamp=dt.datetime.fromisoformat(v["initialization_timestamp_utc"].rstrip("Z")).replace(tzinfo=dt.UTC),
+                created_timestamp=dt.datetime.fromisoformat(v["created_timestamp_utc"]),
+                init_timestamp=dt.datetime.fromisoformat(v["initialization_timestamp_utc"]),
                 metadata=v.get("metadata", {}),
             )
             for v in resp["values"]
@@ -196,52 +196,58 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster_version,
             )
 
-        req = dp.GetForecastAsTimeseriesRequest(
-            location_uuid=str(location_uuid),
-            energy_source=energy_type_map[energy_type],
-            horizon_mins=forecast_horizon_minutes,
-            time_window=dp.TimeWindow(
-                start_timestamp_utc=window_start,
-                end_timestamp_utc=window_end,
-            ),
-            forecaster=forecaster,
-            pivot_timestamp_utc=created_cutoff,
-        )
-        resp = await self.dpc.get_forecast_as_timeseries(req)
+        req = {
+            "location_uuid": str(location_uuid),
+            "energy_source": energy_type_map[energy_type].value,
+            "horizon_mins": forecast_horizon_minutes,
+            "time_window": {
+                "start_timestamp_utc": window_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end_timestamp_utc": window_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            "forecaster": forecaster.to_dict(),
+            "pivot_timestamp_utc": created_cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+        resp = self.svc.GetForecastAsTimeseries(req)
 
         if location_type == models.LocationType.SUBSTATION:
-            # Spoof the forecast values so that the capacity and id corresponds to the substation
-            for v in resp.values:
-                v.location_uuid = location_uuid
-                v.effective_capacity_watts = location.effective_capacity_watts
+        # Spoof the forecast values so that the capacity and id corresponds to the substation
+            for v in resp["values"]:
+                v["location_uuid"] = location_uuid
+                v["effective_capacity_watts"] = location.effective_capacity_watts
 
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
                 power_kilowatts=int(
-                    v.effective_capacity_watts * v.p50_value_fraction / 1000,
+                    float(v["effective_capacity_watts"]) \
+                        * float(v.get("p50_value_fraction", 0)) / 1000,
                 ),
-                valid_timestamp=v.target_timestamp_utc,
+                valid_timestamp=v["target_timestamp_utc"],
                 location_uuid=location_uuid,
-                capacity_kilowatts=int(v.effective_capacity_watts / 1000),
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
+                capacity_kilowatts=int(float(v["effective_capacity_watts"]) / 1000),
+                created_timestamp=v["created_timestamp_utc"],
+                init_timestamp=v["initialization_timestamp_utc"],
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
                 plevels_kilowatts={
                     "p10": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p10"] / 1000.0,
+                        float(v["effective_capacity_watts"]) \
+                            * float(v["other_statistics_fractions"].get("p10", 0)) / 1000.0,
                     ),
                     "p90": int(
-                        v.effective_capacity_watts * v.other_statistics_fractions["p90"] / 1000.0,
+                        float(v["effective_capacity_watts"]) \
+                            * float(v["other_statistics_fractions"].get("p90", 0)) / 1000.0,
                     ),
                 }
-                if "p10" in v.other_statistics_fractions and "p90" in v.other_statistics_fractions
+                if "p10" in v.get("other_statistics_fractions", {}) and \
+                    "p90" in v.get("other_statistics_fractions", {})
                 else {},
-                metadata=struct_to_dict(v.metadata),
+                metadata=v["metadata"],
             )
-            for v in resp.values
+            for v in resp["values"]
         ]
         return out
+
 
     @override
     async def put_predicted_generation(

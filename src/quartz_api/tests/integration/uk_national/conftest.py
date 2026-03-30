@@ -43,6 +43,7 @@ async def api_client_uk_national(
     app = _create_server(config_uk_national)
 
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
+    db_instance.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
