@@ -2,7 +2,6 @@
 
 import asyncio
 import datetime as dt
-import json
 import logging
 import traceback
 from collections import defaultdict
@@ -20,16 +19,16 @@ from fastapi import (
     Response,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.encoders import jsonable_encoder
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
-from pydantic import AfterValidator
+from pydantic import AfterValidator, TypeAdapter
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
+from ...models.endpoint_types import default_now_window_start, default_window_end
 from .cache import key_builder
 from .endpoint_types import (
     Forecast,
@@ -55,6 +54,8 @@ GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 24 # 1 day
 
 router = APIRouter()
 
+_forecast_adapter = TypeAdapter(list[Forecast])
+_compact_adapter = TypeAdapter(list[OneDatetimeManyForecastValuesMW])
 _cache_warming: bool = False
 
 
@@ -256,8 +257,10 @@ def _build_forecast_response(
     )
 
     forecasts = []
-    for gsp_id in gsp_uuid_id_map.values():
+    for gsp_id in sorted(gsp_uuid_id_map.values()):
         pgv = gsp_pgv_map.get(gsp_id)
+        if pgv is None:
+            continue
         location = Location.from_location(gsp_id_map[gsp_id])
         location.installed_capacity_mw = \
             pgv.capacity_kilowatts / 1000.0
@@ -322,37 +325,58 @@ async def get_all_available_forecasts(
     """
     # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
     # trigger a warm in the background and ask the client to retry.
-    if gsp_ids is None:
-        global _cache_warming
-        if not _cache_warming:
-            background_tasks.add_task(_warm_forecast_all_cache, request.app)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            headers={"Retry-After": "60"},
-            detail="Forecast cache is being populated, please retry in 60 seconds.",
-        )
 
-    # gsp_ids path: custom query, fetch live.
-    gsps_to_convert: dict[int, models.Location] = {
-        k: v for k, v in gsp_id_map.items()
-        if k in convert_list_of_gsp_ids(gsp_ids)
-    }
-    tasks = [
-        asyncio.create_task(
-            db.get_predicted_generation(
-                location_uuid=str(loc.uuid),
-                window_start=start_datetime_utc,
-                window_end=end_datetime_utc,
-                energy_type=models.EnergyType.SOLAR,
-                location_type=models.LocationType.GSP,
+    start_datetime_utc_set = start_datetime_utc != default_now_window_start()
+    end_datetime_utc_set = end_datetime_utc != default_window_end()
+
+    if gsp_ids is None and start_datetime_utc != end_datetime_utc:
+            if start_datetime_utc_set or end_datetime_utc_set:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="start_datetime_utc must be equal to end_datetime_utc if gsp_ids is not specified",  # noqa: E501
+                )
+
+            global _cache_warming
+            if not _cache_warming:
+                background_tasks.add_task(_warm_forecast_all_cache, request.app)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "60"},
+                detail="Forecast cache is being populated, please retry in 60 seconds.",
+            )
+
+    if gsp_ids is None:
+        gsps_to_convert = gsp_id_map
+        tasks = [
+            db.get_predicted_generation_snapshot(
+                location_uuids=[v.uuid for _,v in gsp_id_map.items()],
+                snapshot_timestamp_utc=start_datetime_utc,
                 authdata={},
-                forecast_horizon_minutes=0,
+                energy_type=models.EnergyType.SOLAR,
                 forecaster_name=GSP_FORECASTER_NAME,
                 forecaster_version=GSP_FORECASTER_VERSION,
             ),
-        )
-        for loc in gsps_to_convert.values()
-    ]
+        ]
+    else:
+        # gsp_ids path: custom query, fetch live.
+        gsps_to_convert: dict[int, models.Location] = {
+            k: v for k, v in gsp_id_map.items()
+            if k in convert_list_of_gsp_ids(gsp_ids)
+        }
+        tasks = [
+                db.get_predicted_generation(
+                    location_uuid=str(loc.uuid),
+                    window_start=start_datetime_utc,
+                    window_end=end_datetime_utc,
+                    energy_type=models.EnergyType.SOLAR,
+                    location_type=models.LocationType.GSP,
+                    authdata={},
+                    forecast_horizon_minutes=0,
+                    forecaster_name=GSP_FORECASTER_NAME,
+                    forecaster_version=GSP_FORECASTER_VERSION,
+            )
+            for loc in gsps_to_convert.values()
+        ]
     results: list[list[models.PredictedGenerationValue] | Exception] = await asyncio.gather(
         *tasks, return_exceptions=True,
     )
@@ -428,7 +452,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             creation_time=start,
         )
         forecast_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(forecast_response)).encode(),
+            _forecast_adapter.dump_json, forecast_response,
         )
         await backend.set(
             f"{base_key}[]:[]",
@@ -440,7 +464,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
         compact_value = await run_in_threadpool(
-            lambda: json.dumps(jsonable_encoder(compact_response)).encode(),
+            _compact_adapter.dump_json, compact_response,
         )
         await backend.set(
             f"{base_key}[('compact', 'true')]:[]",

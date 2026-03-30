@@ -31,22 +31,23 @@ UTCDatetimeDefaultWindowStart = Annotated[
     ),
 ]
 
+def default_now_window_start() -> dt.datetime:
+    """Default factory for UTCDatetimeDefaultNowWindowStart: UTC now floored to 30 minutes."""
+    return pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+
+def default_window_end() -> dt.datetime:
+    """Default factory for UTCDatetimeDefaultNowWindowEnd: UTC now floored to 6 hours + 2 days."""
+    return pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
+
+
 UTCDatetimeDefaultNowWindowStart = Annotated[
     UTCDatetime,
-    Query(
-        default_factory=lambda: (
-            pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-        ),
-    ),
+    Query(default_factory=default_now_window_start),
 ]
 
 UTCDatetimeDefaultWindowEnd = Annotated[
     UTCDatetime,
-    Query(
-        default_factory=lambda: (
-            pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
-        ),
-    ),
+    Query(default_factory=default_window_end),
 ]
 
 

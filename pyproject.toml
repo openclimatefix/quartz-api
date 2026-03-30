@@ -34,7 +34,9 @@ dependencies = [
     "auth0-fastapi-api>=1.0.0b5",
     "fastapi-cache2[memcache]>=0.2.2",
     "slowapi>=0.1.9",
+    "grpc-requests>=0.1.21",
     "gunicorn>=25.3.0",
+    "jinja2>=3.1.6",
 ]
 
 [dependency-groups]
