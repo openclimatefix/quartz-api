@@ -50,7 +50,10 @@ log = logging.getLogger(__name__)
 
 GSP_FORECASTER_NAME = "blend"
 GSP_FORECASTER_VERSION = "1.3.0"
-GSP_FORECAST_ALL_CACHE_LENGTH_SECS = 60 * 60 * 24 # 1 day
+# We use this for the default gsp/forecast/all route
+GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG = 60 * 60 * 24 # 1 day
+# we use this on the route, for things likes gsp/forecast/all?gsp_ids=1,2,3
+GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE = 10 * 60 # 10 minutes
 
 router = APIRouter()
 
@@ -292,7 +295,7 @@ def _build_forecast_response(
     response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
     include_in_schema=False,
 )
-@cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS) # 1 day
+@cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE) # 10 minutes
 async def get_all_available_forecasts(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -457,7 +460,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         await backend.set(
             f"{base_key}[]:[]",
             forecast_value,
-            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
         )
         compact_response = _build_compact_response(
             results=results,
@@ -469,7 +472,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         await backend.set(
             f"{base_key}[('compact', 'true')]:[]",
             compact_value,
-            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
         )
         log.info("GSP forecast all cache warmed: %d GSPs, %d timestamps",
                  len(gsp_uuid_id_map), len(results))
