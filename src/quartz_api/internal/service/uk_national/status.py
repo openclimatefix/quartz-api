@@ -14,6 +14,7 @@ from .cache import key_builder
 from .endpoint_types import Status, gsp_id_map
 
 router = APIRouter()
+router_check_last_forecast_run = APIRouter()
 
 
 db_url = os.getenv("DB_URL", None)
@@ -45,7 +46,7 @@ async def get_status(request: Request) -> Status:  # noqa: ARG001
     return status
 
 
-@router.get("/check_last_forecast_run", include_in_schema=False)
+@router_check_last_forecast_run.get("/check_last_forecast_run", include_in_schema=False)
 @cache(key_builder=key_builder)
 async def check_last_forecast_run(
     request: Request,  # noqa: ARG001
