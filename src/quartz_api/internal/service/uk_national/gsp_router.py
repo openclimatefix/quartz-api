@@ -28,6 +28,7 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
+from ...models.endpoint_types import default_now_window_start, default_window_end
 from .cache import key_builder
 from .endpoint_types import (
     Forecast,
@@ -325,12 +326,8 @@ async def get_all_available_forecasts(
     # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
     # trigger a warm in the background and ask the client to retry.
 
-    start_datetime_utc_set = (start_datetime_utc !=
-                              pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-                              )
-    end_datetime_utc_set = (end_datetime_utc !=
-                            pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
-                            )
+    start_datetime_utc_set = start_datetime_utc != default_now_window_start()
+    end_datetime_utc_set = end_datetime_utc != default_window_end()
 
     if gsp_ids is None and start_datetime_utc != end_datetime_utc:
             if start_datetime_utc_set or end_datetime_utc_set:
