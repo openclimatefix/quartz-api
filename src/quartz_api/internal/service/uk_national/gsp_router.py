@@ -257,7 +257,7 @@ def _build_forecast_response(
     )
 
     forecasts = []
-    for gsp_id in gsp_uuid_id_map.values():
+    for gsp_id in sorted(gsp_uuid_id_map.values()):
         pgv = gsp_pgv_map.get(gsp_id)
         if pgv is None:
             continue
