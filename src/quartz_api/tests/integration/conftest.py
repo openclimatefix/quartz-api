@@ -94,7 +94,7 @@ def forecast(
 def make_location(
     name: str,
     gsp_id: int,
-    metadata: dict,
+    metadata: dict[str, str],
     location_type: dp.LocationType = dp.LocationType.NATION,
 ) -> dp.CreateLocationRequest:
     """Create a location request."""
@@ -155,7 +155,7 @@ async def national_location(dp_client: dp.DataPlatformDataServiceStub) -> dp.Cre
 
     gsp_id_map[0] = models.Location(
         uuid=UUID(create_location_response.location_uuid),
-        metadata={"gsp_id": 0},
+        metadata={"gsp_id": "0"},
         name="uk",
         latitude=0,
         longitude=0,
