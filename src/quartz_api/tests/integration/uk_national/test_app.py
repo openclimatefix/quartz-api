@@ -408,7 +408,7 @@ async def test_gsp_status_check_last_forecast_run(
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
-    response = await api_client_uk_national.get("/v0/solar/GB/status/check_last_forecast_run")
+    response = await api_client_uk_national.get("/v0/solar/GB/check_last_forecast_run")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, str)
