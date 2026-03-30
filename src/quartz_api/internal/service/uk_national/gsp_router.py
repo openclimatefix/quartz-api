@@ -324,15 +324,27 @@ async def get_all_available_forecasts(
     """
     # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
     # trigger a warm in the background and ask the client to retry.
-    if gsp_ids is None and (start_datetime_utc != end_datetime_utc):
-        global _cache_warming
-        if not _cache_warming:
-            background_tasks.add_task(_warm_forecast_all_cache, request.app)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            headers={"Retry-After": "60"},
-            detail="Forecast cache is being populated, please retry in 60 seconds.",
-        )
+
+    start_datetime_utc_set = (start_datetime_utc !=
+                              pd.Timestamp.utcnow().floor("30min").to_pydatetime())
+    end_datetime_utc_set = (end_datetime_utc !=
+                            pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2))
+
+    if gsp_ids is None and start_datetime_utc != end_datetime_utc:
+            if start_datetime_utc_set or end_datetime_utc_set:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="start_datetime_utc must be equal to end_datetime_utc if gsp_ids is not specified",
+                )
+
+            global _cache_warming
+            if not _cache_warming:
+                background_tasks.add_task(_warm_forecast_all_cache, request.app)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "60"},
+                detail="Forecast cache is being populated, please retry in 60 seconds.",
+            )
 
     if gsp_ids is None:
         gsps_to_convert = gsp_id_map
