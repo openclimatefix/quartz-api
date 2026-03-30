@@ -6,7 +6,8 @@ from fastapi import APIRouter
 
 from .gsp_router import router as gsp_router
 from .national_router import router as national_router
-from .status import router as status_router, router_check_last_forecast_run
+from .status import router as status_router
+from .status import router_check_last_forecast_run
 from .system import router as system_router
 
 router = APIRouter()
