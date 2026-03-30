@@ -326,15 +326,17 @@ async def get_all_available_forecasts(
     # trigger a warm in the background and ask the client to retry.
 
     start_datetime_utc_set = (start_datetime_utc !=
-                              pd.Timestamp.utcnow().floor("30min").to_pydatetime())
+                              pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+                              )
     end_datetime_utc_set = (end_datetime_utc !=
-                            pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2))
+                            pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
+                            )
 
     if gsp_ids is None and start_datetime_utc != end_datetime_utc:
             if start_datetime_utc_set or end_datetime_utc_set:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="start_datetime_utc must be equal to end_datetime_utc if gsp_ids is not specified",
+                    detail="start_datetime_utc must be equal to end_datetime_utc if gsp_ids is not specified",  # noqa: E501
                 )
 
             global _cache_warming
