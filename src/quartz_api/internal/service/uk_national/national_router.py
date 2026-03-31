@@ -139,6 +139,16 @@ async def get_national_forecast(
             start_datetime_utc \
                 = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
 
+    windows: list[tuple[dt.datetime, dt.datetime]] = [(start_datetime_utc, end_datetime_utc)]
+    if end_datetime_utc - start_datetime_utc > dt.timedelta(days=7):
+        windows = [
+            (
+                start_datetime_utc + dt.timedelta(days=i),
+                min(start_datetime_utc + dt.timedelta(days=i+7), end_datetime_utc)
+            )
+            for i in range(0, (end_datetime_utc - start_datetime_utc).days, 7)
+        ]
+
     # get model name
     model_name_str = model_names_external_to_internal[model_name]
     if trend_adjuster_on:
@@ -154,20 +164,23 @@ async def get_national_forecast(
     uk_loc = locations[0]
 
 
-    pgvs = await db.get_predicted_generation(
-        energy_type=models.EnergyType.SOLAR,
-        location_type=models.LocationType.NATION,
-        window_start=start_datetime_utc,
-        window_end=end_datetime_utc,
-        created_cutoff=creation_limit_utc,
-        forecast_horizon_minutes=forecast_horizon_minutes or 0,
-        forecaster_name=model_name_str,
-        forecaster_version=FORECASTER_VERSION_BLEND \
-            if model_name == ModelName.blend else FORECASTER_VERSION_PVNET,
-        authdata={},
-        location_uuid=uk_loc.uuid,
-    )
-    log.info(f"Fetched {len(pgvs)} predicted generation values")
+    all_pgvs: list[models.PredictedGenerationValue] = []
+    for window in windows:
+        pgvs = await db.get_predicted_generation(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.NATION,
+            window_start=start_datetime_utc,
+            window_end=end_datetime_utc,
+            created_cutoff=creation_limit_utc,
+            forecast_horizon_minutes=forecast_horizon_minutes or 0,
+            forecaster_name=model_name_str,
+            forecaster_version=FORECASTER_VERSION_BLEND \
+                if model_name == ModelName.blend else FORECASTER_VERSION_PVNET,
+            authdata={},
+            location_uuid=uk_loc.uuid,
+        )
+        all_pgvs.extend(pgvs)
+        log.info(f"Fetched {len(pgvs)} predicted generation values")
 
     out: list[NationalForecastValue] = [
         NationalForecastValue(
@@ -180,7 +193,7 @@ async def get_national_forecast(
                     if v.plevels_kilowatts.get("p90") is not None else None,
             },
         )
-        for v in pgvs
+        for v in all_pgvs
     ]
 
     if not include_metadata:
