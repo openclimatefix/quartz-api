@@ -41,6 +41,6 @@ def get_user_key(request: Request) -> str:
     return get_remote_address(request)
 
 
-default_limits = ["3600/hour", "10/second"]
+default_limits = ["3600/hour", "20/second"]
 
 limiter = Limiter(key_func=get_user_key, default_limits=default_limits, key_style="endpoint")
