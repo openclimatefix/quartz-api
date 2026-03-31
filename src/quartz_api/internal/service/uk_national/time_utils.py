@@ -16,7 +16,7 @@ INTRADAY_LIMIT_HOURS = int(os.getenv("INTRADAY_LIMIT_HOURS", 8))
 
 def limit_end_datetime_by_permissions(
     auth: AuthDependency,
-    end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
+    end_datetime_utc: models.UTCDatetimeDefaultWindowEndNonAware,
 ) -> dt.datetime:
     """Ensures only users with required permissions can access intraday data."""
     permissions: str | list[str] = auth.get("permissions", [])

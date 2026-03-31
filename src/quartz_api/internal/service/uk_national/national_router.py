@@ -91,11 +91,11 @@ async def get_national_forecast(
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
     end_datetime_utc: Annotated[
-        models.UTCDatetimeDefaultWindowEnd,
+        models.UTCDatetimeDefaultWindowEndNonAware,
         Depends(limit_end_datetime_by_permissions),
     ],
-    start_datetime_utc: models.UTCDatetime | None = None,
-    creation_limit_utc: models.UTCDatetime | None = None,
+    start_datetime_utc: models.UTCDatetimeNonAware | None = None,
+    creation_limit_utc: models.UTCDatetimeNonAware | None = None,
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
     model_name: ModelName = ModelName.blend,
