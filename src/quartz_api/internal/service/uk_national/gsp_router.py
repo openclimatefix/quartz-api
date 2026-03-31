@@ -462,6 +462,11 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             forecast_value,
             expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
         )
+        await backend.set(
+            f"{base_key}[('compact', 'false')]:[]",
+            forecast_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
+        )
         compact_response = _build_compact_response(
             results=results,
             gsp_uuid_id_map=gsp_uuid_id_map,
