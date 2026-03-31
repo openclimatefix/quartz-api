@@ -144,7 +144,7 @@ async def get_national_forecast(
         windows = [
             (
                 start_datetime_utc + dt.timedelta(days=i),
-                min(start_datetime_utc + dt.timedelta(days=i+7), end_datetime_utc)
+                min(start_datetime_utc + dt.timedelta(days=i+7), end_datetime_utc),
             )
             for i in range(0, (end_datetime_utc - start_datetime_utc).days, 7)
         ]
@@ -169,8 +169,8 @@ async def get_national_forecast(
         pgvs = await db.get_predicted_generation(
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.NATION,
-            window_start=start_datetime_utc,
-            window_end=end_datetime_utc,
+            window_start=window[0],
+            window_end=window[1],
             created_cutoff=creation_limit_utc,
             forecast_horizon_minutes=forecast_horizon_minutes or 0,
             forecaster_name=model_name_str,
