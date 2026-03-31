@@ -19,6 +19,8 @@ from .endpoint_types import (
     UTCDatetimeDefaultWindowEnd,
     UTCDatetimeDefaultNowWindowStart,
     UTCDatetimeDefaultWindowStart,
+    UTCDatetimeNonAware,
+    UTCDatetimeDefaultWindowEndNonAware,
     ForecastHorizon,
 )
 

@@ -22,6 +22,11 @@ UTCDatetime = Annotated[
     AfterValidator(lambda v: v.astimezone(dt.UTC)),
 ]
 
+UTCDatetimeNonAware = Annotated[
+    dt.datetime,
+    AfterValidator(lambda v: v.replace(tzinfo=dt.UTC)),
+]
+
 UTCDatetimeDefaultWindowStart = Annotated[
     UTCDatetime,
     Query(
@@ -47,6 +52,11 @@ UTCDatetimeDefaultNowWindowStart = Annotated[
 
 UTCDatetimeDefaultWindowEnd = Annotated[
     UTCDatetime,
+    Query(default_factory=default_window_end),
+]
+
+UTCDatetimeDefaultWindowEndNonAware = Annotated[
+    UTCDatetimeNonAware,
     Query(default_factory=default_window_end),
 ]
 
