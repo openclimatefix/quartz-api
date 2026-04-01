@@ -38,7 +38,7 @@ UTCDatetimeDefaultWindowStart = Annotated[
 
 def default_now_window_start() -> dt.datetime:
     """Default factory for UTCDatetimeDefaultNowWindowStart: UTC now floored to 30 minutes."""
-    return pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    return pd.Timestamp.utcnow().ceil("30min").to_pydatetime()
 
 def default_window_end() -> dt.datetime:
     """Default factory for UTCDatetimeDefaultNowWindowEnd: UTC now floored to 6 hours + 2 days."""
