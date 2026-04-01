@@ -218,7 +218,7 @@ async def test_gsp_forecast_all_cache_hit(
     prefix = FastAPICache.get_prefix()
     base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
 
-    cached_forecast = b'[{"location": {"label": "GSP 1", "gspId": 1}, "model": {"name": "blend", "version": "1.3.0"}, "forecastValues": [{"targetTime": "2026-01-01T00:00:00Z", "expectedPowerGenerationMegawatts": 1.23}], "inputDataLastUpdated": {"gsp": "2026-01-01T00:00:00Z", "nwp": "2026-01-01T00:00:00Z", "pv": "2026-01-01T00:00:00Z", "satellite": "2026-01-01T00:00:00Z"}}]'  # noqa: E501
+    cached_forecast = b'{"forecasts":[{"location": {"label": "GSP 1", "gspId": 1}, "model": {"name": "blend", "version": "1.3.0"}, "forecastValues": [{"targetTime": "2026-01-01T00:00:00Z", "expectedPowerGenerationMegawatts": 1.23}], "inputDataLastUpdated": {"gsp": "2026-01-01T00:00:00Z", "nwp": "2026-01-01T00:00:00Z", "pv": "2026-01-01T00:00:00Z", "satellite": "2026-01-01T00:00:00Z"}}]}'  # noqa: E501
     cached_compact = b'[{"datetimeUtc": "2026-01-01T00:00:00Z", "forecastValues": {"1": 1.23}}]'
     await backend.set(f"{base_key}[]:[]", cached_forecast, expire=60)
     await backend.set(f"{base_key}[('compact', 'true')]:[]", cached_compact, expire=60)
@@ -226,6 +226,7 @@ async def test_gsp_forecast_all_cache_hit(
     response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/")
     assert response.status_code == 200
     data = response.json()
+    data = data['forecasts']
     assert data[0]["model"]["name"] == "blend"
     assert data[0]["forecastValues"][0]["expectedPowerGenerationMegawatts"] == 1.23
 
@@ -270,6 +271,7 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3")
     assert response.status_code == 200
     data = response.json()
+    data = data['forecasts']
     assert isinstance(data, list)
     assert len(data) == 3
     assert "location" in data[0]
@@ -317,6 +319,7 @@ async def test_gsp_forecast_all_for_one_timestamp(
     )
     assert response.status_code == 200
     data = response.json()
+    data = data['forecasts']
     assert isinstance(data, list)
     assert len(data) == 10 # 10 gsps
 
