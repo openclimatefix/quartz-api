@@ -484,6 +484,40 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         log.info("GSP forecast all cache set with keys: %s and %s",
                  f"{base_key}[]:[]",
                  f"{base_key}[('compact', 'true')]:[]")
+        
+        # add extra cache for some legacy requests
+        start = now.ceil("30min").to_pydatetime().replace(tzinfo=dt.UTC)
+        end = now.floor("30min").to_pydatetime().replace(tzinfo=dt.UTC) + dt.timedelta(days=2)
+        forecast_response = _build_forecast_response(
+            results=[v for v in results if v if v[0].valid_timestamp >= start and v[0].valid_timestamp <= end],
+            gsp_uuid_id_map=gsp_uuid_id_map,
+        )
+        forecast_value = await run_in_threadpool(
+            _compact_adapter.dump_json, forecast_response,
+        )
+        await backend.set(
+            f"{base_key}[(start_datetime_utc:{start.isoformat()}, end_datetime_utc:{end.isoformat()})]:[]",
+            forecast_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
+        )
+
+        # Also do next timestamp
+        start = start + dt.timedelta(minutes=30)
+        end = end
+        forecast_response = _build_forecast_response(
+            results=[v for v in results if v if v[0].valid_timestamp >= start and v[0].valid_timestamp <= end],
+            gsp_uuid_id_map=gsp_uuid_id_map,
+        )
+        forecast_value = await run_in_threadpool(
+            _compact_adapter.dump_json, forecast_response,
+        )
+        await backend.set(
+            f"{base_key}[(start_datetime_utc:{start.isoformat()}, end_datetime_utc:{end.isoformat()})]:[]",
+            forecast_value,
+            expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
+        )
+
+
     except Exception:
         log.exception("GSP forecast all cache warm failed: %s", traceback.format_exc())
     finally:
