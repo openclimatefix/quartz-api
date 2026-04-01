@@ -144,7 +144,7 @@ async def get_national_forecast(
         windows = [
             (
                 start_datetime_utc + dt.timedelta(days=i),
-                min(start_datetime_utc + dt.timedelta(days=i+7), end_datetime_utc),
+                min(start_datetime_utc + dt.timedelta(days=i+7, seconds=-1), end_datetime_utc),
             )
             for i in range(0, (end_datetime_utc - start_datetime_utc).days, 7)
         ]
@@ -197,10 +197,6 @@ async def get_national_forecast(
         )
         for v in all_pgvs
     ]
-
-    # legacy bug in Old API
-    if forecast_horizon_minutes is not None:
-        out = [v for v in out if v.target_time < end_datetime_utc]
 
     if not include_metadata:
         return out
