@@ -1938,7 +1938,7 @@ wheels = [
 
 [[package]]
 name = "quartz-api"
-version = "0.4.50"
+version = "0.4.53"
 source = { editable = "." }
 dependencies = [
     { name = "apitally", extra = ["fastapi"] },
