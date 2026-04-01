@@ -212,6 +212,14 @@ class Forecast(EnhancedBaseModel):
         exclude=True,
     )
 
+class ListForecasts(EnhancedBaseModel):
+    """A list of Forecasts."""
+
+    forecasts: list[Forecast] = Field(
+        ...,
+        description="List of forecast objects.",
+    )
+
 
 class GSPYield(EnhancedBaseModel):
     """GSP Yield data."""

@@ -144,7 +144,7 @@ async def get_national_forecast(
         windows = [
             (
                 start_datetime_utc + dt.timedelta(days=i),
-                min(start_datetime_utc + dt.timedelta(days=i+7), end_datetime_utc),
+                min(start_datetime_utc + dt.timedelta(days=i+7, seconds=-1), end_datetime_utc),
             )
             for i in range(0, (end_datetime_utc - start_datetime_utc).days, 7)
         ]
@@ -182,6 +182,8 @@ async def get_national_forecast(
         all_pgvs.extend(pgvs)
         log.info(f"Fetched {len(pgvs)} predicted generation values")
 
+
+    all_pgvs = sorted(all_pgvs, key=lambda x: x.valid_timestamp, reverse=False)
     out: list[NationalForecastValue] = [
         NationalForecastValue(
             target_time=v.valid_timestamp,
@@ -211,11 +213,11 @@ async def get_national_forecast(
         national_forecast = NationalForecast(
             location=Location.from_location(uk_loc),
             model=MLModel(
-                name=pgvs[0].forecaster_name,
+                name=pgvs[-1].forecaster_name,
                 version=version,
             ),
-            forecast_creation_time=pgvs[0].created_timestamp,
-            initialization_datetime_utc=pgvs[0].init_timestamp,
+            forecast_creation_time=pgvs[-1].created_timestamp,
+            initialization_datetime_utc=pgvs[-1].init_timestamp,
             forecast_values=out,
             input_data_last_updated=input_data,
         )
