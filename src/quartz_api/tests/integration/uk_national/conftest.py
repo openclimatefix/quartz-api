@@ -6,8 +6,8 @@ import typing
 from uuid import UUID
 
 import pandas as pd
-import pytest_asyncio
-from dp_sdk.ocf import dp
+import pytest
+from ocf import dp
 from httpx import ASGITransport, AsyncClient
 from pyhocon import ConfigFactory, ConfigTree
 
@@ -20,8 +20,8 @@ from quartz_api.tests.integration.conftest import forecast
 auth_dep = typing.get_args(AuthDependency)[1].dependency
 
 
-@pytest_asyncio.fixture(scope="session")
-async def config_uk_national() -> None:
+@pytest.fixture(scope="session")
+def config_uk_national() -> None:
     """Returns the configuration tree for the UK National integration tests."""
     # set env variable to point to the config file
     os.environ["ROUTERS"] = "uk_national"
@@ -35,8 +35,8 @@ async def config_uk_national() -> None:
     os.environ.pop("SOURCE", None)
 
 
-@pytest_asyncio.fixture(scope="module")
-async def api_client_uk_national(
+@pytest.fixture(scope="module")
+def api_client_uk_national(
     config_uk_national: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Returns a TestClient for the FastAPI application."""
@@ -46,12 +46,12 @@ async def api_client_uk_national(
     db_instance.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
-async def api_client_uk_national_admin(
+@pytest.fixture(scope="module")
+def api_client_uk_national_admin(
     config_uk_national: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Test client with ocf:admin permissions."""
@@ -59,12 +59,12 @@ async def api_client_uk_national_admin(
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
     app.dependency_overrides[auth_dep] = lambda: {"sub": "admin|123", "permissions": ["ocf:admin"]}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
-async def api_client_uk_national_non_admin(
+@pytest.fixture(scope="module")
+def api_client_uk_national_non_admin(
     config_uk_national: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Test client without admin permissions."""
@@ -72,12 +72,12 @@ async def api_client_uk_national_non_admin(
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
     app.dependency_overrides[auth_dep] = lambda: {"sub": "user|456", "permissions": []}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
-@pytest_asyncio.fixture(scope="session")
-async def make_national_forecast_values(
+@pytest.fixture(scope="session")
+def make_national_forecast_values(
     dp_client: dp.DataPlatformDataServiceStub,
     national_location: dp.CreateLocationResponse,
 ) -> None:
@@ -90,11 +90,11 @@ async def make_national_forecast_values(
             "blend_adjust",
             init_time_utc - datetime.timedelta(minutes=i * 30),
         )
-        _ = await dp_client.create_forecast(request)
+        _ = dp_client.create_forecast(request)
 
 
-@pytest_asyncio.fixture(scope="session")
-async def make_gsp_forecast_values(
+@pytest.fixture(scope="session")
+def make_gsp_forecast_values(
     dp_client: dp.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],
 ) -> None:
@@ -103,23 +103,23 @@ async def make_gsp_forecast_values(
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
     for location_uuid in gsp_locations:
         request = forecast(location_uuid, "blend", init_time_utc)
-        _ = await dp_client.create_forecast(request)
+        _ = dp_client.create_forecast(request)
 
 
-@pytest_asyncio.fixture(scope="session")
-async def make_observers(dp_client: dp.DataPlatformDataServiceStub) -> None:
+@pytest.fixture(scope="session")
+def make_observers(dp_client: dp.DataPlatformDataServiceStub) -> None:
     """Make observers."""
     for model_name in ["pvlive_in_day", "pvlive_day_after"]:
         create_observer_request = dp.CreateObserverRequest(
             name=model_name,
         )
-        _ = await dp_client.create_observer(create_observer_request)
+        _ = dp_client.create_observer(create_observer_request)
 
 
 def make_observation_values(
     location_uuid: str,
     observer_name: str,
-    init_time_utc: datetime,
+    init_time_utc: datetime.datetime,
 ) -> dp.CreateObservationsRequest:
     """Make observation values for a given location and observer."""
     return dp.CreateObservationsRequest(
@@ -136,8 +136,8 @@ def make_observation_values(
     )
 
 
-@pytest_asyncio.fixture(scope="session")
-async def make_national_observation_values(
+@pytest.fixture(scope="session")
+def make_national_observation_values(
     dp_client: dp.DataPlatformDataServiceStub,
     national_location: dp.CreateLocationResponse,
 ) -> None:
@@ -150,11 +150,11 @@ async def make_national_observation_values(
             observer_name=model_name,
             init_time_utc=init_time_utc,
         )
-        _ = await dp_client.create_observations(request)
+        _ = dp_client.create_observations(request)
 
 
-@pytest_asyncio.fixture(scope="session")
-async def make_gsp_observation_values(
+@pytest.fixture(scope="session")
+def make_gsp_observation_values(
     dp_client: dp.DataPlatformDataServiceStub,
     gsp_locations: list[dp.CreateLocationResponse],
 ) -> None:
@@ -168,4 +168,4 @@ async def make_gsp_observation_values(
                 observer_name=model_name,
                 init_time_utc=init_time_utc,
             )
-            _ = await dp_client.create_observations(request)
+            _ = dp_client.create_observations(request)

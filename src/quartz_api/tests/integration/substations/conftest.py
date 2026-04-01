@@ -7,7 +7,8 @@ from uuid import UUID
 import pandas as pd
 import pytest_asyncio
 from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf import dp
+from ocf.dp.dp_data import service_pb2_grpc, messages_pb2
+from ocf.dp.dp import common_pb2
 from httpx import ASGITransport, AsyncClient
 from pyhocon import ConfigFactory, ConfigTree
 
@@ -18,7 +19,7 @@ from quartz_api.tests.integration.conftest import forecast
 
 
 @pytest_asyncio.fixture(scope="session")
-async def config_substations() -> None:
+def config_substations() -> None:
     """Returns the configuration tree for the substations integration tests."""
     os.environ["ROUTERS"] = "substations"
     os.environ["SOURCE"] = "dataplatform"
@@ -31,17 +32,16 @@ async def config_substations() -> None:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def api_client_substations(
-    config_substations: ConfigTree, dp_client: dp.DataPlatformDataServiceStub,
+def api_client_substations(
+    config_substations: ConfigTree, dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Returns a TestClient for the FastAPI application."""
     app = _create_server(config_substations)
 
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
-    db_instance.set_sync_client(os.environ["DATA_PLATFORM_HOST"], os.environ["DATA_PLATFORM_PORT"])
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
@@ -51,18 +51,18 @@ def make_substation_location(
     lat: float,
     lon: float,
     capacity_watts: int = 1_000_000,  # 1 MW default
-) -> dp.CreateLocationRequest:
+) -> messages_pb2.CreateLocationRequest:
     """Create a substation location request.
 
     The substation is a point within the GSP polygon.
     """
     metadata = Struct(fields={"gsp_id": Value(number_value=gsp_id)})
 
-    return dp.CreateLocationRequest(
+    return messages_pb2.CreateLocationRequest(
         location_name=name,
-        energy_source=dp.EnergySource.SOLAR,
+        energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
         geometry_wkt=f"POINT({lon} {lat})",
-        location_type=dp.LocationType.PRIMARY_SUBSTATION,
+        location_type=common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
         effective_capacity_watts=capacity_watts,
         metadata=metadata,
         valid_from_utc=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC),
@@ -70,8 +70,8 @@ def make_substation_location(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def substation_locations(
-    dp_client: dp.DataPlatformDataServiceStub,
+def substation_locations(
+    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],  # noqa: ARG001 - ensures GSPs are created first
 ) -> list[tuple[UUID, str, int]]:
     """Create substation locations within GSP regions.
@@ -99,15 +99,15 @@ async def substation_locations(
             lon=lon,
             capacity_watts=capacity_watts,
         )
-        res = await dp_client.create_location(create_location_request)
+        res = dp_client.CreateLocation(create_location_request)
         created_substations.append((UUID(res.location_uuid), name, gsp_id))
 
     return created_substations
 
 
 @pytest_asyncio.fixture(scope="session")
-async def make_gsp_forecast_values(
-    dp_client: dp.DataPlatformDataServiceStub,
+def make_gsp_forecast_values(
+    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],
     make_forecasters: None,  # noqa: ARG001 - ensures forecasters are created first
 ) -> None:
@@ -120,4 +120,4 @@ async def make_gsp_forecast_values(
         # Create forecasts for both blend and blend_adjust
         for model_name in ["blend", "blend_adjust"]:
             request = forecast(location_uuid, model_name, init_time_utc)
-            _ = await dp_client.create_forecast(request)
+            _ = dp_client.CreateForecast(request)
