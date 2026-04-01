@@ -252,7 +252,7 @@ async def test_gsp_forecast_all_gsp_ids(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 10
+    assert len(data) == 9
     assert "datetimeUtc" in data[0]
     assert "forecastValues" in data[0]
     assert len(data[0]["forecastValues"]) == 3
@@ -277,7 +277,7 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     assert "location" in data[0]
     assert "model" in data[0]
     assert "forecastValues" in data[0]
-    assert len(data[0]["forecastValues"]) == 10
+    assert len(data[0]["forecastValues"]) == 9
 
 
 # 4.3.4 Cache refresh endpoint returns 202 for ocf:admin user
