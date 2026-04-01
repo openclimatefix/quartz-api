@@ -226,7 +226,7 @@ async def test_gsp_forecast_all_cache_hit(
     response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/")
     assert response.status_code == 200
     data = response.json()
-    data = data['forecasts']
+    data = data["forecasts"]
     assert data[0]["model"]["name"] == "blend"
     assert data[0]["forecastValues"][0]["expectedPowerGenerationMegawatts"] == 1.23
 
@@ -271,7 +271,7 @@ async def test_gsp_forecast_compact_false_gsp_ids(
     response = await api_client_uk_national.get("/v0/solar/GB/gsp/forecast/all/?gsp_ids=1,2,3")
     assert response.status_code == 200
     data = response.json()
-    data = data['forecasts']
+    data = data["forecasts"]
     assert isinstance(data, list)
     assert len(data) == 3
     assert "location" in data[0]
@@ -319,7 +319,7 @@ async def test_gsp_forecast_all_for_one_timestamp(
     )
     assert response.status_code == 200
     data = response.json()
-    data = data['forecasts']
+    data = data["forecasts"]
     assert isinstance(data, list)
     assert len(data) == 10 # 10 gsps
 
