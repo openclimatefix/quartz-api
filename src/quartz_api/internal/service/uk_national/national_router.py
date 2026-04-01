@@ -198,6 +198,10 @@ async def get_national_forecast(
         for v in all_pgvs
     ]
 
+    # legacy bug in Old API
+    if forecast_horizon_minutes is not None:
+        out = [v for v in out if v.target_time < end_datetime_utc]
+
     if not include_metadata:
         return out
 
