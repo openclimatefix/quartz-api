@@ -36,6 +36,7 @@ from .endpoint_types import (
     GSPYield,
     GSPYieldGroupByDatetime,
     InputDataLastUpdated,
+    ListForecasts,
     Location,
     MLModel,
     OneDatetimeManyForecastValuesMW,
@@ -292,7 +293,7 @@ def _build_forecast_response(
 
 @router.get(
     "/forecast/all/",
-    response_model=list[OneDatetimeManyForecastValuesMW | Forecast],
+    response_model=list[OneDatetimeManyForecastValuesMW] | ListForecasts,
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE) # 10 minutes
