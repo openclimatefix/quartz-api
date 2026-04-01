@@ -1,5 +1,4 @@
 """Fixtures for setting up uk-national api with data-platform backend."""
-
 import datetime
 import os
 import time
@@ -7,8 +6,9 @@ from importlib.metadata import version
 from uuid import UUID
 
 import pytest_asyncio
-from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf import dp
+from google.protobuf.struct_pb2 import Struct, Value
+from ocf.dp.dp_data import service_pb2_grpc, messages_pb2
+from ocf.dp.dp import common_pb2
 from grpclib.client import Channel
 from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
@@ -18,7 +18,7 @@ from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
 
 
 @pytest_asyncio.fixture(scope="session")
-async def dp_client() -> dp.DataPlatformDataServiceStub:
+async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
     """Fixture to spin up a PostgreSQL container for the entire test session.
 
     This fixture uses `testcontainers` to start a fresh PostgreSQL container and provides
@@ -53,31 +53,35 @@ async def dp_client() -> dp.DataPlatformDataServiceStub:
             os.environ["DATA_PLATFORM_PORT"] = str(port)
 
             channel = Channel(host=host, port=port)
-            client = dp.DataPlatformDataServiceStub(channel)
+            client = service_pb2_grpc.DataPlatformDataServiceStub(channel)
             yield client
             channel.close()
 
 
 @pytest_asyncio.fixture(scope="session")
-async def make_forecasters(dp_client: dp.DataPlatformDataServiceStub) -> None:
+async def make_forecasters(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> None:
     """Make forecasters."""
     for model_name in ["blend", "blend_adjust"]:
-        create_forecaster_request = dp.CreateForecasterRequest(
+        create_forecaster_request = messages_pb2.CreateForecasterRequest(
             name=model_name,
             version="1.3.0",
         )
-        _ = await dp_client.create_forecaster(create_forecaster_request)
+        _ = dp_client.CreateForecaster(create_forecaster_request)
 
 
-def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.CreateForecastRequest:
+def forecast(
+    location_uuid: str,
+    name: str,
+    init_time_utc: datetime.datetime,
+) -> messages_pb2.CreateForecastRequest:
     """Create a forecast request."""
-    return dp.CreateForecastRequest(
+    return messages_pb2.CreateForecastRequest(
         location_uuid=location_uuid,
-        energy_source=dp.EnergySource.SOLAR,
+        energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
         init_time_utc=init_time_utc,
-        forecaster=dp.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
+        forecaster=messages_pb2.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
         values=[
-            dp.CreateForecastRequestForecastValue(
+            messages_pb2.CreateForecastRequestForecastValue(
                 horizon_mins=i * 30,
                 p50_fraction=i * 0.05,
                 other_statistics_fractions={"p10": i * 0.06, "p90": i * 0.04},
@@ -92,8 +96,8 @@ def make_location(
     name: str,
     gsp_id: int,
     metadata: dict,
-    location_type: dp.LocationType = dp.LocationType.NATION,
-) -> dp.CreateLocationRequest:
+    location_type: common_pb2.LocationType = common_pb2.LocationType.LOCATION_TYPE_NATION,
+) -> messages_pb2.CreateLocationRequest:
     """Create a location request."""
     lat = float(gsp_id)
     lon = float(gsp_id)
@@ -101,9 +105,9 @@ def make_location(
         f"POLYGON(({lon - 0.5} {lat - 0.5}, {lon + 0.5} {lat - 0.5}, "
         f"{lon + 0.5} {lat + 0.5}, {lon - 0.5} {lat + 0.5}, {lon - 0.5} {lat - 0.5}))"
     )
-    create_location_request = dp.CreateLocationRequest(
+    create_location_request = messages_pb2.CreateLocationRequest(
         location_name=name,
-        energy_source=dp.EnergySource.SOLAR,
+        energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
         geometry_wkt=polygon_wkt,
         location_type=location_type,
         effective_capacity_watts=10_000_000,
@@ -115,7 +119,7 @@ def make_location(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]:
+async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> list[UUID]:
     """Make national location."""
     # add location gsp 1 to 10
     location_uuids = []
@@ -125,9 +129,9 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
             name=f"gsp_{i}",
             gsp_id=i,
             metadata=metadata,
-            location_type=dp.LocationType.GSP,
+            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP,
         )
-        res = await dp_client.create_location(create_location_request)
+        res = dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
 
         gsp_id_map[i] = models.Location(
@@ -143,12 +147,14 @@ async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]
 
 
 @pytest_asyncio.fixture(scope="session")
-async def national_location(dp_client: dp.DataPlatformDataServiceStub) -> dp.CreateLocationResponse:
+async def national_location(
+    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
+) -> messages_pb2.CreateLocationResponse:
     """Make national location."""
     # add location gsp 0
     metadata = Struct(fields={"gsp_id": Value(number_value=0)})
     create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
-    create_location_response = await dp_client.create_location(create_location_request)
+    create_location_response = dp_client.CreateLocation(create_location_request)
 
     gsp_id_map[0] = models.Location(
         uuid=UUID(create_location_response.location_uuid),

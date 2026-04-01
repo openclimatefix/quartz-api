@@ -4,8 +4,8 @@ import datetime as dt
 import logging
 from uuid import UUID
 
-from dp_sdk.ocf.dp.dp import common_pb2
-from dp_sdk.ocf.dp.dp_data import messages_pb2, service_pb2_grpc
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from fastapi import HTTPException
 from google.protobuf.json_format import MessageToDict
 from typing_extensions import override
