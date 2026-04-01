@@ -288,7 +288,7 @@ def _build_forecast_response(
                 input_data_last_updated=input_data_by_gsp.get(gsp_id, stub_input_data),
             ),
         )
-    return forecasts
+    return ListForecasts(forecasts=forecasts)
 
 
 @router.get(
