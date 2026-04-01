@@ -231,7 +231,7 @@ def _build_forecast_response(
     gsp_id_map: dict[int, models.Location],
     gsp_uuid_id_map: dict[UUID, int],
     creation_time: dt.datetime,
-) -> list[Forecast]:
+) -> ListForecasts:
     """Reorganise results as one Forecast object per GSP with all timesteps."""
     fvs_per_gsp: dict[int, list[ForecastValue]] = defaultdict(list)
     # Capture pgv info per GSP.
@@ -312,7 +312,7 @@ async def get_all_available_forecasts(
     ],
     gsp_ids: str | None = None,
     compact: bool = False,
-) -> list[OneDatetimeManyForecastValuesMW] | list[Forecast]:
+) -> list[OneDatetimeManyForecastValuesMW] | ListForecasts:
     """### Get all forecasts for all GSPs.
 
     Returns forecasts for all GSPs across the full forecast window.
