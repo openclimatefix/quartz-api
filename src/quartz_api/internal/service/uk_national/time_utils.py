@@ -1,6 +1,7 @@
 """Utility functions for handling datetime objects in UK National context."""
 
 import datetime as dt
+import pandas as pd
 import os
 
 import sentry_sdk
@@ -34,3 +35,14 @@ def limit_end_datetime_by_permissions(
         return min(end_datetime_utc, intraday_max_allowed)
 
     return end_datetime_utc
+
+def get_start_window():
+    now = pd.Timestamp.utcnow()
+    # set as uk london timezone
+    now_london = now.tz_convert("Europe/London")
+    # round and move back 2 days
+    now_minus_2_days_london = now_london.floor("6h") - dt.timedelta(days=2)
+    # change back to utc
+    now_minus_2_days_utc = now_minus_2_days_london.tz_convert("UTC")
+
+    return now_minus_2_days_utc
