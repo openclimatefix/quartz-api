@@ -170,12 +170,12 @@ class StorageClient(models.StorageInterface):
                     float(v.effective_capacity_watts) \
                         * float(v.p50_value_fraction) / 1000,
                 ),
-                valid_timestamp=v.target_timestamp_utc,
+                valid_timestamp=v.target_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 location_uuid=UUID(location_uuid) \
                     if isinstance(location_uuid, str) else location_uuid,
                 capacity_kilowatts=int(float(v.effective_capacity_watts) / 1000),
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
+                created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
                 plevels_kilowatts=plevels,
@@ -230,7 +230,7 @@ class StorageClient(models.StorageInterface):
         resp = self.dpc.GetObservationsAsTimeseries(req)
         out: list[models.ActualGenerationValue] = [
             models.ActualGenerationValue(
-                valid_timestamp=v.timestamp_utc,
+                valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 power_kilowatts=int(v.effective_capacity_watts * v.v_fraction / 1000.0),
                 location_uuid=location_uuid \
                     if isinstance(location_uuid, UUID) else UUID(location_uuid),
@@ -288,13 +288,13 @@ class StorageClient(models.StorageInterface):
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
                 power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
-                valid_timestamp=resp.timestamp_utc,
+                valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 location_uuid=UUID(v.location_uuid),
                 capacity_kilowatts=v.effective_capacity_watts / 1000,
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
-                created_timestamp=v.created_timestamp_utc,
-                init_timestamp=v.initialization_timestamp_utc,
+                created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
             )
             for v in resp.values
@@ -324,7 +324,7 @@ class StorageClient(models.StorageInterface):
 
         out: list[models.ActualGenerationValue] = [
             models.ActualGenerationValue(
-                valid_timestamp=resp.timestamp_utc,
+                valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 power_kilowatts=round(
                     v.value_fraction * v.effective_capacity_watts / 1000,
                     4,
@@ -373,7 +373,7 @@ class StorageClient(models.StorageInterface):
         resp = self.dpc.ListLocations(req)
         out: list[models.Location] = [
             models.Location(
-                uuid=loc.location_uuid,
+                uuid=UUID(loc.location_uuid) if isinstance(loc.location_uuid, str) else loc.location_uuid,
                 name=loc.location_name,
                 capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                 latitude=loc.latlng.latitude,

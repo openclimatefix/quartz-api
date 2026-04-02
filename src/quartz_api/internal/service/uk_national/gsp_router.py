@@ -1,6 +1,7 @@
 """The 'gsp' FastAPI router object."""
 
 import datetime as dt
+import asyncio
 import logging
 import time
 import traceback
@@ -58,7 +59,7 @@ GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE = 10 * 60 # 10 minutes
 
 router = APIRouter()
 
-_forecast_adapter = TypeAdapter(list[Forecast])
+_forecast_adapter = TypeAdapter(ListForecasts)
 _compact_adapter = TypeAdapter(list[OneDatetimeManyForecastValuesMW])
 _cache_warming: bool = False
 
@@ -213,6 +214,9 @@ def _build_compact_response(
     for snapshot in results:
         for pgv in snapshot:
             gsp_id = gsp_uuid_id_map.get(pgv.location_uuid)
+            if gsp_id is None:
+                log.info("Skipping pgv with unknown location_uuid %s", pgv.location_uuid)
+                continue
             grouped[pgv.valid_timestamp][gsp_id] = round(pgv.power_kilowatts / 1000.0, 4)
     return [
         OneDatetimeManyForecastValuesMW(
@@ -387,7 +391,7 @@ def get_all_available_forecasts(
     )
 
 
-def _warm_forecast_all_cache(app: FastAPI) -> None:
+async def _warm_forecast_all_cache(app: FastAPI) -> None:
     """Pre-warm the /forecast/all/ cache by fetching data directly, bypassing HTTP auth.
 
     Runs as a background task triggered by the /forecast/all/refresh endpoint.
@@ -400,7 +404,7 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
     _cache_warming = True
     try:
         # Wait to let the server finish starting up before hitting gRPC.
-        time.sleep(5)
+        await asyncio.sleep(5)
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
             log.warning("GSP forecast cache warm skipped: storage client not configured")
@@ -432,7 +436,7 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
             results.append(result)
             if (i + 1) % 10 == 0 or (i + 1) == total:
                 log.info("Cache warm progress: %d/%d timestamps fetched", i + 1, total)
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
@@ -445,7 +449,7 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
         forecast_value = run_in_threadpool(
             _forecast_adapter.dump_json, forecast_response,
         )
-        backend.set(
+        await backend.set(
             f"{base_key}[]:[]",
             forecast_value,
             expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,
@@ -462,7 +466,7 @@ def _warm_forecast_all_cache(app: FastAPI) -> None:
         compact_value = run_in_threadpool(
             _compact_adapter.dump_json, compact_response,
         )
-        backend.set(
+        await backend.set(
             f"{base_key}[('compact', 'true')]:[]",
             compact_value,
             expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_LONG,

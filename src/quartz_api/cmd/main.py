@@ -1,5 +1,6 @@
 """API providing access to OCF's Quartz Forecasts."""
 
+import asyncio
 import functools
 import importlib
 import importlib.metadata
@@ -26,7 +27,6 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
-from starlette.concurrency import run_in_threadpool
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import (
@@ -130,9 +130,12 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     if "uk_national" in conf.get_string("api.routers"):
         from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
-        await run_in_threadpool(_warm_forecast_all_cache, server)
+        warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
     yield
+
+    if warm_task is not None:
+        warm_task.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
