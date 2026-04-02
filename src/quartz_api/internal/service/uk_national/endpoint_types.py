@@ -41,6 +41,9 @@ def convert_list_of_gsp_ids(gsp_ids:str | None) -> list[int] | None:
     if gsp_ids is None:
         return gsp_ids
 
+    if gsp_ids == "":
+        return None
+
     return [int(gsp_id) for gsp_id in gsp_ids.split(",")]
 
 class EnhancedBaseModel(BaseModel):
