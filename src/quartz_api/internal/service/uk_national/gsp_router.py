@@ -310,8 +310,7 @@ async def get_all_available_forecasts(
         dt.datetime,
         Depends(limit_end_datetime_by_permissions),
     ],
-    gsp_ids: Annotated[list[str] | None,
-                       AfterValidator(lambda v: convert_list_of_gsp_ids(v))] = None,
+    gsp_ids: str | None = None,
     compact: bool = False,
 ) -> list[OneDatetimeManyForecastValuesMW] | ListForecasts:
     """### Get all forecasts for all GSPs.
@@ -330,6 +329,7 @@ async def get_all_available_forecasts(
     """
     # Default (no gsp_ids): served from warm cache only. If we're here it's a cache miss —
     # trigger a warm in the background and ask the client to retry.
+    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
 
     start_datetime_utc_set = start_datetime_utc != default_now_window_start()
     end_datetime_utc_set = end_datetime_utc != default_window_end()
@@ -548,8 +548,7 @@ async def get_truths_for_all_gsps(
     start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
-    gsp_ids: Annotated[list[str] | None,
-                       AfterValidator(lambda v: convert_list_of_gsp_ids(v))] = None,
+    gsp_ids: str | None = None,
 ) -> list[GSPYieldGroupByDatetime]:
     """### Get PV_Live values for all GSPs for yesterday and today.
 
@@ -570,6 +569,7 @@ async def get_truths_for_all_gsps(
     - **end_datetime_utc**: optional end datetime for the query.
     """
     out: list[GSPYieldGroupByDatetime] = []
+    gsp_ids = convert_list_of_gsp_ids(gsp_ids)
     gsp_uuid_id_map: dict[UUID, int] = {v.uuid: k for k, v in gsp_id_map.items()}
 
     if gsp_ids is None:
