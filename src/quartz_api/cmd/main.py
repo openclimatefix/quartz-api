@@ -1,6 +1,5 @@
 """API providing access to OCF's Quartz Forecasts."""
 
-import asyncio
 import functools
 import importlib
 import importlib.metadata
@@ -27,6 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from quartz_api.internal import models, service
 from quartz_api.internal.backends import (
@@ -93,24 +93,27 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             storage = DummyStorage()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            from dp_sdk.ocf.dp.dp_data import service_pb2_grpc
-            trace_interceptor = trace.TraceMetadataInterceptor()
+            from ocf.dp.dp_data import service_pb2_grpc
+            trace_interceptor = trace.TraceInterceptor()
             grpc_channel = grpc.insecure_channel(
                 target=conf.get_string("backend.dataplatform.host") \
                     + ":" + conf.get_string("backend.dataplatform.port"),
-                interceptors=[trace_interceptor],
             )
-            client = service_pb2_grpc.DataPlatformDataServiceStub(grpc_channel)
-            storage = DataPlatformStorage.from_dp(client=client)
+            intercept_channel = grpc.intercept_channel(
+                grpc_channel,
+                trace_interceptor,
+            )
+            client = service_pb2_grpc.DataPlatformDataServiceStub(intercept_channel)
+            storage = DataPlatformStorage.from_dp(dp_client=client)
 
             if "uk_national" in conf.get_string("api.routers").split(","):
                 # Populate the GSP ID to UUID mapping
-                resp = await storage.get_locations(
+                resp = storage.get_locations(
                         location_type=models.LocationType.GSP,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
                     )
-                resp += await storage.get_locations(
+                resp += storage.get_locations(
                         location_type=models.LocationType.NATION,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
@@ -125,15 +128,11 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     server.dependency_overrides[models.get_storage_client] = lambda: storage
 
-    warm_task = None
     if "uk_national" in conf.get_string("api.routers"):
         from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
-        warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
+        await run_in_threadpool(_warm_forecast_all_cache, server)
 
     yield
-
-    if warm_task is not None:
-        warm_task.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
@@ -145,6 +144,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
     description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
+        debug=True,
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",

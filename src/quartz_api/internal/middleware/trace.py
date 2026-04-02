@@ -1,5 +1,6 @@
 """Middleware to log API requests to the database."""
 
+import collections
 import logging
 import time
 import uuid
@@ -70,6 +71,15 @@ class TracerMiddleware(BaseHTTPMiddleware):
 
         return response
 
+# See https://github.com/grpc/grpc/blob/master/examples/python/interceptors/headers/header_manipulator_client_interceptor.py
+class _ClientCallDetails(
+    collections.namedtuple(
+        "_ClientCallDetails", ("method", "timeout", "metadata", "credentials"),
+    ),
+    grpc.ClientCallDetails,
+):
+    pass
+
 class TraceInterceptor(grpc.UnaryUnaryClientInterceptor):
     """GRPC Interceptor to add tracing information to outgoing GRPC requests."""
 
@@ -84,8 +94,7 @@ class TraceInterceptor(grpc.UnaryUnaryClientInterceptor):
 
         new_metadata = list(client_call_details.metadata or [])
         new_metadata.append(("traceid", trace_id))
-
-        new_details = grpc.ClientCallDetails(
+        new_details: grpc.ClientCallDetails = _ClientCallDetails(
             method=client_call_details.method,
             timeout=client_call_details.timeout,
             metadata=new_metadata,

@@ -4,10 +4,10 @@ import datetime as dt
 import logging
 from uuid import UUID
 
-from ocf.dp.dp import common_pb2
-from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from fastapi import HTTPException
 from google.protobuf.json_format import MessageToDict
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -167,8 +167,8 @@ class StorageClient(models.StorageInterface):
 
             out.append(models.PredictedGenerationValue(
                 power_kilowatts=int(
-                    float(v["effective_capacity_watts"]) \
-                        * float(v.get("p50_value_fraction", 0)) / 1000,
+                    float(v.effective_capacity_watts) \
+                        * float(v.p50_value_fraction) / 1000,
                 ),
                 valid_timestamp=v.target_timestamp_utc,
                 location_uuid=UUID(location_uuid) \

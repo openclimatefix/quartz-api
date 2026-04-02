@@ -7,9 +7,9 @@ from uuid import UUID
 
 import pytest_asyncio
 from google.protobuf.struct_pb2 import Struct, Value
-from ocf.dp.dp_data import service_pb2_grpc, messages_pb2
-from ocf.dp.dp import common_pb2
 from grpclib.client import Channel
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
 
