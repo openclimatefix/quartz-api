@@ -1,10 +1,10 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
-
 import datetime as dt
 import logging
 from uuid import UUID
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from google.protobuf.json_format import MessageToDict
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
@@ -45,7 +45,7 @@ class StorageClient(models.StorageInterface):
         return instance
 
     @override
-    def get_predicted_generation(
+    async def get_predicted_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -77,7 +77,7 @@ class StorageClient(models.StorageInterface):
             location_type_filter=location_type_map[location_type],
             user_oauth_id_filter=oauth_id,
         )
-        resp = self.dpc.ListLocations(req)
+        resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
@@ -93,7 +93,7 @@ class StorageClient(models.StorageInterface):
                 location_type_filter=common_pb2.LocationType.LOCATION_TYPE_GSP,
                 user_oauth_id_filter=oauth_id,
             )
-            gsps = self.dpc.ListLocations(req)
+            gsps = await self.dpc.ListLocations(req)
             if len(gsps.locations) == 0:
                 raise HTTPException(
                     status_code=404,
@@ -113,7 +113,7 @@ class StorageClient(models.StorageInterface):
                 energy_source=energy_type_map[energy_type],
                 pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
             )
-            resp = self.dpc.GetLatestForecasts(req)
+            resp = await self.dpc.GetLatestForecasts(req)
             if len(resp.forecasts) == 0:
                 return []
             resp.forecasts.sort(
@@ -126,7 +126,7 @@ class StorageClient(models.StorageInterface):
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
-            resp = self.dpc.ListForecasters(req)
+            resp = await self.dpc.ListForecasters(req)
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
@@ -146,47 +146,51 @@ class StorageClient(models.StorageInterface):
             pivot_timestamp_utc=created_cutoff,
         )
 
-        resp = self.dpc.GetForecastAsTimeseries(req)
+        resp = await self.dpc.GetForecastAsTimeseries(req)
 
         if location_type == models.LocationType.SUBSTATION:
             # Spoof the forecast values so that the capacity and id corresponds to the substation
-            for v in resp["values"]:
-                v.location_uuid = location_uuid
+            resp.location_uuid = str(location_uuid)
+            for v in resp.values:
                 v.effective_capacity_watts = location.effective_capacity_watts
 
-        out: list[models.PredictedGenerationValue] = []
-        for v in resp.values:
-            plevels: dict[str, int | float] = {}
-            stats = v.other_statistics_fractions
-            for plevel in ["p10", "p90"]:
-                val = int(
-                    v.effective_capacity_watts * stats[plevel] / 1000.0,
-                ) if plevel in stats else None
-                if val is not None:
-                    plevels[plevel] = val
+        def _map_resp(resp: messages_pb2.GetForecastAsTimeseriesResponse) \
+                -> list[models.PredictedGenerationValue]:
+            out: list[models.PredictedGenerationValue] = []
+            for v in resp.values:
+                plevels: dict[str, int | float] = {}
+                stats = v.other_statistics_fractions
+                for plevel in ["p10", "p90"]:
+                    val = int(
+                        v.effective_capacity_watts * stats[plevel] / 1000.0,
+                    ) if plevel in stats else None
+                    if val is not None:
+                        plevels[plevel] = val
 
-            out.append(models.PredictedGenerationValue(
-                power_kilowatts=int(
-                    float(v.effective_capacity_watts) \
-                        * float(v.p50_value_fraction) / 1000,
-                ),
-                valid_timestamp=v.target_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                location_uuid=UUID(location_uuid) \
-                    if isinstance(location_uuid, str) else location_uuid,
-                capacity_kilowatts=int(float(v.effective_capacity_watts) / 1000),
-                created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                forecaster_name=forecaster.forecaster_name,
-                forecaster_version=forecaster.forecaster_version,
-                plevels_kilowatts=plevels,
-                metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
-            ))
+                out.append(models.PredictedGenerationValue(
+                    power_kilowatts=int(
+                        float(v.effective_capacity_watts) \
+                            * float(v.p50_value_fraction) / 1000,
+                    ),
+                    valid_timestamp=v.target_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    location_uuid=UUID(location_uuid) \
+                        if isinstance(location_uuid, str) else location_uuid,
+                    capacity_kilowatts=int(float(v.effective_capacity_watts) / 1000),
+                    created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    forecaster_name=forecaster.forecaster_name,
+                    forecaster_version=forecaster.forecaster_version,
+                    plevels_kilowatts=plevels,
+                    metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
+                ))
 
-        return out
+            return out
+
+        return await run_in_threadpool(_map_resp, resp)
 
 
     @override
-    def put_predicted_generation(
+    async def put_predicted_generation(
         self,
         generation_values: list[models.PredictedGenerationValue],
         location_type: models.LocationType,
@@ -196,7 +200,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend doesn't support forecast input yet.")
 
     @override
-    def get_actual_generation(
+    async def get_actual_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -211,7 +215,7 @@ class StorageClient(models.StorageInterface):
             raise ValueError("Observer must be specified for data platform backend.")
 
         if authdata != {}:
-            _ = self._check_user_access(
+            _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
@@ -227,22 +231,26 @@ class StorageClient(models.StorageInterface):
                 end_timestamp_utc=window_end,
             ),
         )
-        resp = self.dpc.GetObservationsAsTimeseries(req)
-        out: list[models.ActualGenerationValue] = [
-            models.ActualGenerationValue(
-                valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                power_kilowatts=int(v.effective_capacity_watts * v.v_fraction / 1000.0),
-                location_uuid=UUID(v.location_uuid),
-                capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
-                observer_name=observer_name,
-            )
-            for v in resp.values
-        ]
+        resp = await self.dpc.GetObservationsAsTimeseries(req)
 
-        return out
+        def _map_resp(resp: messages_pb2.GetObservationsAsTimeseriesResponse) \
+                -> list[models.ActualGenerationValue]:
+            out: list[models.ActualGenerationValue] = [
+                models.ActualGenerationValue(
+                    valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    power_kilowatts=int(v.effective_capacity_watts * v.value_fraction / 1000.0),
+                    location_uuid=UUID(resp.location_uuid),
+                    capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
+                    observer_name=observer_name,
+                )
+                for v in resp.values
+            ]
+            return out
+
+        return await run_in_threadpool(_map_resp, resp)
 
     @override
-    def put_actual_generation(
+    async def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
         energy_type: models.EnergyType,
@@ -252,7 +260,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend does not yet support writing generation")
 
     @override
-    def get_predicted_generation_snapshot(
+    async def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -268,7 +276,7 @@ class StorageClient(models.StorageInterface):
                 forecaster_names_filter=[forecaster_name],
                 latest_versions_only=True,
             )
-            resp = self.dpc.ListForecasters(req)
+            resp = await self.dpc.ListForecasters(req)
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
@@ -282,27 +290,30 @@ class StorageClient(models.StorageInterface):
             timestamp_utc=snapshot_timestamp_utc,
             forecaster=forecaster,
         )
-        resp = self.dpc.GetForecastAtTimestamp(req)
+        resp = await self.dpc.GetForecastAtTimestamp(req)
 
-        out: list[models.PredictedGenerationValue] = [
-            models.PredictedGenerationValue(
-                power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
-                valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                location_uuid=UUID(v.location_uuid),
-                capacity_kilowatts=v.effective_capacity_watts / 1000,
-                forecaster_name=forecaster.forecaster_name,
-                forecaster_version=forecaster.forecaster_version,
-                created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
-            )
-            for v in resp.values
-        ]
+        def _map_resp(resp: messages_pb2.GetForecastAtTimestampResponse) \
+                -> list[models.PredictedGenerationValue]:
+            out: list[models.PredictedGenerationValue] = [
+                models.PredictedGenerationValue(
+                    power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
+                    valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    location_uuid=UUID(v.location_uuid),
+                    capacity_kilowatts=v.effective_capacity_watts / 1000,
+                    forecaster_name=forecaster.forecaster_name,
+                    forecaster_version=forecaster.forecaster_version,
+                    created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
+                )
+                for v in resp.values
+            ]
+            return out
 
-        return out
+        return await run_in_threadpool(_map_resp, resp)
 
     @override
-    def get_actual_generation_snapshot(
+    async def get_actual_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -319,26 +330,29 @@ class StorageClient(models.StorageInterface):
             timestamp_utc=snapshot_timestamp_utc,
             observer_name=observer_name,
         )
-        resp = self.dpc.GetObservationsAtTimestamp(req)
+        resp = await self.dpc.GetObservationsAtTimestamp(req)
 
-        out: list[models.ActualGenerationValue] = [
-            models.ActualGenerationValue(
-                valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                power_kilowatts=round(
-                    v.value_fraction * v.effective_capacity_watts / 1000,
-                    4,
-                ),
-                location_uuid=UUID(v.location_uuid),
-                capacity_kilowatts=v.effective_capacity_watts / 1000,
-                observer_name=observer_name,
-            )
-            for v in resp.values
-        ]
+        def _map_resp(resp: messages_pb2.GetObservationsAtTimestampResponse) \
+                -> list[models.ActualGenerationValue]:
+            out: list[models.ActualGenerationValue] = [
+                models.ActualGenerationValue(
+                    valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
+                    power_kilowatts=round(
+                        v.value_fraction * v.effective_capacity_watts / 1000,
+                        4,
+                    ),
+                    location_uuid=UUID(v.location_uuid),
+                    capacity_kilowatts=v.effective_capacity_watts / 1000,
+                    observer_name=observer_name,
+                )
+                for v in resp.values
+            ]
+            return out
 
-        return out
+        return await run_in_threadpool(_map_resp, resp)
 
     @override
-    def get_locations(
+    async def get_locations(
         self,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
@@ -369,22 +383,26 @@ class StorageClient(models.StorageInterface):
             user_oauth_id_filter=oauth_id,
             location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
         )
-        resp = self.dpc.ListLocations(req)
-        out: list[models.Location] = [
-            models.Location(
-                uuid=UUID(loc.location_uuid),
-                name=loc.location_name,
-                capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
-                latitude=loc.latlng.latitude,
-                longitude=loc.latlng.longitude,
-                metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
-            )
-            for loc in resp.locations
-        ]
-        return out
+        resp = await self.dpc.ListLocations(req)
+
+        def _map_resp(resp: messages_pb2.ListLocationsResponse) -> list[models.Location]:
+            out: list[models.Location] = [
+                models.Location(
+                    uuid=UUID(loc.location_uuid),
+                    name=loc.location_name,
+                    capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
+                    latitude=loc.latlng.latitude,
+                    longitude=loc.latlng.longitude,
+                    metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
+                )
+                for loc in resp.locations
+            ]
+            return out
+
+        return await run_in_threadpool(_map_resp, resp)
 
     @override
-    def put_location(
+    async def put_location(
         self,
         location: models.Location,
         location_type: models.LocationType,
@@ -394,14 +412,14 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Data platform backend doesn't yet support location writing.")
 
     @override
-    def log_api_call(
+    async def log_api_call(
         self,
         url: str,
         authdata: dict[str, str],
     ) -> None:
         pass
 
-    def _check_user_access(
+    async def _check_user_access(
         self,
         location_uuid: UUID,
         energy_source: common_pb2.EnergySource,
@@ -415,7 +433,7 @@ class StorageClient(models.StorageInterface):
             location_type_filter=location_type,
             user_oauth_id_filter=oauth_id,
         )
-        resp = self.dpc.ListLocations(req)
+        resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,

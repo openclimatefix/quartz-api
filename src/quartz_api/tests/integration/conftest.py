@@ -5,9 +5,9 @@ import time
 from importlib.metadata import version
 from uuid import UUID
 
+import grpc.aio
 import pytest_asyncio
 from google.protobuf.struct_pb2 import Struct, Value
-from grpclib.client import Channel
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from testcontainers.core.container import DockerContainer
@@ -52,10 +52,10 @@ async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
             os.environ["DATA_PLATFORM_HOST"] = host
             os.environ["DATA_PLATFORM_PORT"] = str(port)
 
-            channel = Channel(host=host, port=port)
+            channel = grpc.aio.insecure_channel(target=f"{host}:{port}")
             client = service_pb2_grpc.DataPlatformDataServiceStub(channel)
             yield client
-            channel.close()
+            await channel.close()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -66,7 +66,7 @@ async def make_forecasters(dp_client: service_pb2_grpc.DataPlatformDataServiceSt
             name=model_name,
             version="1.3.0",
         )
-        _ = dp_client.CreateForecaster(create_forecaster_request)
+        _ = await dp_client.CreateForecaster(create_forecaster_request)
 
 
 def forecast(
@@ -81,7 +81,7 @@ def forecast(
         init_time_utc=init_time_utc,
         forecaster=messages_pb2.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
         values=[
-            messages_pb2.CreateForecastRequestForecastValue(
+            messages_pb2.CreateForecastRequest.ForecastValue(
                 horizon_mins=i * 30,
                 p50_fraction=i * 0.05,
                 other_statistics_fractions={"p10": i * 0.06, "p90": i * 0.04},
@@ -131,9 +131,10 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
             metadata=metadata,
             location_type=common_pb2.LocationType.LOCATION_TYPE_GSP,
         )
-        res = dp_client.CreateLocation(create_location_request)
+        res = await dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
 
+        gsp_id_map.clear()
         gsp_id_map[i] = models.Location(
             uuid=UUID(res.location_uuid),
             metadata={"gsp_id": i},
@@ -154,7 +155,7 @@ async def national_location(
     # add location gsp 0
     metadata = Struct(fields={"gsp_id": Value(number_value=0)})
     create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
-    create_location_response = dp_client.CreateLocation(create_location_request)
+    create_location_response = await dp_client.CreateLocation(create_location_request)
 
     gsp_id_map[0] = models.Location(
         uuid=UUID(create_location_response.location_uuid),

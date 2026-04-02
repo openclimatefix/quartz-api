@@ -28,18 +28,13 @@ class LocationType(Enum):
 
 
 @dataclasses.dataclass(slots=True)
-class GenerationValue:
-    """Base class for generation values."""
+class PredictedGenerationValue:
+    """Predicted generation value with additional metadata."""
 
     power_kilowatts: float
     valid_timestamp: dt.datetime
     location_uuid: UUID
     capacity_kilowatts: float
-
-
-@dataclasses.dataclass(slots=True)
-class PredictedGenerationValue(GenerationValue):
-    """Predicted generation value with additional metadata."""
 
     forecaster_name: str
     forecaster_version: str
@@ -55,8 +50,14 @@ class PredictedGenerationValue(GenerationValue):
     metadata: dict[str, str | float] = dataclasses.field(default_factory=dict)
 
 
-class ActualGenerationValue(GenerationValue):
+@dataclasses.dataclass(slots=True)
+class ActualGenerationValue:
     """Generation value recorded by an observer."""
+
+    power_kilowatts: float
+    valid_timestamp: dt.datetime
+    location_uuid: UUID
+    capacity_kilowatts: float
 
     observer_name: str
 
@@ -77,7 +78,7 @@ class StorageInterface(abc.ABC):
     """Defines the interface for a generic storage system."""
 
     @abc.abstractmethod
-    def get_predicted_generation(
+    async def get_predicted_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -98,7 +99,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def put_predicted_generation(
+    async def put_predicted_generation(
         self,
         generation_values: list[PredictedGenerationValue],
         location_type: LocationType,
@@ -109,7 +110,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_actual_generation(
+    async def get_actual_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -128,7 +129,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def put_actual_generation(
+    async def put_actual_generation(
         self,
         generation_values: list[ActualGenerationValue],
         energy_type: EnergyType,
@@ -139,7 +140,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_predicted_generation_snapshot(
+    async def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -152,7 +153,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_actual_generation_snapshot(
+    async def get_actual_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -164,7 +165,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_locations(
+    async def get_locations(
         self,
         energy_type: EnergyType,
         location_type: LocationType,
@@ -175,7 +176,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def put_location(
+    async def put_location(
         self,
         location: Location,
         location_type: LocationType,
@@ -186,7 +187,7 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def log_api_call(
+    async def log_api_call(
         self,
         url: str,
         authdata: dict[str, str],
