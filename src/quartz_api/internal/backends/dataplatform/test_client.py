@@ -5,8 +5,8 @@ import uuid
 from unittest.mock import Mock, patch
 
 from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf.dp.dp import common_pb2
-from dp_sdk.ocf.dp.dp_data import messages_pb2, service_pb2_grpc
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from fastapi import HTTPException
 from grpc_requests import Client
 
