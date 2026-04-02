@@ -19,7 +19,7 @@ authors = [
 classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
-    "dp-sdk",
+    "dp-sdk >= 0.25.0",
     "fastapi>=0.105.0",
     "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
@@ -37,8 +37,6 @@ dependencies = [
     "grpc-requests>=0.1.21",
     "gunicorn>=25.3.0",
     "jinja2>=3.1.6",
-    "dp_sdk @ ${PROJECT_ROOT}/gen/python",
-
 ]
 
 [dependency-groups]
