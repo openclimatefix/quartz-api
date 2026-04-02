@@ -1,9 +1,9 @@
 """Utility functions for handling datetime objects in UK National context."""
 
 import datetime as dt
-import pandas as pd
 import os
 
+import pandas as pd
 import sentry_sdk
 
 from quartz_api.internal import models
@@ -36,7 +36,8 @@ def limit_end_datetime_by_permissions(
 
     return end_datetime_utc
 
-def get_start_window():
+def get_start_window() -> pd.Timestamp:
+    """Get the start window for the forecast query."""
     now = pd.Timestamp.utcnow()
     # set as uk london timezone
     now_london = now.tz_convert("Europe/London")
