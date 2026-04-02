@@ -95,25 +95,22 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         case "dataplatform":
             from ocf.dp.dp_data import service_pb2_grpc
             trace_interceptor = trace.TraceInterceptor()
-            grpc_channel = grpc.insecure_channel(
+            grpc_channel = grpc.aio.insecure_channel(
                 target=conf.get_string("backend.dataplatform.host") \
                     + ":" + conf.get_string("backend.dataplatform.port"),
+                    interceptors=[trace_interceptor],
             )
-            intercept_channel = grpc.intercept_channel(
-                grpc_channel,
-                trace_interceptor,
-            )
-            client = service_pb2_grpc.DataPlatformDataServiceStub(intercept_channel)
+            client = service_pb2_grpc.DataPlatformDataServiceStub(grpc_channel)
             storage = DataPlatformStorage.from_dp(dp_client=client)
 
             if "uk_national" in conf.get_string("api.routers").split(","):
                 # Populate the GSP ID to UUID mapping
-                resp = storage.get_locations(
+                resp = await storage.get_locations(
                         location_type=models.LocationType.GSP,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
                     )
-                resp += storage.get_locations(
+                resp += await storage.get_locations(
                         location_type=models.LocationType.NATION,
                         energy_type=models.EnergyType.SOLAR,
                         authdata={},
@@ -139,7 +136,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     gsp_id_map.clear()
     if grpc_channel:
-        grpc_channel.close()
+        await grpc_channel.close()
 
 
 def _create_server(conf: ConfigTree) -> FastAPI:

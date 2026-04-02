@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pandas as pd
 import pytest_asyncio
-from betterproto.lib.google.protobuf import Struct, Value
+from google.protobuf.struct_pb2 import Struct
 from httpx import ASGITransport, AsyncClient
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
@@ -32,7 +32,7 @@ def config_substations() -> None:
 
 
 @pytest_asyncio.fixture(scope="module")
-def api_client_substations(
+async def api_client_substations(
     config_substations: ConfigTree, dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
 ) -> AsyncClient:
     """Returns a TestClient for the FastAPI application."""
@@ -41,7 +41,7 @@ def api_client_substations(
     db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
     app.dependency_overrides[models.get_storage_client] = lambda: db_instance
 
-    with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
@@ -56,7 +56,8 @@ def make_substation_location(
 
     The substation is a point within the GSP polygon.
     """
-    metadata = Struct(fields={"gsp_id": Value(number_value=gsp_id)})
+    metadata = Struct()
+    metadata.update({"gsp_id": gsp_id})
 
     return messages_pb2.CreateLocationRequest(
         location_name=name,
@@ -70,7 +71,7 @@ def make_substation_location(
 
 
 @pytest_asyncio.fixture(scope="session")
-def substation_locations(
+async def substation_locations(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],  # noqa: ARG001 - ensures GSPs are created first
 ) -> list[tuple[UUID, str, int]]:
@@ -99,14 +100,14 @@ def substation_locations(
             lon=lon,
             capacity_watts=capacity_watts,
         )
-        res = dp_client.CreateLocation(create_location_request)
+        res = await dp_client.CreateLocation(create_location_request)
         created_substations.append((UUID(res.location_uuid), name, gsp_id))
 
     return created_substations
 
 
 @pytest_asyncio.fixture(scope="session")
-def make_gsp_forecast_values(
+async def make_gsp_forecast_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],
     make_forecasters: None,  # noqa: ARG001 - ensures forecasters are created first
@@ -120,4 +121,4 @@ def make_gsp_forecast_values(
         # Create forecasts for both blend and blend_adjust
         for model_name in ["blend", "blend_adjust"]:
             request = forecast(location_uuid, model_name, init_time_utc)
-            _ = dp_client.CreateForecast(request)
+            _ = await dp_client.CreateForecast(request)

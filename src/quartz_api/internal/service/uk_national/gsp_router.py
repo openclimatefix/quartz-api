@@ -70,7 +70,7 @@ _cache_warming: bool = False
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
-def get_forecasts_for_a_specific_gsp(
+async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -109,7 +109,7 @@ def get_forecasts_for_a_specific_gsp(
         # existent GSP - so that is what is replicated here. Seems odd to me.
         return []
 
-    pgvs = db.get_predicted_generation(
+    pgvs = await db.get_predicted_generation(
         location_uuid=gsp_id_map[gsp_id].uuid,
         window_start=start_datetime_utc,
         window_end=end_datetime_utc,
@@ -144,7 +144,7 @@ def get_forecasts_for_a_specific_gsp(
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
-def get_truths_for_a_specific_gsp(
+async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -179,7 +179,7 @@ def get_truths_for_a_specific_gsp(
             detail=f"GSP ID {gsp_id} not found",
         )
 
-    agvs = db.get_actual_generation(
+    agvs = await db.get_actual_generation(
         location_uuid=gsp_id_map[gsp_id].uuid,
         window_start=start_datetime_utc,
         window_end=end_datetime_utc,
@@ -294,7 +294,7 @@ def _build_forecast_response(
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE) # 10 minutes
-def get_all_available_forecasts(
+async def get_all_available_forecasts(
     request: Request,
     background_tasks: BackgroundTasks,
     db: models.StorageClientDependency,
@@ -349,7 +349,7 @@ def get_all_available_forecasts(
     if gsp_ids is None:
         gsps_to_convert = gsp_id_map
         results = [
-            db.get_predicted_generation_snapshot(
+            await db.get_predicted_generation_snapshot(
                 location_uuids=[v.uuid for _,v in gsp_id_map.items()],
                 snapshot_timestamp_utc=start_datetime_utc,
                 authdata={},
@@ -365,7 +365,7 @@ def get_all_available_forecasts(
             if k in convert_list_of_gsp_ids(gsp_ids)
         }
         results = [
-            db.get_predicted_generation(
+            await db.get_predicted_generation(
                 location_uuid=str(loc.uuid),
                 window_start=start_datetime_utc,
                 window_end=end_datetime_utc,
@@ -424,7 +424,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         total = len(timestamps)
         results: list[list[models.PredictedGenerationValue]] = []
         for i, ts in enumerate(timestamps):
-            result = db.get_predicted_generation_snapshot(
+            result = await db.get_predicted_generation_snapshot(
                 location_uuids=list(gsp_uuid_id_map.keys()),
                 snapshot_timestamp_utc=ts.to_pydatetime(),
                 energy_type=models.EnergyType.SOLAR,
@@ -530,7 +530,7 @@ def refresh_forecast_all_cache(
     include_in_schema=False,
 )
 @cache(key_builder=key_builder, expire=60 * 30)
-def get_truths_for_all_gsps(
+async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -565,7 +565,7 @@ def get_truths_for_all_gsps(
 
     if gsp_ids is None:
         # Return a snapshot of the data at the start_datetime_utc for all gsps
-        values = db.get_actual_generation_snapshot(
+        values = await db.get_actual_generation_snapshot(
                 location_uuids=[loc.uuid for loc in gsp_id_map.values()],
                 snapshot_timestamp_utc=start_datetime_utc,
                 energy_type=models.EnergyType.SOLAR,
@@ -583,7 +583,7 @@ def get_truths_for_all_gsps(
 
     elif len(gsp_ids) == 1:
         # Get observations as a timeseries
-        values = db.get_actual_generation(
+        values = await db.get_actual_generation(
             location_uuid=gsp_id_map[gsp_ids[0]].uuid,
             window_start=start_datetime_utc,
             window_end=end_datetime_utc,
@@ -605,7 +605,7 @@ def get_truths_for_all_gsps(
         # Looping over snapshots results in fewer calls than looping over GSPs
         out = []
         for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min"):
-            tsout = db.get_actual_generation_snapshot(
+            tsout = await db.get_actual_generation_snapshot(
                 location_uuids=list(gsp_uuid_id_map.keys()),
                 snapshot_timestamp_utc=ts,
                 energy_type=models.EnergyType.SOLAR,

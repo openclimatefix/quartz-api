@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any
 
-import grpc
+import grpc.aio
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing_extensions import override
@@ -74,31 +74,32 @@ class TracerMiddleware(BaseHTTPMiddleware):
 # See https://github.com/grpc/grpc/blob/master/examples/python/interceptors/headers/header_manipulator_client_interceptor.py
 class _ClientCallDetails(
     collections.namedtuple(
-        "_ClientCallDetails", ("method", "timeout", "metadata", "credentials"),
+        "_ClientCallDetails", ("method", "timeout", "metadata", "credentials", "wait_for_ready"),
     ),
-    grpc.ClientCallDetails,
+    grpc.aio.ClientCallDetails,
 ):
     pass
 
-class TraceInterceptor(grpc.UnaryUnaryClientInterceptor):
+class TraceInterceptor(grpc.aio.UnaryUnaryClientInterceptor):
     """GRPC Interceptor to add tracing information to outgoing GRPC requests."""
 
     @override
-    def intercept_unary_unary(
+    async def intercept_unary_unary(
             self,
-            continuation: Callable,
-            client_call_details: grpc.ClientCallDetails,
+            continuation: Callable[[grpc.HandlerCallDetails], Awaitable[grpc.RpcMethodHandler]],
+            client_call_details: grpc.aio.ClientCallDetails,
             request: Any,
         ) -> Any:
         trace_id = get_trace_id()
 
         new_metadata = list(client_call_details.metadata or [])
         new_metadata.append(("traceid", trace_id))
-        new_details: grpc.ClientCallDetails = _ClientCallDetails(
+        new_details: grpc.aio.ClientCallDetails = _ClientCallDetails(
             method=client_call_details.method,
             timeout=client_call_details.timeout,
             metadata=new_metadata,
             credentials=client_call_details.credentials,
+            wait_for_ready=client_call_details.wait_for_ready,
         )
 
-        return continuation(new_details, request)
+        return await continuation(new_details, request)

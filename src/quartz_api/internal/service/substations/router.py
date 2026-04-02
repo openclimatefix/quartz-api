@@ -132,7 +132,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     _: AuthDependency,
     datetime_utc: Annotated[
         dt.datetime,
-        Query(default_factory=lambda: pd.Timestamp.utcnow().floor("30T").to_pydatetime()),
+        Query(default_factory=lambda: pd.Timestamp.utcnow().floor("30min").to_pydatetime()),
     ],
 ) -> OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""

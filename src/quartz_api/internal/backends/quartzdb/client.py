@@ -49,7 +49,7 @@ class StorageClient(models.StorageInterface):
             return self.session
 
     @override
-    def get_predicted_generation(
+    async def get_predicted_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -179,7 +179,7 @@ class StorageClient(models.StorageInterface):
         return out
 
     @override
-    def put_predicted_generation(
+    async def put_predicted_generation(
         self,
         generation_values: list[models.PredictedGenerationValue],
         location_type: models.LocationType,
@@ -247,7 +247,7 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
-    def get_actual_generation(
+    async def get_actual_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -329,7 +329,7 @@ class StorageClient(models.StorageInterface):
             return out
 
     @override
-    def put_actual_generation(
+    async def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
         energy_type: models.EnergyType,
@@ -396,7 +396,7 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
-    def get_locations(
+    async def get_locations(
         self,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
@@ -466,7 +466,7 @@ class StorageClient(models.StorageInterface):
         return locations
 
     @override
-    def get_predicted_generation_snapshot(
+    async def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -478,7 +478,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Quartz Storage Client does not support snapshot fetches.")
 
     @override
-    def get_actual_generation_snapshot(
+    async def get_actual_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -489,7 +489,7 @@ class StorageClient(models.StorageInterface):
         raise NotImplementedError("Quartz Storage Client does not support snapshot fetches.")
 
     @override
-    def put_location(
+    async def put_location(
         self,
         location: models.Location,
         location_type: models.LocationType,
@@ -564,7 +564,7 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
-    def log_api_call(
+    async def log_api_call(
         self,
         url: str,
         authdata: dict[str, str],
