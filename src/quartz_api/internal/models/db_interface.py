@@ -27,8 +27,8 @@ class LocationType(Enum):
     NATION = 5
 
 
-@dataclasses.dataclass
-class GenerationValue(slots=True):
+@dataclasses.dataclass(slots=True)
+class GenerationValue:
     """Base class for generation values."""
 
     power_kilowatts: float

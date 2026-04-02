@@ -131,7 +131,10 @@ def mock_get_latest_forecasts(
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_locations(self, client_mock: service_pb2_grpc.DataPlatformDataServiceStub) -> None:
+    async def test_get_locations(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str

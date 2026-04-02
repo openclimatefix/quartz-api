@@ -7,6 +7,7 @@ from uuid import UUID
 from dp_sdk.ocf.dp.dp import common_pb2
 from dp_sdk.ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from fastapi import HTTPException
+from google.protobuf.json_format import MessageToDict
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -171,14 +172,14 @@ class StorageClient(models.StorageInterface):
                 ),
                 valid_timestamp=v.target_timestamp_utc,
                 location_uuid=UUID(location_uuid) \
-                    if isintance(location_uuid, str) else location_uuid,
+                    if isinstance(location_uuid, str) else location_uuid,
                 capacity_kilowatts=int(float(v.effective_capacity_watts) / 1000),
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
                 plevels_kilowatts=plevels,
-                metadata=v.metadata,
+                metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
             ))
 
         return out
@@ -231,7 +232,8 @@ class StorageClient(models.StorageInterface):
             models.ActualGenerationValue(
                 valid_timestamp=v.timestamp_utc,
                 power_kilowatts=int(v.effective_capacity_watts * v.v_fraction / 1000.0),
-                location_uuid=location_uuid if isinstance(location_uuid, UUID) else UUID(location_uuid),
+                location_uuid=location_uuid \
+                    if isinstance(location_uuid, UUID) else UUID(location_uuid),
                 capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
                 observer_name=observer_name,
             )
@@ -293,7 +295,7 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster.forecaster_version,
                 created_timestamp=v.created_timestamp_utc,
                 init_timestamp=v.initialization_timestamp_utc,
-                metadata=struct_to_dict(v.metadata),
+                metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
             )
             for v in resp.values
         ]
@@ -376,7 +378,7 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                 latitude=loc.latlng.latitude,
                 longitude=loc.latlng.longitude,
-                metadata=struct_to_dict(loc.metadata),
+                metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
             )
             for loc in resp.locations
         ]
@@ -428,7 +430,7 @@ class StorageClient(models.StorageInterface):
             capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
-            metadata=loc.metadata,
+            metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
         )
 
 
