@@ -7,9 +7,9 @@ from uuid import UUID
 import pandas as pd
 import pytest_asyncio
 from betterproto.lib.google.protobuf import Struct, Value
-from ocf.dp.dp_data import service_pb2_grpc, messages_pb2
-from ocf.dp.dp import common_pb2
 from httpx import ASGITransport, AsyncClient
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from pyhocon import ConfigFactory, ConfigTree
 
 from quartz_api.cmd.main import _create_server

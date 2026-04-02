@@ -86,7 +86,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
     },
 )
 @cache(key_builder=key_builder)
-async def get_national_forecast(
+def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -155,7 +155,7 @@ async def get_national_forecast(
         model_name_str += "_adjust"
 
     # get national location
-    locations = await db.get_locations(
+    locations = db.get_locations(
         location_uuid=gsp_id_map[0].uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
@@ -163,10 +163,9 @@ async def get_national_forecast(
     )
     uk_loc = locations[0]
 
-
     all_pgvs: list[models.PredictedGenerationValue] = []
     for window in windows:
-        pgvs = await db.get_predicted_generation(
+        pgvs = db.get_predicted_generation(
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.NATION,
             window_start=window[0],
@@ -181,7 +180,6 @@ async def get_national_forecast(
         )
         all_pgvs.extend(pgvs)
         log.info(f"Fetched {len(pgvs)} predicted generation values")
-
 
     all_pgvs = sorted(all_pgvs, key=lambda x: x.valid_timestamp, reverse=False)
     out: list[NationalForecastValue] = [
@@ -231,7 +229,7 @@ async def get_national_forecast(
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder)
-async def get_national_pvlive(
+def get_national_pvlive(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
@@ -255,7 +253,7 @@ async def get_national_pvlive(
 
     """
     # get national location UUID and and set forecast horizon
-    locations = await db.get_locations(
+    locations = db.get_locations(
         location_uuid=gsp_id_map[0].uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
@@ -263,7 +261,7 @@ async def get_national_pvlive(
     )
     uk_loc = locations[0]
 
-    agvs = await db.get_actual_generation(
+    agvs = db.get_actual_generation(
         location_uuid=uk_loc.uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
