@@ -232,8 +232,7 @@ class StorageClient(models.StorageInterface):
             models.ActualGenerationValue(
                 valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 power_kilowatts=int(v.effective_capacity_watts * v.v_fraction / 1000.0),
-                location_uuid=location_uuid \
-                    if isinstance(location_uuid, UUID) else UUID(location_uuid),
+                location_uuid=UUID(v.location_uuid),
                 capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
                 observer_name=observer_name,
             )
@@ -373,7 +372,7 @@ class StorageClient(models.StorageInterface):
         resp = self.dpc.ListLocations(req)
         out: list[models.Location] = [
             models.Location(
-                uuid=UUID(loc.location_uuid) if isinstance(loc.location_uuid, str) else loc.location_uuid,
+                uuid=UUID(loc.location_uuid),
                 name=loc.location_name,
                 capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                 latitude=loc.latlng.latitude,
@@ -425,7 +424,7 @@ class StorageClient(models.StorageInterface):
         loc = resp.locations[0]
 
         return models.Location(
-            uuid=loc.location_uuid,
+            uuid=UUID(loc.location_uuid),
             name=loc.location_name,
             capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
             latitude=loc.latlng.latitude,
