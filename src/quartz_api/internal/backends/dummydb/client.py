@@ -21,7 +21,7 @@ class StorageClient(models.StorageInterface):
     """Defines a dummy storage that conforms to the StorageInterface."""
 
     @override
-    async def get_predicted_generation(
+    def get_predicted_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -65,7 +65,7 @@ class StorageClient(models.StorageInterface):
         return values
 
     @override
-    async def put_predicted_generation(
+    def put_predicted_generation(
         self,
         generation_values: list[models.PredictedGenerationValue],
         energy_type: models.EnergyType,
@@ -74,7 +74,7 @@ class StorageClient(models.StorageInterface):
         pass
 
     @override
-    async def get_actual_generation(
+    def get_actual_generation(
         self,
         location_uuid: UUID | str,
         window_start: dt.datetime,
@@ -112,7 +112,7 @@ class StorageClient(models.StorageInterface):
         return values
 
     @override
-    async def put_actual_generation(
+    def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
         location_uuid: UUID,
@@ -123,7 +123,7 @@ class StorageClient(models.StorageInterface):
         pass
 
     @override
-    async def get_locations(
+    def get_locations(
         self,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
@@ -193,7 +193,7 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
-    async def get_predicted_generation_snapshot(
+    def get_predicted_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -226,7 +226,7 @@ class StorageClient(models.StorageInterface):
         return values
 
     @override
-    async def get_actual_generation_snapshot(
+    def get_actual_generation_snapshot(
         self,
         location_uuids: list[UUID],
         snapshot_timestamp_utc: dt.datetime,
@@ -254,7 +254,7 @@ class StorageClient(models.StorageInterface):
         return values
 
     @override
-    async def put_location(
+    def put_location(
         self,
         location: models.Location,
         location_type: models.LocationType,
@@ -272,7 +272,7 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
-    async def log_api_call(
+    def log_api_call(
         self,
         url: str,
         authdata: dict[str, str],
