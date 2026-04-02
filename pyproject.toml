@@ -37,6 +37,8 @@ dependencies = [
     "grpc-requests>=0.1.21",
     "gunicorn>=25.3.0",
     "jinja2>=3.1.6",
+    "dp_sdk @ ${PROJECT_ROOT}/gen/python",
+
 ]
 
 [dependency-groups]
@@ -62,8 +64,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.24.5/dp_sdk-0.24.5-py3-none-any.whl" }
-
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 
 [project.urls]
 repository = "https://github.com/openclimatefix/quartz-api"
