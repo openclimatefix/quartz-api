@@ -176,15 +176,18 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             redis = aioredis.from_url(conf.get_string("cache.url"))
             FastAPICache.init(RedisBackend(redis), expire=120, prefix="fastapi-cache")
         case "memcache":
-            from fastapi_cache.backends.memcached import MemcachedBackend
             from aiomcache import Client as MemcachedClient
+            from fastapi_cache.backends.memcached import MemcachedBackend
 
             host, _, port = conf.get_string("cache.url").rpartition(":")
             mc = MemcachedClient(host or "localhost", int(port or 11211))
             FastAPICache.init(MemcachedBackend(mc), expire=120, prefix="fastapi-cache")
         case _:
             FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
-            log.warning("using in-memory cache. NOT recommended for production with multiple workers")
+            log.warning(
+                "using in-memory cache. NOT recommended for production"
+                " with multiple workers",
+            )
 
     # Register rate limiter
     server.state.limiter = ratelimit.limiter
