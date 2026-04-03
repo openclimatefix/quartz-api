@@ -280,9 +280,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             env=conf.get_string("apitally.environment"),
             enable_request_logging=True,
             log_request_headers=True,
-            log_request_body=True,
-            log_response_body=True,
-            capture_logs=True,
+            log_request_body=False,
+            log_response_body=False,
+            capture_logs=False,
         )
 
     server.add_middleware(trace.TracerMiddleware)
