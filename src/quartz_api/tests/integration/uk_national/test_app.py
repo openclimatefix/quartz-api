@@ -352,6 +352,7 @@ async def test_gsp_pvlive_all(
     gsp_locations,  # noqa arg001
     make_forecasters,  # noqa arg001
     make_gsp_forecast_values,  # noqa arg001
+    make_observers,  # noqa arg001
 ) -> None:
     """Test a sample endpoint for UK National forecast data."""
 
