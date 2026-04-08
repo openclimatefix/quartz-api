@@ -5,7 +5,6 @@ import typing
 from uuid import UUID
 
 import pandas as pd
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from ocf.dp.dp import common_pb2
