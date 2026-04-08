@@ -123,6 +123,7 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
     """Make national location."""
     # add location gsp 1 to 10
     location_uuids = []
+    gsp_id_map.clear()
     for i in range(1, 11):
         metadata = Struct(fields={"gsp_id": Value(number_value=i)})
         create_location_request = make_location(
@@ -134,7 +135,6 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
         res = await dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
 
-        gsp_id_map.clear()
         gsp_id_map[i] = models.Location(
             uuid=UUID(res.location_uuid),
             metadata={"gsp_id": i},
