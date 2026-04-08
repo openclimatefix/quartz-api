@@ -11,6 +11,7 @@ from google.protobuf.struct_pb2 import Struct, Value
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from testcontainers.core.container import DockerContainer
+from testcontainers.core.network import Network
 from testcontainers.postgres import PostgresContainer
 
 from quartz_api.internal import models
@@ -24,36 +25,35 @@ async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
     This fixture uses `testcontainers` to start a fresh PostgreSQL container and provides
     the connection URL dynamically for use in other fixtures.
     """
-    # we use a specific postgres image with postgis and pgpartman installed
-    # TODO make a release of this, not using logging tag.
-    with PostgresContainer(
-        f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
-        username="postgres",
-        password="postgres",  # noqa S106
-        dbname="postgres",
-        env={"POSTGRES_HOST": "db"},
-    ) as postgres:
-        database_url = postgres.get_connection_url()
-        # we need to get ride of psycopg2, so the go driver works
-        database_url = database_url.replace("postgresql+psycopg2", "postgres")
-        # we need to change to host.docker.internal so the data platform container can see it
-        # https://stackoverflow.com/questions/46973456/docker-access-localhost-port-from-container
-        database_url = database_url.replace("localhost", "host.docker.internal")
-
-        with DockerContainer(
+    with Network() as network:
+        database_url = "postgresql://postgres:postgres@db:5432/postgres?sslmode=disable"
+        # we use a specific postgres image with postgis and pgpartman installed
+        with PostgresContainer(
+            f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
+            username="postgres",
+            password="postgres",  # noqa S106
+            dbname="postgres",
+        ).with_network(network).with_network_aliases("db"), DockerContainer(
             image=f"ghcr.io/openclimatefix/data-platform:{version('dp_sdk')}",
             env={"DATABASE_URL": database_url},
             ports=[50051],
-        ) as data_platform_server:
-            time.sleep(1)  # Give some time for the server to start
+            platform="linux/amd64",
+        ).with_network(network) as data_platform_server:
+            time.sleep(2)
+            try:
+                port = data_platform_server.get_exposed_port(50051)
+            except Exception as e:
+                raise e
 
-            port = data_platform_server.get_exposed_port(50051)
             host = data_platform_server.get_container_host_ip()
             os.environ["DATA_PLATFORM_HOST"] = host
             os.environ["DATA_PLATFORM_PORT"] = str(port)
 
             channel = grpc.aio.insecure_channel(target=f"{host}:{port}")
+            await channel.channel_ready()
+
             client = service_pb2_grpc.DataPlatformDataServiceStub(channel)
+
             yield client
             await channel.close()
 
