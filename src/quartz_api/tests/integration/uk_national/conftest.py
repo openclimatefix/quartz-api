@@ -21,8 +21,8 @@ from quartz_api.tests.integration.conftest import forecast
 auth_dep = typing.get_args(AuthDependency)[1].dependency
 
 
-@pytest.fixture(scope="session")
-def config_uk_national() -> None:
+@pytest_asyncio.fixture(scope="session")
+async def config_uk_national() -> None:
     """Returns the configuration tree for the UK National integration tests."""
     # set env variable to point to the config file
     os.environ["ROUTERS"] = "uk_national"
@@ -76,8 +76,8 @@ async def api_client_uk_national_non_admin(
         yield ac
 
 
-@pytest.fixture(scope="session")
-def make_national_forecast_values(
+@pytest_asyncio.fixture(scope="session")
+async def make_national_forecast_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     national_location: messages_pb2.CreateLocationResponse,
 ) -> None:
@@ -90,11 +90,11 @@ def make_national_forecast_values(
             "blend_adjust",
             init_time_utc - datetime.timedelta(minutes=i * 30),
         )
-        _ = dp_client.CreateForecast(request)
+        _ = await dp_client.CreateForecast(request)
 
 
-@pytest.fixture(scope="session")
-def make_gsp_forecast_values(
+@pytest_asyncio.fixture(scope="session")
+async def make_gsp_forecast_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],
 ) -> None:
@@ -103,17 +103,17 @@ def make_gsp_forecast_values(
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
     for location_uuid in gsp_locations:
         request = forecast(location_uuid, "blend", init_time_utc)
-        _ = dp_client.CreateForecast(request)
+        _ = await dp_client.CreateForecast(request)
 
 
-@pytest.fixture(scope="session")
-def make_observers(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> None:
+@pytest_asyncio.fixture(scope="session")
+async def make_observers(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> None:
     """Make observers."""
     for model_name in ["pvlive_in_day", "pvlive_day_after"]:
         create_observer_request = messages_pb2.CreateObserverRequest(
             name=model_name,
         )
-        _ = dp_client.CreateObserver(create_observer_request)
+        _ = await dp_client.CreateObserver(create_observer_request)
 
 
 def make_observation_values(
@@ -136,8 +136,8 @@ def make_observation_values(
     )
 
 
-@pytest.fixture(scope="session")
-def make_national_observation_values(
+@pytest_asyncio.fixture(scope="session")
+async def make_national_observation_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     national_location: messages_pb2.CreateLocationResponse,
 ) -> None:
@@ -150,11 +150,11 @@ def make_national_observation_values(
             observer_name=model_name,
             init_time_utc=init_time_utc,
         )
-        _ = dp_client.CreateObservations(request)
+        _ = await dp_client.CreateObservations(request)
 
 
-@pytest.fixture(scope="session")
-def make_gsp_observation_values(
+@pytest_asyncio.fixture(scope="session")
+async def make_gsp_observation_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[messages_pb2.CreateLocationResponse],
 ) -> None:
@@ -168,4 +168,5 @@ def make_gsp_observation_values(
                 observer_name=model_name,
                 init_time_utc=init_time_utc,
             )
-            _ = dp_client.CreateObservations(request)
+            _ = await dp_client.CreateObservations(request)
+

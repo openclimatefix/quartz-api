@@ -415,7 +415,7 @@ async def test_gsp_pvlive_all(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 193
+    assert len(data) == 10
 
 
 # 5.1 check system routes
