@@ -25,7 +25,7 @@ from .endpoint_types import (
     gsp_id_map,
     model_names_external_to_internal,
 )
-from .time_utils import limit_end_datetime_by_permissions
+from .time_utils import get_start_window, limit_end_datetime_by_permissions
 
 log = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ async def get_national_forecast(
     # we get from from now - rounded up to nearest 30 mins, less 3 days.
     if start_datetime_utc is None:
         start_datetime_utc \
-            = pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2)
+            = get_start_window()
         if include_metadata:
             start_datetime_utc \
                 = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
@@ -267,7 +267,7 @@ async def get_national_pvlive(
         location_uuid=uk_loc.uuid,
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
-        window_start=pd.Timestamp.utcnow().floor("6h").to_pydatetime() - dt.timedelta(days=2),
+        window_start=get_start_window(),
         window_end=pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2),
         observer_name=f"pvlive_{regime}",
         authdata={},
