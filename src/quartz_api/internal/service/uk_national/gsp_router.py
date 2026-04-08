@@ -612,11 +612,12 @@ async def get_truths_for_all_gsps(
                 observer_name=f"pvlive_{regime}",
                 authdata={},
             )
-            out.append(GSPYieldGroupByDatetime(
-                datetime_utc=ts,
-                generation_kw_by_gsp_id={
-                    gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in tsout
-                }),
+            if len(tsout) > 0:
+                out.append(GSPYieldGroupByDatetime(
+                    datetime_utc=ts,
+                    generation_kw_by_gsp_id={
+                        gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in tsout
+                    }),
             )
 
     return out
