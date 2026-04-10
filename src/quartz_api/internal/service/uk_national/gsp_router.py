@@ -75,7 +75,7 @@ async def get_forecasts_for_a_specific_gsp(
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
+    start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK,
     end_datetime_utc: Annotated[
         dt.datetime,
         Depends(limit_end_datetime_by_permissions),
@@ -149,7 +149,7 @@ async def get_truths_for_a_specific_gsp(
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
     gsp_id: int,
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart,
+    start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[GSPYield]:
@@ -544,7 +544,7 @@ async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStart, # TODO update to now
+    start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK, # TODO update to now
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
     gsp_ids: str | None = None,
