@@ -136,7 +136,7 @@ async def get_national_forecast(
         start_datetime_utc = get_start_window()
         if include_metadata:
             start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(
-                days=3
+                days=3,
             )
 
     windows: list[tuple[dt.datetime, dt.datetime]] = [(start_datetime_utc, end_datetime_utc)]
