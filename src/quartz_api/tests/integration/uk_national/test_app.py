@@ -1,3 +1,4 @@
+import datetime
 import pandas as pd
 import pytest
 from fastapi_cache import FastAPICache
@@ -103,6 +104,26 @@ async def test_national_forecast_metadata_true_and_false(
             == data_with_metadata["forecastValues"][i]["expectedPowerGenerationMegawatts"]
         )
     assert data_with_metadata["model"]["version"] == "1.2.3"
+
+
+# 2.4 Test the National Forecast last_run_datetime route
+@pytest.mark.asyncio(loop_scope="session")
+async def test_national_forecast_last_run_datetime(
+    api_client_uk_national,
+    national_location,  # noqa arg001
+    make_forecasters,  # noqa arg001
+    make_national_forecast_values,  # noqa arg001
+) -> None:
+    """Test the last_run_datetime endpoint returns a datetime string."""
+
+    response = await api_client_uk_national.get(
+        "/v0/solar/GB/national/forecast/last_run_datetime",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, str)
+    # Verify it's a valid ISO 8601 datetime
+    datetime.datetime.fromisoformat(data)
 
 
 # 3.1 Test the National PVlive route

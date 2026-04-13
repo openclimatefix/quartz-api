@@ -5,7 +5,7 @@ import logging
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
@@ -223,6 +223,51 @@ async def get_national_forecast(
         )
 
         return national_forecast
+
+
+@router.get(
+    "/forecast/last_run_datetime",
+    response_model=dt.datetime,
+    status_code=status.HTTP_200_OK,
+)
+@cache(key_builder=key_builder, expire=10)
+async def get_national_last_run_datetime(
+    request: Request,  # noqa: ARG001
+    db: models.StorageClientDependency,
+    auth: AuthDependency,  # noqa: ARG001
+    model_name: ModelName = ModelName.blend,
+    trend_adjuster_on: bool | None = True,
+) -> dt.datetime:
+    """This route returns the creation time of the most recent forecast.
+
+    - **model_name**: optional, specify which model to use for the forecast.
+       Options: blend (default), pvnet_intraday, pvnet_day_ahead, pvnet_intraday_ecmwf_only
+    - **trend_adjuster_on**: optional, default is True.
+       The forecast is adjusted depending on trends in the last week.
+
+    """
+    # get model name
+    model_name_str = model_names_external_to_internal[model_name]
+    if trend_adjuster_on:
+        model_name_str += "_adjust"
+
+    forecast = await db.get_predicted_generation(
+        location_uuid=gsp_id_map[0].uuid,
+        location_type=models.LocationType.NATION,
+        energy_type=models.EnergyType.SOLAR,
+        window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=30),
+        window_end=dt.datetime.now(tz=dt.UTC),
+        authdata={},
+        forecaster_name=model_name_str,
+    )
+
+    if not forecast:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No forecasts found",
+        )
+
+    return forecast[0].created_timestamp
 
 
 @router.get(
