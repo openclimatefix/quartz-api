@@ -1,4 +1,5 @@
 import datetime
+
 import pandas as pd
 import pytest
 from fastapi_cache import FastAPICache
@@ -342,7 +343,8 @@ async def test_gsp_forecast_all_for_one_timestamp(
     data = response.json()
     data = data["forecasts"]
     assert isinstance(data, list)
-    assert len(data) == 10 # 10 gsps
+    assert len(data) == 10  # 10 gsps
+
 
 # 4.3.7 Get forecast/all with for one timestamp, compact=true
 @pytest.mark.asyncio(loop_scope="session")
@@ -361,9 +363,6 @@ async def test_gsp_forecast_all_for_one_timestamp_compact(
     data = response.json()
     assert isinstance(data, list)
     assert len(data) == 1
-
-
-
 
 
 # 4.4 Check GSP pvlive route
@@ -437,6 +436,7 @@ async def test_gsp_status_check_last_forecast_run(
     data = response.json()
     assert isinstance(data, str)
 
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_system_details(
     api_client_uk_national,
@@ -450,4 +450,3 @@ async def test_system_details(
     data = response.json()
     assert isinstance(data, list)
     assert len(data) == 1
-
