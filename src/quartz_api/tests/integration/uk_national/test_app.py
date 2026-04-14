@@ -1,6 +1,11 @@
+import datetime
+
 import pandas as pd
 import pytest
+from dp_sdk.ocf import dp
 from fastapi_cache import FastAPICache
+
+from quartz_api.internal.service.uk_national.national_router import FORECASTER_VERSION_BLEND
 
 
 # 1. Does the app start up, and can we use health
@@ -103,6 +108,51 @@ async def test_national_forecast_metadata_true_and_false(
             == data_with_metadata["forecastValues"][i]["expectedPowerGenerationMegawatts"]
         )
     assert data_with_metadata["model"]["version"] == "1.2.3"
+
+
+# 2.4 Test the National Forecast last_run_datetime route
+@pytest.mark.asyncio(loop_scope="session")
+async def test_national_forecast_last_updated(
+    api_client_uk_national,
+    dp_client: dp.DataPlatformDataServiceStub,
+    national_location,
+    make_forecasters,  # noqa arg001
+    make_national_forecast_values,  # noqa arg001
+) -> None:
+    """Test the last_run_datetime endpoint returns a datetime string."""
+
+    response = await api_client_uk_national.get(
+        "/v0/solar/GB/national/forecast/last_updated",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, str)
+
+    last_updated_reponse = datetime.datetime.fromisoformat(data)
+    assert last_updated_reponse.tzinfo is not None
+
+    # get the latest updated from data platform
+    # note we have to use the specifc call, to make sure the create time matches completely
+    # There is currently a bug in dp_client.get_latest_forecast, so cant use that for created time
+    now = datetime.datetime.now(tz=datetime.UTC)
+    dp_response = await dp_client.get_forecast_as_timeseries(
+        dp.GetForecastAsTimeseriesRequest(
+            location_uuid=national_location.location_uuid,
+            energy_source=dp.EnergySource.SOLAR,
+            time_window=dp.TimeWindow(
+                start_timestamp_utc=now - datetime.timedelta(minutes=30),
+                end_timestamp_utc=now + datetime.timedelta(minutes=30),
+            ),
+            forecaster=dp.Forecaster(
+                forecaster_name="blend_adjust",
+                forecaster_version=FORECASTER_VERSION_BLEND,
+            ),
+        ),
+    )
+    last_updated_forecast = max([forecast.created_timestamp_utc for forecast in dp_response.values])
+
+    # check data-platform and api has same respsone
+    assert last_updated_reponse == last_updated_forecast
 
 
 # 3.1 Test the National PVlive route
@@ -321,7 +371,8 @@ async def test_gsp_forecast_all_for_one_timestamp(
     data = response.json()
     data = data["forecasts"]
     assert isinstance(data, list)
-    assert len(data) == 10 # 10 gsps
+    assert len(data) == 10  # 10 gsps
+
 
 # 4.3.7 Get forecast/all with for one timestamp, compact=true
 @pytest.mark.asyncio(loop_scope="session")
@@ -340,9 +391,6 @@ async def test_gsp_forecast_all_for_one_timestamp_compact(
     data = response.json()
     assert isinstance(data, list)
     assert len(data) == 1
-
-
-
 
 
 # 4.4 Check GSP pvlive route
@@ -416,6 +464,7 @@ async def test_gsp_status_check_last_forecast_run(
     data = response.json()
     assert isinstance(data, str)
 
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_system_details(
     api_client_uk_national,
@@ -429,4 +478,3 @@ async def test_system_details(
     data = response.json()
     assert isinstance(data, list)
     assert len(data) == 1
-

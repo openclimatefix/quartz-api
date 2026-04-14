@@ -5,7 +5,7 @@ import logging
 from typing import Annotated
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
@@ -58,7 +58,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
                                 ],
                             },
                             "With metadata (include_metadata=true)": {
-                                "summary": "Full NationalForecast object with location and model info", # noqa: E501
+                                "summary": "Full NationalForecast object with location and model info",  # noqa: E501
                                 "value": {
                                     "location": {"label": "national", "gspId": 0},
                                     "model": {"name": "blend_adjust", "version": "1.3.0"},
@@ -89,7 +89,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency, # noqa: ARG001
+    auth: AuthDependency,  # noqa: ARG001
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEndNonAware,
         Depends(limit_end_datetime_by_permissions),
@@ -135,16 +135,18 @@ async def get_national_forecast(
     if start_datetime_utc is None:
         start_datetime_utc \
             = models.get_start_window_shifted_for_uk()
+
         if include_metadata:
-            start_datetime_utc \
-                = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(days=3)
+            start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(
+                days=3,
+            )
 
     windows: list[tuple[dt.datetime, dt.datetime]] = [(start_datetime_utc, end_datetime_utc)]
     if end_datetime_utc - start_datetime_utc > dt.timedelta(days=7):
         windows = [
             (
                 start_datetime_utc + dt.timedelta(days=i),
-                min(start_datetime_utc + dt.timedelta(days=i+7, seconds=-1), end_datetime_utc),
+                min(start_datetime_utc + dt.timedelta(days=i + 7, seconds=-1), end_datetime_utc),
             )
             for i in range(0, (end_datetime_utc - start_datetime_utc).days, 7)
         ]
@@ -163,7 +165,6 @@ async def get_national_forecast(
     )
     uk_loc = locations[0]
 
-
     all_pgvs: list[models.PredictedGenerationValue] = []
     for window in windows:
         pgvs = await db.get_predicted_generation(
@@ -174,14 +175,14 @@ async def get_national_forecast(
             created_cutoff=creation_limit_utc,
             forecast_horizon_minutes=forecast_horizon_minutes or 0,
             forecaster_name=model_name_str,
-            forecaster_version=FORECASTER_VERSION_BLEND \
-                if model_name == ModelName.blend else FORECASTER_VERSION_PVNET,
+            forecaster_version=FORECASTER_VERSION_BLEND
+            if model_name == ModelName.blend
+            else FORECASTER_VERSION_PVNET,
             authdata={},
             location_uuid=uk_loc.uuid,
         )
         all_pgvs.extend(pgvs)
         log.info(f"Fetched {len(pgvs)} predicted generation values")
-
 
     all_pgvs = sorted(all_pgvs, key=lambda x: x.valid_timestamp, reverse=False)
     out: list[NationalForecastValue] = [
@@ -190,9 +191,11 @@ async def get_national_forecast(
             expected_power_generation_megawatts=v.power_kilowatts / 1000,
             plevels={
                 "plevel_10": v.plevels_kilowatts.get("p10") / 1000
-                    if v.plevels_kilowatts.get("p10") is not None else None,
+                if v.plevels_kilowatts.get("p10") is not None
+                else None,
                 "plevel_90": v.plevels_kilowatts.get("p90") / 1000
-                    if v.plevels_kilowatts.get("p90") is not None else None,
+                if v.plevels_kilowatts.get("p90") is not None
+                else None,
             },
         )
         for v in all_pgvs
@@ -202,7 +205,6 @@ async def get_national_forecast(
         return out
 
     else:
-
         # Legacy inputdata,
         # In nowcasting_datamodel, we get this from the database
         input_data = format_metadata(pgvs[-1].metadata)
@@ -226,6 +228,51 @@ async def get_national_forecast(
 
 
 @router.get(
+    "/forecast/last_updated",
+    response_model=dt.datetime,
+    status_code=status.HTTP_200_OK,
+)
+@cache(key_builder=key_builder, expire=10)
+async def get_national_last_updated(
+    request: Request,  # noqa: ARG001
+    db: models.StorageClientDependency,
+    auth: AuthDependency,  # noqa: ARG001
+    model_name: ModelName = ModelName.blend,
+    trend_adjuster_on: bool | None = True,
+) -> dt.datetime:
+    """This route returns the creation time of the most recent forecast.
+
+    - **model_name**: optional, specify which model to use for the forecast.
+       Options: blend (default), pvnet_intraday, pvnet_day_ahead, pvnet_intraday_ecmwf_only
+    - **trend_adjuster_on**: optional, default is True.
+       The forecast is adjusted depending on trends in the last week.
+
+    """
+    # get model name
+    model_name_str = model_names_external_to_internal[model_name]
+    if trend_adjuster_on:
+        model_name_str += "_adjust"
+
+    forecast = await db.get_predicted_generation(
+        location_uuid=gsp_id_map[0].uuid,
+        location_type=models.LocationType.NATION,
+        energy_type=models.EnergyType.SOLAR,
+        window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=30),
+        window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(minutes=30),
+        authdata={},
+        forecaster_name=model_name_str,
+    )
+
+    if not forecast:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No forecasts found",
+        )
+
+    return forecast[0].created_timestamp
+
+
+@router.get(
     "/pvlive",
     response_model=list[NationalYield],
     status_code=status.HTTP_200_OK,
@@ -234,7 +281,7 @@ async def get_national_forecast(
 async def get_national_pvlive(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency, # noqa: ARG001
+    auth: AuthDependency,  # noqa: ARG001
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
 ) -> list[NationalYield]:
     """### Get national PV_Live values for yesterday and/or today.
@@ -286,5 +333,3 @@ async def get_national_pvlive(
     out.sort(key=lambda x: x.datetime_utc, reverse=True)
 
     return out
-
-
