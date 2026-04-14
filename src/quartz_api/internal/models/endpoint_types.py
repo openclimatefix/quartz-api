@@ -44,6 +44,33 @@ def default_window_end() -> dt.datetime:
     """Default factory for UTCDatetimeDefaultNowWindowEnd: UTC now floored to 6 hours + 2 days."""
     return pd.Timestamp.utcnow().floor("6h").to_pydatetime() + dt.timedelta(days=2)
 
+def get_start_window_shifted_for_uk(now: pd.Timestamp| None = None) -> pd.Timestamp:
+    """Get the start window shifted for the UK timezone.
+
+    This gets takes the time now, shifts it to the UK timezone, and then
+    rounds it down to the nearest 6-hour window, moving back 2 days
+    and then converts it back to UTC.
+
+    e.g now is 2026-02-26 12:01 UTC-> 2026-02-24 12:00 UTC
+    e.g now is 2026-07-03 12:01 UTC-> 2026-07-01 11:00 UTC (this is 12:00 BST)
+    """
+    if now is None:
+        now = pd.Timestamp.utcnow()
+    # set as uk london timezone
+    now_london = now.tz_convert("Europe/London")
+    # round and move back 2 days
+    now_minus_2_days_london = now_london.floor("6h") - dt.timedelta(days=2)
+    # change back to utc
+    now_minus_2_days_utc = now_minus_2_days_london.tz_convert("UTC")
+
+    return now_minus_2_days_utc
+
+UTCDatetimeDefaultWindowStartShiftUK = Annotated[
+    UTCDatetime,
+    Query(
+        default_factory=get_start_window_shifted_for_uk,
+    ),
+]
 
 UTCDatetimeDefaultNowWindowStart = Annotated[
     UTCDatetime,

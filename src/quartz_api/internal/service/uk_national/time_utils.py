@@ -3,7 +3,6 @@
 import datetime as dt
 import os
 
-import pandas as pd
 import sentry_sdk
 
 from quartz_api.internal import models
@@ -35,15 +34,3 @@ def limit_end_datetime_by_permissions(
         return min(end_datetime_utc, intraday_max_allowed)
 
     return end_datetime_utc
-
-def get_start_window() -> pd.Timestamp:
-    """Get the start window for the forecast query."""
-    now = pd.Timestamp.utcnow()
-    # set as uk london timezone
-    now_london = now.tz_convert("Europe/London")
-    # round and move back 2 days
-    now_minus_2_days_london = now_london.floor("6h") - dt.timedelta(days=2)
-    # change back to utc
-    now_minus_2_days_utc = now_minus_2_days_london.tz_convert("UTC")
-
-    return now_minus_2_days_utc
