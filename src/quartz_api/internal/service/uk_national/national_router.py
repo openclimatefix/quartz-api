@@ -228,12 +228,12 @@ async def get_national_forecast(
 
 
 @router.get(
-    "/forecast/last_run_datetime",
+    "/forecast/last_updated",
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder, expire=10)
-async def get_national_last_run_datetime(
+async def get_national_last_updated(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,  # noqa: ARG001
@@ -258,7 +258,7 @@ async def get_national_last_run_datetime(
         location_type=models.LocationType.NATION,
         energy_type=models.EnergyType.SOLAR,
         window_start=dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=30),
-        window_end=dt.datetime.now(tz=dt.UTC),
+        window_end=dt.datetime.now(tz=dt.UTC) + dt.timedelta(minutes=30),
         authdata={},
         forecaster_name=model_name_str,
     )
