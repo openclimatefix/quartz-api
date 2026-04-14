@@ -544,7 +544,7 @@ async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
-    start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK, # TODO update to now
+    start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK,
     end_datetime_utc: models.UTCDatetimeDefaultWindowEnd,
     regime: Annotated[str, AfterValidator(lambda v: v.replace("-", "_"))] = "in-day",
     gsp_ids: str | None = None,
