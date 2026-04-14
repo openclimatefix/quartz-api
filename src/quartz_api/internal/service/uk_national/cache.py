@@ -50,7 +50,7 @@ async def key_builder(
             repr(sorted(params)),
             repr(sorted(permissions)),
         ],
-    )
+    ).replace("False", "false").replace("True", "true")
 
     log.info(f"Cache key generated: {key}")
 
