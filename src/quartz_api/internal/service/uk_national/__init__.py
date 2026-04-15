@@ -2,7 +2,7 @@
 
 As part of Open Climate Fix's
 [open source project](https://github.com/openclimatefix), the Quartz Solar API
-offers acces to solar energy forecasts for the UK.
+offers access to solar energy forecasts for the UK.
 
 __Nowcasting__ means __forecasting for the next few hours__.
 OCF has built a predictive model that nowcasts solar energy generation for
@@ -18,12 +18,12 @@ forecast how much solar energy will generated for a given GSP.
 
 OCF's incredibly accurate, short-term forecasts allow National Grid to reduce
 the amount of spinning reserves they need to run at any given moment,
-ultimately reducing carbon emmisions.
+ultimately reducing carbon emissions.
 
 You will find an explanation of the terms we use and how solar forecasts are
 defined in the **Key Terms and Sample Use Cases** section.
 
-Predicatably, you'll find more detailed information for each API route in
+Predictably, you'll find more detailed information for each API route in
 the documentation below.
 
 Quartz Solar API is built with [FastAPI](https://fastapi.tiangolo.com/), and
@@ -42,7 +42,7 @@ If you have any further questions, please don't hesitate to get in touch.
 ## A Note on PV_Live
 
 [PV_Live](https://www.solar.sheffield.ac.uk/pvlive/) is Sheffield
-Solar's API that provides estimate and truth PV generation values
+Solar's API that provides estimate and truth embedded PV generation values
 by GSP.
 In the Quartz Solar app, PV_Live Estimate and PV_Live Actual readings are
 plotted on the same chart as the Quartz Solar forecast values, providing a
