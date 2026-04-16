@@ -441,7 +441,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
         base_key = f"{prefix}::get:/v0/solar/GB/gsp/forecast/all/:"
         forecast_response = _build_forecast_response(
             results=results,
-            gsp_id_map={k: v for k, v in gsp_id_map.items() if v != 0},
+            gsp_id_loc_map={k: v for k, v in gsp_id_map.items() if v != 0},
             gsp_uuid_id_map=gsp_uuid_id_map,
             creation_time=start,
         )
