@@ -11,4 +11,7 @@ async def test_app_start(
     """Ensures FastAPI boots and can successfully talk to the real Docker backend."""
     # Check Health
     response = await api_client_dataplatform.get("/health")
+    assert response.status_code == 200
+    response = await api_client_dataplatform.get("/v0/solar/GB/national/forecast")
+    assert response.status_code == 200
 
