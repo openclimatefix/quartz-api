@@ -78,14 +78,14 @@ async def api_client_uk_national_non_admin(
 @pytest_asyncio.fixture(scope="session")
 async def make_national_forecast_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
-    national_location: messages_pb2.CreateLocationResponse,
+    gsp_locations: list[UUID],
 ) -> None:
     """Make forecast values for the national location."""
     # get time now, rounded down by 30 mins
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
     for i in range(15):
         request = forecast(
-            national_location.location_uuid,
+            str(gsp_locations[0]),
             "blend_adjust",
             init_time_utc - datetime.timedelta(minutes=i * 30),
         )
@@ -100,8 +100,8 @@ async def make_gsp_forecast_values(
     """Make forecast values for the GSP locations."""
     # get time now, rounded down by 30 mins
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
-    for location_uuid in gsp_locations:
-        request = forecast(location_uuid, "blend", init_time_utc)
+    for location_uuid in gsp_locations[1:]:
+        request = forecast(str(location_uuid), "blend", init_time_utc)
         _ = await dp_client.CreateForecast(request)
 
 
@@ -138,14 +138,14 @@ def make_observation_values(
 @pytest_asyncio.fixture(scope="session")
 async def make_national_observation_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
-    national_location: messages_pb2.CreateLocationResponse,
+    gsp_locations: list[UUID],
 ) -> None:
     """Make observation values for the national location."""
     # get time now, rounded down by 30 mins
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
     for model_name in ["pvlive_in_day", "pvlive_day_after"]:
         request = make_observation_values(
-            location_uuid=national_location.location_uuid,
+            location_uuid=str(gsp_locations[0]),
             observer_name=model_name,
             init_time_utc=init_time_utc,
         )

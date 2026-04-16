@@ -228,7 +228,7 @@ def _build_compact_response(
 
 def _build_forecast_response(
     results: list[list[models.PredictedGenerationValue]],
-    gsp_id_map: dict[int, models.Location],
+    gsp_id_loc_map: dict[int, models.Location],
     gsp_uuid_id_map: dict[UUID, int],
     creation_time: dt.datetime,
 ) -> ListForecasts:
@@ -262,7 +262,7 @@ def _build_forecast_response(
         pgv = gsp_pgv_map.get(gsp_id)
         if pgv is None:
             continue
-        location = Location.from_location(gsp_id_map[gsp_id])
+        location = Location.from_location(gsp_id_loc_map[gsp_id])
         location.installed_capacity_mw = \
             pgv.capacity_kilowatts / 1000.0
         forecasts.append(
@@ -384,7 +384,7 @@ async def get_all_available_forecasts(
         return _build_compact_response(results=results, gsp_uuid_id_map=gsp_uuid_id_map)
     return _build_forecast_response(
         results=results,
-        gsp_id_map=gsps_to_convert,
+        gsp_id_loc_map=gsps_to_convert,
         gsp_uuid_id_map=gsp_uuid_id_map,
         creation_time=start_datetime_utc,
     )
@@ -561,7 +561,10 @@ async def get_truths_for_all_gsps(
     gsp_ids: list[int] | None = convert_list_of_gsp_ids(gsp_ids)
     out: list[GSPYieldGroupByDatetime] = []
 
-    gsp_uuid_id_map: dict[UUID, int] = {v.uuid: k for k, v in gsp_id_map.items()}
+    gsp_uuid_id_map: dict[UUID, int] = {
+        v.uuid: k for k, v in gsp_id_map.items()
+        if gsp_ids is None or k in gsp_ids
+    }
 
     if gsp_ids is None:
         # Return a snapshot of the data at the start_datetime_utc for all gsps
@@ -605,6 +608,7 @@ async def get_truths_for_all_gsps(
         # Looping over snapshots results in fewer calls than looping over GSPs
         out = []
         for ts in pd.date_range(start=start_datetime_utc, end=end_datetime_utc, freq="30min"):
+
             tsout = await db.get_actual_generation_snapshot(
                 location_uuids=list(gsp_uuid_id_map.keys()),
                 snapshot_timestamp_utc=ts,
@@ -612,12 +616,14 @@ async def get_truths_for_all_gsps(
                 observer_name=f"pvlive_{regime}",
                 authdata={},
             )
-            out.append(GSPYieldGroupByDatetime(
-                datetime_utc=ts,
-                generation_kw_by_gsp_id={
-                    gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in tsout
-                }),
-            )
+            if len(tsout) > 0:
+                out.append(GSPYieldGroupByDatetime(
+                    datetime_utc=ts,
+                    generation_kw_by_gsp_id={
+                        gsp_uuid_id_map[v.location_uuid]: v.power_kilowatts for v in tsout
+                    }),
+                )
+        log.info(f"Fetched {len(out)} snapshots for {len(gsp_uuid_id_map)} GSPs")
 
     return out
 

@@ -121,25 +121,26 @@ def make_location(
 @pytest_asyncio.fixture(scope="session")
 async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> list[UUID]:
     """Make national location."""
-    # add location gsp 1 to 10
+    # add location gsp 0 to 10
     location_uuids = []
     gsp_id_map.clear()
-    for i in range(1, 11):
+    for i in range(0, 11):
         metadata = Struct()
-        metadata.update({"gsp_id": i})
+        metadata.update({"gsp_id": int(i)})
         create_location_request = make_location(
-            name=f"gsp_{i}",
+            name=f"gsp_{i}" if i > 0 else "uk",
             gsp_id=i,
             metadata=metadata,
-            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP,
+            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP \
+                if i > 0 else common_pb2.LocationType.LOCATION_TYPE_NATION,
         )
         res = await dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
 
         gsp_id_map[i] = models.Location(
             uuid=UUID(res.location_uuid),
-            metadata={"gsp_id": i},
-            name="uk",
+            metadata={"gsp_id": int(i)},
+            name=res.location_name,
             latitude=0,
             longitude=0,
             capacity_kilowatts=res.effective_capacity_watts / 1000,
@@ -147,25 +148,3 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
 
     return location_uuids
 
-
-@pytest_asyncio.fixture(scope="session")
-async def national_location(
-    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
-) -> messages_pb2.CreateLocationResponse:
-    """Make national location."""
-    # add location gsp 0
-    metadata = Struct()
-    metadata.update({"gsp_id": 0})
-    create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
-    create_location_response = await dp_client.CreateLocation(create_location_request)
-
-    gsp_id_map[0] = models.Location(
-        uuid=UUID(create_location_response.location_uuid),
-        metadata={"gsp_id": 0},
-        name="uk",
-        latitude=0,
-        longitude=0,
-        capacity_kilowatts=create_location_response.effective_capacity_watts / 1000,
-    )
-
-    return create_location_response
