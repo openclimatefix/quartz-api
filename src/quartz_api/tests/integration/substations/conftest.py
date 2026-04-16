@@ -1,48 +1,15 @@
 """Fixtures for setting up substations api with data-platform backend."""
 
 import datetime
-import os
 from uuid import UUID
 
 import pandas as pd
 import pytest_asyncio
 from google.protobuf.struct_pb2 import Struct
-from httpx import ASGITransport, AsyncClient
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
-from pyhocon import ConfigFactory, ConfigTree
 
-from quartz_api.cmd.main import _create_server
-from quartz_api.internal import models
-from quartz_api.internal.backends import DataPlatformStorage
 from quartz_api.tests.integration.conftest import forecast
-
-
-@pytest_asyncio.fixture(scope="session")
-def config_substations() -> None:
-    """Returns the configuration tree for the substations integration tests."""
-    os.environ["ROUTERS"] = "substations"
-    os.environ["SOURCE"] = "dataplatform"
-
-    yield ConfigFactory.parse_file(
-        "src/quartz_api/cmd/server.conf",
-    )
-    os.environ.pop("ROUTERS", None)
-    os.environ.pop("SOURCE", None)
-
-
-@pytest_asyncio.fixture(scope="module")
-async def api_client_substations(
-    config_substations: ConfigTree, dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
-) -> AsyncClient:
-    """Returns a TestClient for the FastAPI application."""
-    app = _create_server(config_substations)
-
-    db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
-    app.dependency_overrides[models.get_storage_client] = lambda: db_instance
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
 
 
 def make_substation_location(
@@ -50,7 +17,7 @@ def make_substation_location(
     gsp_id: int,
     lat: float,
     lon: float,
-    capacity_watts: int = 1_000_000,  # 1 MW default
+    capacity_watts: int = 1_000_000,
 ) -> messages_pb2.CreateLocationRequest:
     """Create a substation location request.
 
@@ -110,15 +77,12 @@ async def substation_locations(
 async def make_gsp_forecast_values(
     dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
     gsp_locations: list[UUID],
-    make_forecasters: None,  # noqa: ARG001 - ensures forecasters are created first
+    make_forecasters: None,  # noqa: ARG001
 ) -> None:
-    """Create forecast values for the GSP locations.
-
-    These forecasts will be used to derive substation forecasts.
-    """
+    """Create forecast values for the GSP locations."""
     init_time_utc = pd.Timestamp.now(tz="UTC").floor("30min").to_pydatetime()
     for location_uuid in gsp_locations:
-        # Create forecasts for both blend and blend_adjust
         for model_name in ["blend", "blend_adjust"]:
-            request = forecast(location_uuid, model_name, init_time_utc)
-            _ = await dp_client.CreateForecast(request)
+            request = forecast(str(location_uuid), model_name, init_time_utc)
+            await dp_client.CreateForecast(request)
+

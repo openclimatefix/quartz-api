@@ -27,7 +27,7 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 )
 async def get_substations(
     db: models.StorageClientDependency,
-    _: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     substation_type: Literal["primary"] = "primary",
 ) -> list[Substation]:
     """Get all substations.

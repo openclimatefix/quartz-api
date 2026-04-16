@@ -1,21 +1,30 @@
 """Fixtures for setting up uk-national api with data-platform backend."""
+
 import datetime
 import os
 import time
+import typing
 from importlib.metadata import version
 from uuid import UUID
 
 import grpc.aio
 import pytest_asyncio
 from google.protobuf.struct_pb2 import Struct, Value
+from httpx import ASGITransport, AsyncClient
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
+from pyhocon import ConfigFactory, ConfigTree
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 from testcontainers.postgres import PostgresContainer
 
+from quartz_api.cmd.main import _create_server
 from quartz_api.internal import models
+from quartz_api.internal.backends import DataPlatformStorage
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+
+auth_dep = typing.get_args(AuthDependency)[1].dependency
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -28,17 +37,22 @@ async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
     with Network() as network:
         database_url = "postgresql://postgres:postgres@db:5432/postgres?sslmode=disable"
         # we use a specific postgres image with postgis and pgpartman installed
-        with PostgresContainer(
-            f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
-            username="postgres",
-            password="postgres",  # noqa S106
-            dbname="postgres",
-        ).with_network(network).with_network_aliases("db"), DockerContainer(
-            image=f"ghcr.io/openclimatefix/data-platform:{version('dp_sdk')}",
-            env={"DATABASE_URL": database_url},
-            ports=[50051],
-            platform="linux/amd64",
-        ).with_network(network) as data_platform_server:
+        with (
+            PostgresContainer(
+                f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
+                username="postgres",
+                password="postgres",  # noqa S106
+                dbname="postgres",
+            )
+            .with_network(network)
+            .with_network_aliases("db"),
+            DockerContainer(
+                image=f"ghcr.io/openclimatefix/data-platform:{version('dp_sdk')}",
+                env={"DATABASE_URL": database_url},
+                ports=[50051],
+                platform="linux/amd64",
+            ).with_network(network) as data_platform_server,
+        ):
             time.sleep(2)
             try:
                 port = data_platform_server.get_exposed_port(50051)
@@ -56,6 +70,33 @@ async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
 
             yield client
             await channel.close()
+
+            os.environ.pop("DATA_PLATFORM_HOST", None)
+            os.environ.pop("DATA_PLATFORM_PORT", None)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def config_all_routers() -> None:
+    """Fixture to provide configuration with all routers enabled."""
+    os.environ["ROUTERS"] = "uk_national,substations,sites,regions"
+    os.environ["SOURCE"] = "dataplatform"
+    yield ConfigFactory.parse_file("src/quartz_api/cmd/server.conf")
+    os.environ.pop("ROUTERS", None)
+    os.environ.pop("SOURCE", None)
+
+@pytest_asyncio.fixture(scope="module")
+async def api_client_dataplatform(
+    config_all_routers: ConfigTree,
+    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
+) -> AsyncClient:
+    """Returns a TestClient for the FastAPI application."""
+    app = _create_server(config_all_routers)
+
+    db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
+    app.dependency_overrides[models.get_storage_client] = lambda: db_instance
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -131,8 +172,9 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
             name=f"gsp_{i}" if i > 0 else "uk",
             gsp_id=i,
             metadata=metadata,
-            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP \
-                if i > 0 else common_pb2.LocationType.LOCATION_TYPE_NATION,
+            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP
+            if i > 0
+            else common_pb2.LocationType.LOCATION_TYPE_NATION,
         )
         res = await dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
@@ -147,4 +189,3 @@ async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub)
         )
 
     return location_uuids
-
