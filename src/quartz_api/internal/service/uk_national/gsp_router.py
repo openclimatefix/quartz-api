@@ -445,7 +445,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             gsp_uuid_id_map=gsp_uuid_id_map,
             creation_time=start,
         )
-        forecast_value = run_in_threadpool(
+        forecast_value = await run_in_threadpool(
             _forecast_adapter.dump_json, forecast_response,
         )
         await backend.set(
@@ -462,7 +462,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
             results=results,
             gsp_uuid_id_map=gsp_uuid_id_map,
         )
-        compact_value = run_in_threadpool(
+        compact_value = await run_in_threadpool(
             _compact_adapter.dump_json, compact_response,
         )
         await backend.set(
