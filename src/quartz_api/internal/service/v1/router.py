@@ -240,6 +240,7 @@ async def _warm_v1_forecast_cache(
                     "v1 forecast cache warm %s/%s/%s: %d/%d regions",
                     source, country, region_type, i + 1, len(regions),
                 )
+            # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
 
         if first_pgv:
@@ -336,6 +337,7 @@ async def _warm_v1_generation_cache(
                     "v1 generation cache warm %s/%s/%s/%s: %d/%d regions",
                     source, country, region_type, observer, i + 1, len(regions),
                 )
+            # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
 
         meta = {"observer_name": observer}
@@ -927,7 +929,7 @@ async def get_forecasts_timeseries(
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     region_series: list[RegionForecastTimeSeries] = []
-    for r, raw in zip(regions, raw_list):
+    for r, raw in zip(regions, raw_list, strict=True):
         if raw is None:
             continue
         all_values = [ForecastValue.model_validate(v) for v in json.loads(raw)]
@@ -1068,7 +1070,7 @@ async def get_generation_timeseries(
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     region_series: list[RegionGenerationTimeSeries] = []
-    for r, raw in zip(regions, raw_list):
+    for r, raw in zip(regions, raw_list, strict=True):
         if raw is None:
             continue
         all_values = [GenerationValue.model_validate(v) for v in json.loads(raw)]
