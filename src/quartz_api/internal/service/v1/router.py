@@ -724,11 +724,11 @@ async def get_region_generation(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
-    start_datetime_utc: dt.datetime | None = Query(
+    start_utc: dt.datetime | None = Query(
         None,
         description="Start of generation window (UTC).",
     ),
-    end_datetime_utc: dt.datetime | None = Query(
+    end_utc: dt.datetime | None = Query(
         None,
         description="End of generation window (UTC).",
     ),
@@ -755,8 +755,8 @@ async def get_region_generation(
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(
         location_uuid=region_id,
-        window_start=start_datetime_utc or now - dt.timedelta(days=5),
-        window_end=end_datetime_utc or now,
+        window_start=start_utc or now - dt.timedelta(days=5),
+        window_end=end_utc or now,
         energy_type=energy_type,
         location_type=location_type,
         observer_name=observer,
