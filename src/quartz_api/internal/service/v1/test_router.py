@@ -118,6 +118,20 @@ async def test_get_regions_by_type(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
+async def test_get_regions_by_parent_id(client: AsyncClient) -> None:
+    parent_id = str(uuid4())
+    resp = await client.get(f"/v1/solar/GB/regions?parent_id={parent_id}")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+@pytest.mark.anyio
+async def test_get_regions_invalid_region_type_returns_400(client: AsyncClient) -> None:
+    resp = await client.get("/v1/solar/GB/regions?region_type=unknown_type")
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
 async def test_get_region_by_id(client: AsyncClient) -> None:
     region_id = str(uuid4())
     resp = await client.get(f"/v1/solar/GB/regions/{region_id}")
@@ -203,6 +217,32 @@ async def test_get_generation_snapshot_requires_region_type(client: AsyncClient)
     assert resp.status_code == 422
 
 
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_national_fallback(client: AsyncClient) -> None:
+    """National snapshot uses get_predicted_generation (not get_predicted_generation_snapshot)."""
+    resp = await client.get("/v1/solar/GB/forecasts/snapshot?region_type=national")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "time" in body
+    assert "values" in body
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_invalid_region_type_returns_400(
+    client: AsyncClient,
+) -> None:
+    resp = await client.get("/v1/solar/GB/forecasts/snapshot?region_type=unknown_type")
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_timeseries_invalid_region_type_returns_400(
+    client: AsyncClient,
+) -> None:
+    resp = await client.get("/v1/solar/GB/forecasts/timeseries?region_type=unknown_type")
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # Timeseries (matrix) endpoints — cold cache → 503
 # ---------------------------------------------------------------------------
@@ -268,6 +308,32 @@ async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None
     body = resp.json()
     assert body["observer_name"] == observer
     assert "regions" in body
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_timeseries_region_ids_filter(client: AsyncClient) -> None:
+    """region_ids filter reduces result to matching regions only."""
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    now = dt.datetime.now(tz=dt.UTC)
+    meta = {
+        "model_name": "blend",
+        "model_version": "1.0.0",
+        "created_time": now.isoformat(),
+        "init_time": now.isoformat(),
+    }
+    await backend.set(
+        f"{prefix}:v1:timeseries:solar:GB:gsp:_meta", json.dumps(meta), expire=3600,
+    )
+
+    # UUID that will not match any region returned by DummyDB
+    non_existent_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/solar/GB/forecasts/timeseries?region_type=gsp&region_ids={non_existent_id}",
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["regions"] == []
 
 
 # ---------------------------------------------------------------------------
