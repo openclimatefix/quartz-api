@@ -212,7 +212,7 @@ async def _warm_v1_forecast_cache(
 
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
-        base = f"{prefix}:v1:timeseries:{source}:{country.upper()}:{region_type}"
+        base = f"{prefix}:v1:timeseries:{country.upper()}:{source}:{region_type}"
         first_pgv = None
 
         for i, region in enumerate(regions):
@@ -311,7 +311,7 @@ async def _warm_v1_generation_cache(
         prefix = FastAPICache.get_prefix()
         base = (
             f"{prefix}:v1:timeseries:generation"
-            f":{source}:{country.upper()}:{region_type}:{observer}"
+            f":{country.upper()}:{source}:{region_type}:{observer}"
         )
 
         for i, region in enumerate(regions):
@@ -401,18 +401,16 @@ async def get_sources(
 
 
 @router.get(
-    "/{source}/regions",
+    "/countries",
     status_code=status.HTTP_200_OK,
 )
-async def get_top_level_regions(
-    source: ValidSource,
+async def get_countries(
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> list[RegionDetail]:
-    """List top-level regions (nations) for an energy source."""
-    energy_type = _energy_type_for(source)
+    """List available countries with their nation-level region details."""
     nations = await db.get_locations(
-        energy_type=energy_type,
+        energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
         authdata=auth,
     )
@@ -430,7 +428,7 @@ async def get_top_level_regions(
 
 
 @router.get(
-    "/{source}/{country}/region-types",
+    "/{country}/{source}/region-types",
     status_code=status.HTTP_200_OK,
 )
 async def get_region_types(
@@ -455,7 +453,7 @@ async def get_region_types(
     ]
 
 @router.get(
-    "/{source}/{country}/generation-sources",
+    "/{country}/{source}/generation-sources",
     status_code=status.HTTP_200_OK,
 )
 async def get_generation_sources(
@@ -476,7 +474,7 @@ async def get_generation_sources(
 
 
 @router.get(
-    "/{source}/{country}/regions",
+    "/{country}/{source}/regions",
     status_code=status.HTTP_200_OK,
 )
 async def get_country_regions(
@@ -558,7 +556,7 @@ async def get_country_regions(
 
 
 @router.get(
-    "/{source}/{country}/regions/{region_id}",
+    "/{country}/{source}/regions/{region_id}",
     status_code=status.HTTP_200_OK,
 )
 async def get_region(
@@ -587,7 +585,7 @@ async def get_region(
 
 
 @router.get(
-    "/{source}/{country}/regions/{region_id}/forecast",
+    "/{country}/{source}/regions/{region_id}/forecast",
     status_code=status.HTTP_200_OK,
 )
 async def get_region_forecast(
@@ -666,7 +664,7 @@ async def get_region_forecast(
 
 
 @router.get(
-    "/{source}/{country}/regions/{region_id}/forecast/last_updated",
+    "/{country}/{source}/regions/{region_id}/forecast/last_updated",
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
@@ -716,7 +714,7 @@ async def get_region_forecast_last_updated(
 
 
 @router.get(
-    "/{source}/{country}/regions/{region_id}/generation",
+    "/{country}/{source}/regions/{region_id}/generation",
     status_code=status.HTTP_200_OK,
 )
 async def get_region_generation(
@@ -780,7 +778,7 @@ async def get_region_generation(
 
 
 @router.get(
-    "/{source}/{country}/forecasts/snapshot",
+    "/{country}/{source}/forecasts/snapshot",
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder, expire=120)
@@ -873,7 +871,7 @@ async def get_forecasts_snapshot(
 
 
 @router.get(
-    "/{source}/{country}/forecasts/timeseries",
+    "/{country}/{source}/forecasts/timeseries",
     status_code=status.HTTP_200_OK,
 )
 async def get_forecasts_timeseries(
@@ -905,7 +903,7 @@ async def get_forecasts_timeseries(
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:{source}:{country.upper()}:{region_type}"
+    base = f"{prefix}:v1:timeseries:{country.upper()}:{source}:{region_type}"
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:
@@ -947,7 +945,7 @@ async def get_forecasts_timeseries(
 
 
 @router.get(
-    "/{source}/{country}/generation/snapshot",
+    "/{country}/{source}/generation/snapshot",
     status_code=status.HTTP_200_OK,
 )
 @cache(key_builder=key_builder, expire=120)
@@ -1014,7 +1012,7 @@ async def get_generation_snapshot(
 
 
 @router.get(
-    "/{source}/{country}/generation/timeseries",
+    "/{country}/{source}/generation/timeseries",
     status_code=status.HTTP_200_OK,
 )
 async def get_generation_timeseries(
@@ -1047,7 +1045,7 @@ async def get_generation_timeseries(
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:generation:{source}:{country.upper()}:{region_type}:{observer}"
+    base = f"{prefix}:v1:timeseries:generation:{country.upper()}:{source}:{region_type}:{observer}"
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:
@@ -1088,7 +1086,7 @@ async def get_generation_timeseries(
 
 
 @router.post(
-    "/{source}/{country}/forecasts/refresh",
+    "/{country}/{source}/forecasts/refresh",
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -1111,7 +1109,7 @@ async def refresh_forecasts_cache(
 
 
 @router.post(
-    "/{source}/{country}/generation/refresh",
+    "/{country}/{source}/generation/refresh",
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
