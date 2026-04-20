@@ -925,9 +925,9 @@ async def get_forecasts_timeseries(
         id_set = set(region_ids)
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
 
+    raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     region_series: list[RegionForecastTimeSeries] = []
-    for r in regions:
-        raw = await backend.get(f"{base}:{r.uuid}")
+    for r, raw in zip(regions, raw_list):
         if raw is None:
             continue
         all_values = [ForecastValue.model_validate(v) for v in json.loads(raw)]
@@ -1066,9 +1066,9 @@ async def get_generation_timeseries(
         id_set = set(region_ids)
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
 
+    raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     region_series: list[RegionGenerationTimeSeries] = []
-    for r in regions:
-        raw = await backend.get(f"{base}:{r.uuid}")
+    for r, raw in zip(regions, raw_list):
         if raw is None:
             continue
         all_values = [GenerationValue.model_validate(v) for v in json.loads(raw)]
