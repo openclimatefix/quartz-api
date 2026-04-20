@@ -5,7 +5,7 @@ import uuid
 from unittest.mock import AsyncMock, Mock, patch
 
 from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf import dp
+from ocf import dp
 from fastapi import HTTPException
 from grpc_requests import Client
 
@@ -129,7 +129,7 @@ def mock_get_latest_forecasts(
 
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     async def test_get_locations(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -160,7 +160,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                                                   energy_type=models.EnergyType.SOLAR)
                 self.assertEqual(len(resp), tc.expected_num_locations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     @patch("grpc_requests.Client")
     async def test_get_site_forecast(
         self,
@@ -219,7 +219,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(len(resp), 5)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     async def test_get_site_generation(
         self,
         client_mock: dp.DataPlatformDataServiceStub,
@@ -277,7 +277,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(len(resp), 5)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     async def test_get_substations(
         self,
         client_mock: dp.DataPlatformDataServiceStub,
@@ -311,7 +311,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                                                   energy_type=models.EnergyType.SOLAR)
                 self.assertEqual(len(resp), tc.expected_num_substations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     async def test_get_substation(
         self,
         client_mock: dp.DataPlatformDataServiceStub,
@@ -364,7 +364,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNotNone(resp)
                     self.assertEqual(len(resp), tc.number_of_locations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.DataPlatformDataServiceStub")
     @patch("grpc_requests.Client")
     async def test_get_substation_forecast(
         self,

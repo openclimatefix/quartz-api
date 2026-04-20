@@ -2,7 +2,7 @@ import datetime
 
 import pandas as pd
 import pytest
-from dp_sdk.ocf import dp
+from ocf import dp
 from fastapi_cache import FastAPICache
 
 from quartz_api.internal.service.uk_national.national_router import FORECASTER_VERSION_BLEND

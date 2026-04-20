@@ -6,7 +6,7 @@ import logging
 from struct import Struct
 from uuid import UUID
 
-from dp_sdk.ocf import dp
+from ocf import dp
 from fastapi import HTTPException
 from typing_extensions import override
 

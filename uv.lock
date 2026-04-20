@@ -516,14 +516,14 @@ wheels = [
 
 [[package]]
 name = "dp-sdk"
-version = "0.24.5"
-source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.24.5/dp_sdk-0.24.5-py3-none-any.whl" }
+version = "0.25.0"
+source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 dependencies = [
     { name = "betterproto" },
     { name = "grpcio" },
 ]
 wheels = [
-    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.24.5/dp_sdk-0.24.5-py3-none-any.whl", hash = "sha256:ec62a2a87dbd7c013857a0c8587bdfb9bef5fd7669d59dbe3a903d32c4992567" },
+    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl", hash = "sha256:c9ff2b6498782886562efc93af2452e6478bcdcde1db267c50d21dea402b955f" },
 ]
 
 [package.metadata]
@@ -1988,7 +1988,7 @@ requires-dist = [
     { name = "apitally", extras = ["fastapi"], specifier = ">=0.22.3" },
     { name = "auth0-fastapi-api", specifier = ">=1.0.0b5" },
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.24.5/dp_sdk-0.24.5-py3-none-any.whl" },
+    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "fastapi-cache2", extras = ["memcache"], specifier = ">=0.2.2" },
     { name = "grpc-requests", specifier = ">=0.1.21" },
