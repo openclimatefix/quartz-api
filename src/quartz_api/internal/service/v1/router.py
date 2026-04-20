@@ -664,7 +664,7 @@ async def get_region_forecast(
 
 
 @router.get(
-    "/{country}/{source}/regions/{region_id}/forecast/last_updated",
+    "/{country}/{source}/regions/{region_id}/forecast/last-updated",
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )

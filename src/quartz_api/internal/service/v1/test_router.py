@@ -237,7 +237,7 @@ async def test_get_region_forecast(client: AsyncClient) -> None:
 @pytest.mark.anyio
 async def test_get_region_forecast_last_updated(client: AsyncClient) -> None:
     region_id = str(uuid4())
-    resp = await client.get(f"/v1/GB/solar/regions/{region_id}/forecast/last_updated")
+    resp = await client.get(f"/v1/GB/solar/regions/{region_id}/forecast/last-updated")
     assert resp.status_code == 200
 
 
