@@ -109,6 +109,7 @@ class ForecastResponse(BaseModel):
     model_name: str | None = None
     model_version: str | None = None
     created_time: dt.datetime | None = None
+    init_time: dt.datetime | None = None
     values: list[ForecastValue]
 
 
@@ -143,4 +144,54 @@ class ForecastSnapshot(BaseModel):
     model_name: str | None = None
     model_version: str | None = None
     created_time: dt.datetime | None = None
+    init_time: dt.datetime | None = None
     values: list[RegionForecastValue]
+
+
+class RegionGenerationValue(BaseModel):
+    """A single observed generation value for one region — used in snapshot responses."""
+
+    region_id: UUID
+    capacity_kW: float
+    power_kW: float
+
+
+class GenerationSnapshot(BaseModel):
+    """Snapshot observed generation across all regions at a single point in time."""
+
+    time: dt.datetime
+    observer_name: str | None = None
+    values: list[RegionGenerationValue]
+
+
+class RegionForecastTimeSeries(BaseModel):
+    """Forecast time series for one region — used in matrix responses."""
+
+    region_id: UUID
+    capacity_kW: float
+    values: list[ForecastValue]
+
+
+class ForecastMatrix(BaseModel):
+    """Forecast time series for all regions across a time window."""
+
+    model_name: str | None = None
+    model_version: str | None = None
+    created_time: dt.datetime | None = None
+    init_time: dt.datetime | None = None
+    regions: list[RegionForecastTimeSeries]
+
+
+class RegionGenerationTimeSeries(BaseModel):
+    """Generation time series for one region — used in matrix responses."""
+
+    region_id: UUID
+    capacity_kW: float
+    values: list[GenerationValue]
+
+
+class GenerationMatrix(BaseModel):
+    """Observed generation time series for all regions across a time window."""
+
+    observer_name: str | None = None
+    regions: list[RegionGenerationTimeSeries]

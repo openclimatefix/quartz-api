@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfo
 import grpc
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
-from dp_sdk.ocf import dp
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
@@ -81,7 +80,7 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
 
     if auth_config:
         domain = auth_config["domain"]
-        audience = auth_config["audience"]
+        audience = auth_config["audience"]  # noqa: F841
 
         # Replace the auto-generated HTTPBearer scheme with a proper OAuth2
         # authorization code flow so Swagger UI shows the Auth0 redirect button.
@@ -169,10 +168,17 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     if "uk_national" in conf.get_string("api.routers"):
         warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
+    warm_v1_task = None
+    if "v1" in conf.get_string("api.routers").split(","):
+        from quartz_api.internal.service.v1.router import _warm_all_v1_caches
+        warm_v1_task = asyncio.create_task(_warm_all_v1_caches(server))
+
     yield
 
     if warm_task is not None:
         warm_task.cancel()
+    if warm_v1_task is not None:
+        warm_v1_task.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
