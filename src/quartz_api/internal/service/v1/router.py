@@ -528,8 +528,7 @@ async def get_country_regions(
             energy_type=energy_type,
             location_type=rt.location_type,
             authdata=auth,
-            enclosing_location_uuid=UUID(nation.uuid)
-            if isinstance(nation.uuid, str) else nation.uuid,
+            enclosing_location_uuid=_to_uuid(nation.uuid),
         )
         return [_location_to_detail(loc, cfg) for loc in locs]
 
@@ -543,9 +542,7 @@ async def get_country_regions(
                 energy_type=energy_type,
                 location_type=rt.location_type,
                 authdata=auth,
-                enclosing_location_uuid=UUID(nation.uuid)
-                if isinstance(nation.uuid, str)
-                else nation.uuid,
+                enclosing_location_uuid=_to_uuid(nation.uuid),
             ),
         )
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -819,8 +816,7 @@ async def get_forecasts_snapshot(
             energy_type=energy_type,
             location_type=location_type,
             authdata=auth,
-            enclosing_location_uuid=UUID(nation.uuid)
-            if isinstance(nation.uuid, str) else nation.uuid,
+            enclosing_location_uuid=_to_uuid(nation.uuid),
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -847,9 +843,7 @@ async def get_forecasts_snapshot(
         )
     else:
         snapshot = await db.get_predicted_generation_snapshot(
-            location_uuids=[
-                UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
-            ],
+            location_uuids=[_to_uuid(r.uuid) for r in regions],
             forecaster_name=model_name,
             forecaster_version=model_version,
             snapshot_timestamp_utc=snapshot_time,
@@ -925,7 +919,7 @@ async def get_forecasts_timeseries(
         energy_type=energy_type,
         location_type=rt.location_type,
         authdata=auth,
-        enclosing_location_uuid=UUID(nation.uuid) if isinstance(nation.uuid, str) else nation.uuid,
+        enclosing_location_uuid=_to_uuid(nation.uuid),
     )
     if region_ids is not None:
         id_set = set(region_ids)
@@ -988,8 +982,7 @@ async def get_generation_snapshot(
             energy_type=energy_type,
             location_type=location_type,
             authdata=auth,
-            enclosing_location_uuid=UUID(nation.uuid)
-            if isinstance(nation.uuid, str) else nation.uuid,
+            enclosing_location_uuid=_to_uuid(nation.uuid),
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -997,9 +990,7 @@ async def get_generation_snapshot(
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 
     snapshot = await db.get_actual_generation_snapshot(
-        location_uuids=[
-            UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
-        ],
+        location_uuids=[_to_uuid(r.uuid) for r in regions],
         snapshot_timestamp_utc=snapshot_time,
         energy_type=energy_type,
         observer_name=observer,
@@ -1069,7 +1060,7 @@ async def get_generation_timeseries(
         energy_type=energy_type,
         location_type=rt.location_type,
         authdata=auth,
-        enclosing_location_uuid=UUID(nation.uuid) if isinstance(nation.uuid, str) else nation.uuid,
+        enclosing_location_uuid=_to_uuid(nation.uuid),
     )
     if region_ids is not None:
         id_set = set(region_ids)
