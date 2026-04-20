@@ -4,7 +4,8 @@
 import datetime as dt
 import json
 import typing
-from uuid import uuid4
+from collections.abc import AsyncGenerator
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -21,34 +22,109 @@ from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
 
+# Fixed UUID used in tests that need to control which region UUID is in the cache.
+_FIXED_GSP_UUID = uuid4()
 
-@pytest_asyncio.fixture
-async def client() -> AsyncClient:
-    """Return a test client with DummyDB backend and no auth."""
+
+class FixedUUIDStorageClient(StorageClient):
+    """DummyDB variant that returns a stable UUID for GSP locations.
+
+    Allows tests to pre-populate per-region cache keys and verify window/filter logic.
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=_FIXED_GSP_UUID,
+                    name="Fixed GSP",
+                    latitude=51.0,
+                    longitude=-1.0,
+                    capacity_kilowatts=76000,
+                    location_type=models.LocationType.GSP,
+                ),
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
+def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
-    FastAPICache.init(InMemoryBackend(), prefix="test")
-    dummy_db = StorageClient()
-    app.dependency_overrides[models.get_storage_client] = lambda: dummy_db
-    app.dependency_overrides[_auth_dep] = lambda: {"sub": "test|user", "permissions": []}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-
-
-@pytest_asyncio.fixture
-async def admin_client() -> AsyncClient:
-    """Return a test client with ocf:admin permissions."""
-    app = FastAPI()
-    app.include_router(router)
-    FastAPICache.init(InMemoryBackend(), prefix="test")
-    dummy_db = StorageClient()
-    app.dependency_overrides[models.get_storage_client] = lambda: dummy_db
+    app.dependency_overrides[models.get_storage_client] = lambda: db
     app.dependency_overrides[_auth_dep] = lambda: {
-        "sub": "test|admin",
-        "permissions": ["ocf:admin"],
+        "sub": "test|user",
+        "permissions": permissions,
     }
+    return app
+
+
+@pytest_asyncio.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with DummyDB backend and no auth permissions."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), [])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def admin_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with ocf:admin permissions."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["ocf:admin"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client backed by FixedUUIDStorageClient for cache key tests."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(FixedUUIDStorageClient(), [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+async def _set_forecast_meta() -> None:
+    """Inject a minimal forecast _meta key into the current cache backend."""
+    now = dt.datetime.now(tz=dt.UTC)
+    meta = {
+        "model_name": "blend",
+        "model_version": "1.0.0",
+        "created_time": now.isoformat(),
+        "init_time": now.isoformat(),
+    }
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    await backend.set(
+        f"{prefix}:v1:timeseries:solar:GB:gsp:_meta",
+        json.dumps(meta).encode(),
+        expire=3600,
+    )
+
+
+async def _set_fixed_region_values(values: list[dict]) -> None:
+    """Inject per-region cache values for _FIXED_GSP_UUID into the current backend."""
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    await backend.set(
+        f"{prefix}:v1:timeseries:solar:GB:gsp:{_FIXED_GSP_UUID}",
+        json.dumps(values).encode(),
+        expire=3600,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -268,19 +344,7 @@ async def test_get_generation_timeseries_cold_cache_returns_503(client: AsyncCli
 @pytest.mark.anyio
 async def test_get_forecasts_timeseries_warm_cache(client: AsyncClient) -> None:
     """Timeseries endpoint returns ForecastMatrix (may have empty regions) when _meta is cached."""
-    prefix = FastAPICache.get_prefix()
-    backend = FastAPICache.get_backend()
-    now = dt.datetime.now(tz=dt.UTC)
-    meta = {
-        "model_name": "blend",
-        "model_version": "1.0.0",
-        "created_time": now.isoformat(),
-        "init_time": now.isoformat(),
-    }
-    await backend.set(
-        f"{prefix}:v1:timeseries:solar:GB:gsp:_meta", json.dumps(meta), expire=3600,
-    )
-
+    await _set_forecast_meta()
     resp = await client.get("/v1/solar/GB/forecasts/timeseries?region_type=gsp")
     assert resp.status_code == 200
     body = resp.json()
@@ -291,13 +355,13 @@ async def test_get_forecasts_timeseries_warm_cache(client: AsyncClient) -> None:
 @pytest.mark.anyio
 async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None:
     """Generation timeseries returns GenerationMatrix when _meta is cached."""
-    prefix = FastAPICache.get_prefix()
-    backend = FastAPICache.get_backend()
     observer = "pvlive_in_day"
     meta = {"observer_name": observer}
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
     await backend.set(
         f"{prefix}:v1:timeseries:generation:solar:GB:gsp:{observer}:_meta",
-        json.dumps(meta),
+        json.dumps(meta).encode(),
         expire=3600,
     )
 
@@ -313,27 +377,72 @@ async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None
 @pytest.mark.anyio
 async def test_get_forecasts_timeseries_region_ids_filter(client: AsyncClient) -> None:
     """region_ids filter reduces result to matching regions only."""
-    prefix = FastAPICache.get_prefix()
-    backend = FastAPICache.get_backend()
-    now = dt.datetime.now(tz=dt.UTC)
-    meta = {
-        "model_name": "blend",
-        "model_version": "1.0.0",
-        "created_time": now.isoformat(),
-        "init_time": now.isoformat(),
-    }
-    await backend.set(
-        f"{prefix}:v1:timeseries:solar:GB:gsp:_meta", json.dumps(meta), expire=3600,
-    )
-
-    # UUID that will not match any region returned by DummyDB
+    await _set_forecast_meta()
     non_existent_id = str(uuid4())
     resp = await client.get(
         f"/v1/solar/GB/forecasts/timeseries?region_type=gsp&region_ids={non_existent_id}",
     )
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["regions"] == []
+    assert resp.json()["regions"] == []
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_timeseries_window_includes_cached_values(
+    fixed_uuid_client: AsyncClient,
+) -> None:
+    """Values within the requested window are returned; values outside are excluded."""
+    now = dt.datetime.now(tz=dt.UTC).replace(microsecond=0)
+    t_early = now - dt.timedelta(hours=3)
+    t_late = now + dt.timedelta(hours=3)
+
+    await _set_forecast_meta()
+    await _set_fixed_region_values([
+        {"time": t_early.isoformat(), "power_kW": 100.0, "plevels_kW": {}},
+        {"time": t_late.isoformat(), "power_kW": 200.0, "plevels_kW": {}},
+    ])
+
+    # Narrow window: only t_early should be included
+    resp = await fixed_uuid_client.get(
+        "/v1/solar/GB/forecasts/timeseries",
+        params={
+            "region_type": "gsp",
+            "start_utc": (t_early - dt.timedelta(minutes=1)).isoformat(),
+            "end_utc": (t_early + dt.timedelta(minutes=1)).isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    regions = resp.json()["regions"]
+    assert len(regions) == 1
+    assert len(regions[0]["values"]) == 1
+    assert regions[0]["values"][0]["power_kW"] == 100.0
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_timeseries_window_excludes_out_of_range_values(
+    fixed_uuid_client: AsyncClient,
+) -> None:
+    """Values outside the requested window are not returned."""
+    now = dt.datetime.now(tz=dt.UTC).replace(microsecond=0)
+    t_past = now - dt.timedelta(hours=10)
+
+    await _set_forecast_meta()
+    await _set_fixed_region_values([
+        {"time": t_past.isoformat(), "power_kW": 50.0, "plevels_kW": {}},
+    ])
+
+    # Window starts after the cached value — should be empty
+    resp = await fixed_uuid_client.get(
+        "/v1/solar/GB/forecasts/timeseries",
+        params={
+            "region_type": "gsp",
+            "start_utc": (now - dt.timedelta(hours=1)).isoformat(),
+            "end_utc": (now + dt.timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    regions = resp.json()["regions"]
+    assert len(regions) == 1
+    assert regions[0]["values"] == []
 
 
 # ---------------------------------------------------------------------------
