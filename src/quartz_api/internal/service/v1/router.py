@@ -4,26 +4,37 @@
 
 import asyncio
 import datetime as dt
+import json
+import logging
 from uuid import UUID
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
+from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.service.uk_national.cache import key_builder
 
 from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig
 from .endpoint_types import (
+    ForecastMatrix,
     ForecastModel,
     ForecastResponse,
     ForecastSnapshot,
     ForecastValue,
+    GenerationMatrix,
     GenerationResponse,
+    GenerationSnapshot,
     GenerationSource,
     GenerationValue,
     RegionDetail,
+    RegionForecastTimeSeries,
     RegionForecastValue,
+    RegionGenerationTimeSeries,
+    RegionGenerationValue,
     RegionSummary,
     RegionType,
     Source,
@@ -31,7 +42,14 @@ from .endpoint_types import (
     ValidSource,
 )
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/v1", tags=["v1"])
+
+# Per-combination warming flags: key is "{source}:{country}:{region_type}" or
+# "{source}:{country}:{region_type}:{observer}" for generation.
+_forecast_cache_warming: dict[str, bool] = {}
+_generation_cache_warming: dict[str, bool] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +141,242 @@ def _location_to_detail(
         longitude=loc.longitude,
         metadata=loc.metadata,
     )
+
+
+def _to_uuid(val: str | UUID) -> UUID:
+    """Convert a string or UUID to UUID."""
+    return UUID(val) if isinstance(val, str) else val
+
+
+def _timeseries_window(
+    start_utc: dt.datetime | None,
+    end_utc: dt.datetime | None,
+) -> tuple[dt.datetime, dt.datetime]:
+    """Return canonical start/end window, applying the 6-hour-floored ±2-day default."""
+    now = pd.Timestamp.utcnow().floor("6h").to_pydatetime().replace(tzinfo=dt.UTC)
+    win_start = start_utc if start_utc is not None else now - dt.timedelta(days=2)
+    win_end = end_utc if end_utc is not None else now + dt.timedelta(days=2)
+    if win_start.tzinfo is None:
+        win_start = win_start.replace(tzinfo=dt.UTC)
+    if win_end.tzinfo is None:
+        win_end = win_end.replace(tzinfo=dt.UTC)
+    return win_start, win_end
+
+
+# ---------------------------------------------------------------------------
+# Cache warming
+# ---------------------------------------------------------------------------
+
+
+async def _warm_v1_forecast_cache(
+    app: object,
+    source: str,
+    country: str,
+    region_type: str,
+) -> None:
+    """Pre-warm per-region forecast timeseries cache for one (source, country, region_type)."""
+    flag_key = f"{source}:{country}:{region_type}"
+    _forecast_cache_warming[flag_key] = True
+    try:
+        db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
+        if db is None:
+            log.warning("v1 forecast cache warm skipped: storage client not configured")
+            return
+
+        cfg = COUNTRIES.get(country.upper())
+        if cfg is None:
+            return
+        rt = cfg.get_region_type(region_type)
+        if rt is None:
+            return
+
+        energy_type = _energy_type_for(source)
+        win_start, win_end = _timeseries_window(None, None)
+
+        nations = await db.get_locations(
+            energy_type=energy_type,
+            location_type=models.LocationType.NATION,
+            authdata={},
+        )
+        nation = next((n for n in nations if n.name == cfg.nation_name), None)
+        if nation is None:
+            log.warning("v1 forecast cache warm: nation '%s' not found", cfg.nation_name)
+            return
+
+        regions = await db.get_locations(
+            energy_type=energy_type,
+            location_type=rt.location_type,
+            authdata={},
+            enclosing_location_uuid=_to_uuid(nation.uuid),
+        )
+
+        backend = FastAPICache.get_backend()
+        prefix = FastAPICache.get_prefix()
+        base = f"{prefix}:v1:timeseries:{source}:{country.upper()}:{region_type}"
+        first_pgv = None
+
+        for i, region in enumerate(regions):
+            pgvs = await db.get_predicted_generation(
+                location_uuid=region.uuid,
+                window_start=win_start,
+                window_end=win_end,
+                energy_type=energy_type,
+                location_type=rt.location_type,
+                authdata={},
+            )
+            if pgvs and first_pgv is None:
+                first_pgv = pgvs[0]
+            values = [
+                {
+                    "time": v.valid_timestamp.isoformat(),
+                    "power_kW": v.power_kilowatts,
+                    "plevels_kW": v.plevels_kilowatts,
+                }
+                for v in pgvs
+            ]
+            await backend.set(f"{base}:{region.uuid}", json.dumps(values), expire=86400)
+            if (i + 1) % 20 == 0:
+                log.info(
+                    "v1 forecast cache warm %s/%s/%s: %d/%d regions",
+                    source, country, region_type, i + 1, len(regions),
+                )
+            await asyncio.sleep(0.1)
+
+        if first_pgv:
+            created = first_pgv.created_timestamp
+            init = first_pgv.init_timestamp
+            meta = {
+                "model_name": first_pgv.forecaster_name,
+                "model_version": first_pgv.forecaster_version,
+                "created_time": created.isoformat() if created else None,
+                "init_time": init.isoformat() if init else None,
+            }
+            await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
+
+        log.info(
+            "v1 forecast cache warmed: %s/%s/%s — %d regions",
+            source, country, region_type, len(regions),
+        )
+    except Exception:
+        log.exception("v1 forecast cache warm failed: %s/%s/%s", source, country, region_type)
+    finally:
+        _forecast_cache_warming[flag_key] = False
+
+
+async def _warm_v1_generation_cache(
+    app: object,
+    source: str,
+    country: str,
+    region_type: str,
+    observer: str,
+) -> None:
+    """Pre-warm per-region generation timeseries cache for one combination."""
+    flag_key = f"{source}:{country}:{region_type}:{observer}"
+    _generation_cache_warming[flag_key] = True
+    try:
+        db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
+        if db is None:
+            log.warning("v1 generation cache warm skipped: storage client not configured")
+            return
+
+        cfg = COUNTRIES.get(country.upper())
+        if cfg is None:
+            return
+        rt = cfg.get_region_type(region_type)
+        if rt is None:
+            return
+
+        energy_type = _energy_type_for(source)
+        win_start, win_end = _timeseries_window(None, None)
+
+        nations = await db.get_locations(
+            energy_type=energy_type,
+            location_type=models.LocationType.NATION,
+            authdata={},
+        )
+        nation = next((n for n in nations if n.name == cfg.nation_name), None)
+        if nation is None:
+            log.warning("v1 generation cache warm: nation '%s' not found", cfg.nation_name)
+            return
+
+        regions = await db.get_locations(
+            energy_type=energy_type,
+            location_type=rt.location_type,
+            authdata={},
+            enclosing_location_uuid=_to_uuid(nation.uuid),
+        )
+
+        backend = FastAPICache.get_backend()
+        prefix = FastAPICache.get_prefix()
+        base = (
+            f"{prefix}:v1:timeseries:generation"
+            f":{source}:{country.upper()}:{region_type}:{observer}"
+        )
+
+        for i, region in enumerate(regions):
+            agvs = await db.get_actual_generation(
+                location_uuid=region.uuid,
+                window_start=win_start,
+                window_end=win_end,
+                energy_type=energy_type,
+                location_type=rt.location_type,
+                authdata={},
+                observer_name=observer,
+            )
+            values = [
+                {
+                    "time": v.valid_timestamp.isoformat(),
+                    "power_kW": v.power_kilowatts,
+                }
+                for v in agvs
+            ]
+            await backend.set(f"{base}:{region.uuid}", json.dumps(values), expire=86400)
+            if (i + 1) % 20 == 0:
+                log.info(
+                    "v1 generation cache warm %s/%s/%s/%s: %d/%d regions",
+                    source, country, region_type, observer, i + 1, len(regions),
+                )
+            await asyncio.sleep(0.1)
+
+        meta = {"observer_name": observer}
+        await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
+
+        log.info(
+            "v1 generation cache warmed: %s/%s/%s/%s — %d regions",
+            source, country, region_type, observer, len(regions),
+        )
+    except Exception:
+        log.exception(
+            "v1 generation cache warm failed: %s/%s/%s/%s",
+            source, country, region_type, observer,
+        )
+    finally:
+        _generation_cache_warming[flag_key] = False
+
+
+async def _warm_all_v1_caches(app: object) -> None:
+    """Warm all v1 timeseries caches derived from the COUNTRIES config.
+
+    Targets are inferred automatically: adding generation sources or a new country
+    to country_config.py is sufficient to include them in the pre-warm.
+    """
+    await asyncio.sleep(5)
+    tasks = []
+    for country_code, cfg in COUNTRIES.items():
+        source = "solar"
+        for rt in cfg.region_types:
+            if rt.location_type == models.LocationType.NATION:
+                continue
+            if rt.forecast_models:
+                tasks.append(_warm_v1_forecast_cache(app, source, country_code, rt.type))
+            for gen_src in cfg.generation_sources:
+                tasks.append(
+                    _warm_v1_generation_cache(app, source, country_code, rt.type, gen_src.name),
+                )
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for r in results:
+        if isinstance(r, Exception):
+            log.exception("v1 cache warm subtask failed", exc_info=r)
 
 
 # ---------------------------------------------------------------------------
@@ -275,8 +529,7 @@ async def get_country_regions(
             location_type=rt.location_type,
             authdata=auth,
             enclosing_location_uuid=UUID(nation.uuid)
-            if isinstance(nation.uuid, str)
-            else nation.uuid,
+            if isinstance(nation.uuid, str) else nation.uuid,
         )
         return [_location_to_detail(loc, cfg) for loc in locs]
 
@@ -401,6 +654,7 @@ async def get_region_forecast(
         model_name=first.forecaster_name if first else None,
         model_version=first.forecaster_version if first else None,
         created_time=first.created_timestamp if first else None,
+        init_time=first.init_timestamp if first else None,
         values=[
             ForecastValue(
                 time=v.valid_timestamp,
@@ -410,6 +664,56 @@ async def get_region_forecast(
             for v in pgvs
         ],
     )
+
+
+@router.get(
+    "/{source}/{country}/regions/{region_id}/forecast/last_updated",
+    response_model=dt.datetime,
+    status_code=status.HTTP_200_OK,
+)
+@cache(key_builder=key_builder, expire=10)
+async def get_region_forecast_last_updated(
+    request: Request,
+    source: ValidSource,
+    country: str,
+    region_id: UUID,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    model: str | None = Query(None, description="Forecast model name."),
+) -> dt.datetime:
+    """Return the creation time of the most recent forecast for a region."""
+    energy_type = _energy_type_for(source)
+    _country_config(country)  # validate country
+
+    locs = await db.get_locations(
+        energy_type=energy_type,
+        location_type=None,
+        authdata={},  # TODO: add auth when loosed on DP side
+        location_uuid=region_id,
+    )
+    if len(locs) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region '{region_id}' not found.",
+        )
+    location_type = locs[0].location_type or models.LocationType.NATION
+
+    now = dt.datetime.now(tz=dt.UTC)
+    pgvs = await db.get_predicted_generation(
+        location_uuid=region_id,
+        window_start=now - dt.timedelta(minutes=30),
+        window_end=now + dt.timedelta(minutes=30),
+        energy_type=energy_type,
+        location_type=location_type,
+        authdata={},  # TODO: add auth when loosed on DP side
+        forecaster_name=model,
+    )
+    if not pgvs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No recent forecasts found for this region.",
+        )
+    return pgvs[0].created_timestamp
 
 
 @router.get(
@@ -477,47 +781,37 @@ async def get_region_generation(
 
 
 @router.get(
-    "/{source}/{country}/forecasts",
+    "/{source}/{country}/forecasts/snapshot",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder, expire=120)
 async def get_forecasts_snapshot(
+    request: Request,
     source: ValidSource,
     country: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
+    region_type: str = Query(..., description="Region type (e.g. 'gsp', 'national')."),
     model_name: str | None = Query(None, description="Forecast model name."),
     model_version: str | None = Query(None, description="Forecast model version."),
-    region_type: str | None = Query(
-        None,
-        description="Filter regions by type (e.g. 'gsp').",
-    ),
     timestamp: dt.datetime | None = Query(
         None,
         description="Forecast target timestamp (UTC).",
     ),
 ) -> ForecastSnapshot:
-    """Get forecasts for all regions of a given type at a specific timestamp.
-
-    Used for retrieving the latest forecast snapshot across many regions.
-    """
+    """Get forecasts for all regions of a given type at a specific timestamp."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
     nation = await _resolve_nation(db, energy_type, cfg, auth)
 
-    # Determine which location type to query
-    if region_type is not None:
-        rt = cfg.get_region_type(region_type)
-        if rt is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown region type '{region_type}' for {country.upper()}.",
-            )
-        location_type = rt.location_type
-    else:
-        # Default to GSP if no type specified
-        location_type = models.LocationType.GSP
+    rt = cfg.get_region_type(region_type)
+    if rt is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+        )
+    location_type = rt.location_type
 
-    # Get all regions of the requested type
     if location_type == models.LocationType.NATION:
         regions = [nation]
     else:
@@ -526,21 +820,42 @@ async def get_forecasts_snapshot(
             location_type=location_type,
             authdata=auth,
             enclosing_location_uuid=UUID(nation.uuid)
-            if isinstance(nation.uuid, str)
-            else nation.uuid,
+            if isinstance(nation.uuid, str) else nation.uuid,
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-    snapshot = await db.get_predicted_generation_snapshot(
-        location_uuids=[
-            UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
-        ],
-        forecaster_name=model_name,
-        forecaster_version=model_version,
-        snapshot_timestamp_utc=snapshot_time,
-        energy_type=energy_type,
-        authdata=auth,
-    )
+    if snapshot_time.tzinfo is None:
+        snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
+
+    if location_type == models.LocationType.NATION:
+        # Fallback: GetForecastAtTimestamp historically did not support NATION UUIDs.
+        # Pull a ±30-min timeseries and pick the value nearest the snapshot time.
+        pgvs = await db.get_predicted_generation(
+            location_uuid=nation.uuid,
+            window_start=snapshot_time - dt.timedelta(minutes=30),
+            window_end=snapshot_time + dt.timedelta(minutes=30),
+            energy_type=energy_type,
+            location_type=models.LocationType.NATION,
+            authdata={},  # TODO: add auth when loosed on DP side
+            forecaster_name=model_name,
+            forecaster_version=model_version,
+        )
+        snapshot = (
+            [min(pgvs, key=lambda v: abs(v.valid_timestamp - snapshot_time))]
+            if pgvs
+            else []
+        )
+    else:
+        snapshot = await db.get_predicted_generation_snapshot(
+            location_uuids=[
+                UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
+            ],
+            forecaster_name=model_name,
+            forecaster_version=model_version,
+            snapshot_timestamp_utc=snapshot_time,
+            energy_type=energy_type,
+            authdata=auth,
+        )
 
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
@@ -548,6 +863,7 @@ async def get_forecasts_snapshot(
         model_name=first.forecaster_name if first else None,
         model_version=first.forecaster_version if first else None,
         created_time=first.created_timestamp if first else None,
+        init_time=first.init_timestamp if first else None,
         values=[
             RegionForecastValue(
                 region_id=v.location_uuid,
@@ -558,3 +874,270 @@ async def get_forecasts_snapshot(
             for v in snapshot
         ],
     )
+
+
+@router.get(
+    "/{source}/{country}/forecasts/timeseries",
+    status_code=status.HTTP_200_OK,
+)
+async def get_forecasts_timeseries(
+    source: ValidSource,
+    country: str,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
+    end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
+    region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
+) -> ForecastMatrix:
+    """Get forecast timeseries for all (or selected) regions across a time window.
+
+    Served from the pre-warmed per-region cache. Returns 503 if the cache has not
+    yet been populated — retry after 60 seconds.
+    """
+    energy_type = _energy_type_for(source)
+    cfg = _country_config(country)
+
+    rt = cfg.get_region_type(region_type)
+    if rt is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+        )
+
+    win_start, win_end = _timeseries_window(start_utc, end_utc)
+
+    backend = FastAPICache.get_backend()
+    prefix = FastAPICache.get_prefix()
+    base = f"{prefix}:v1:timeseries:{source}:{country.upper()}:{region_type}"
+
+    raw_meta = await backend.get(f"{base}:_meta")
+    if raw_meta is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Forecast cache is being populated, please retry in 60 seconds.",
+            headers={"Retry-After": "60"},
+        )
+
+    # Resolve the region list so we know which cache keys to read
+    nation = await _resolve_nation(db, energy_type, cfg, auth)
+    regions = await db.get_locations(
+        energy_type=energy_type,
+        location_type=rt.location_type,
+        authdata=auth,
+        enclosing_location_uuid=UUID(nation.uuid) if isinstance(nation.uuid, str) else nation.uuid,
+    )
+    if region_ids is not None:
+        id_set = set(region_ids)
+        regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
+
+    region_series: list[RegionForecastTimeSeries] = []
+    for r in regions:
+        raw = await backend.get(f"{base}:{r.uuid}")
+        if raw is None:
+            continue
+        all_values = [ForecastValue.model_validate(v) for v in json.loads(raw)]
+        windowed = [v for v in all_values if win_start <= v.time <= win_end]
+        region_series.append(
+            RegionForecastTimeSeries(
+                region_id=_to_uuid(r.uuid),
+                capacity_kW=r.capacity_kilowatts,
+                values=windowed,
+            ),
+        )
+
+    metadata = json.loads(raw_meta)
+    return ForecastMatrix(**metadata, regions=region_series)
+
+
+@router.get(
+    "/{source}/{country}/generation/snapshot",
+    status_code=status.HTTP_200_OK,
+)
+@cache(key_builder=key_builder, expire=120)
+async def get_generation_snapshot(
+    request: Request,
+    source: ValidSource,
+    country: str,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    observer: ValidObserver = "pvlive_in_day",
+    timestamp: dt.datetime | None = Query(
+        None,
+        description="Observation target timestamp (UTC).",
+    ),
+) -> GenerationSnapshot:
+    """Get observed generation for all regions of a given type at a specific timestamp."""
+    energy_type = _energy_type_for(source)
+    cfg = _country_config(country)
+    nation = await _resolve_nation(db, energy_type, cfg, auth)
+
+    rt = cfg.get_region_type(region_type)
+    if rt is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+        )
+    location_type = rt.location_type
+
+    if location_type == models.LocationType.NATION:
+        regions = [nation]
+    else:
+        regions = await db.get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=auth,
+            enclosing_location_uuid=UUID(nation.uuid)
+            if isinstance(nation.uuid, str) else nation.uuid,
+        )
+
+    snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    if snapshot_time.tzinfo is None:
+        snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
+
+    snapshot = await db.get_actual_generation_snapshot(
+        location_uuids=[
+            UUID(r.uuid) if isinstance(r.uuid, str) else r.uuid for r in regions
+        ],
+        snapshot_timestamp_utc=snapshot_time,
+        energy_type=energy_type,
+        observer_name=observer,
+        authdata=auth,
+    )
+
+    return GenerationSnapshot(
+        time=snapshot_time,
+        observer_name=observer,
+        values=[
+            RegionGenerationValue(
+                region_id=v.location_uuid,
+                capacity_kW=v.capacity_kilowatts,
+                power_kW=v.power_kilowatts,
+            )
+            for v in snapshot
+        ],
+    )
+
+
+@router.get(
+    "/{source}/{country}/generation/timeseries",
+    status_code=status.HTTP_200_OK,
+)
+async def get_generation_timeseries(
+    source: ValidSource,
+    country: str,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    observer: ValidObserver = "pvlive_in_day",
+    start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
+    end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
+    region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
+) -> GenerationMatrix:
+    """Get observed generation timeseries for all (or selected) regions across a time window.
+
+    Served from the pre-warmed per-region cache. Returns 503 if the cache has not
+    yet been populated — retry after 60 seconds.
+    """
+    energy_type = _energy_type_for(source)
+    cfg = _country_config(country)
+
+    rt = cfg.get_region_type(region_type)
+    if rt is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+        )
+
+    win_start, win_end = _timeseries_window(start_utc, end_utc)
+
+    backend = FastAPICache.get_backend()
+    prefix = FastAPICache.get_prefix()
+    base = f"{prefix}:v1:timeseries:generation:{source}:{country.upper()}:{region_type}:{observer}"
+
+    raw_meta = await backend.get(f"{base}:_meta")
+    if raw_meta is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Generation cache is being populated, please retry in 60 seconds.",
+            headers={"Retry-After": "60"},
+        )
+
+    nation = await _resolve_nation(db, energy_type, cfg, auth)
+    regions = await db.get_locations(
+        energy_type=energy_type,
+        location_type=rt.location_type,
+        authdata=auth,
+        enclosing_location_uuid=UUID(nation.uuid) if isinstance(nation.uuid, str) else nation.uuid,
+    )
+    if region_ids is not None:
+        id_set = set(region_ids)
+        regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
+
+    region_series: list[RegionGenerationTimeSeries] = []
+    for r in regions:
+        raw = await backend.get(f"{base}:{r.uuid}")
+        if raw is None:
+            continue
+        all_values = [GenerationValue.model_validate(v) for v in json.loads(raw)]
+        windowed = [v for v in all_values if win_start <= v.time <= win_end]
+        region_series.append(
+            RegionGenerationTimeSeries(
+                region_id=_to_uuid(r.uuid),
+                capacity_kW=r.capacity_kilowatts,
+                values=windowed,
+            ),
+        )
+
+    metadata = json.loads(raw_meta)
+    return GenerationMatrix(**metadata, regions=region_series)
+
+
+@router.post(
+    "/{source}/{country}/forecasts/refresh",
+    include_in_schema=False,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def refresh_forecasts_cache(
+    source: ValidSource,
+    country: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    auth: AuthDependency,
+    region_type: str = Query("gsp", description="Region type to refresh."),
+) -> Response:
+    """Trigger a background re-warm of the forecast timeseries cache. Requires ocf:admin."""
+    if "ocf:admin" not in auth.get("permissions", []):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    flag_key = f"{source}:{country}:{region_type}"
+    if _forecast_cache_warming.get(flag_key):
+        return Response(status_code=202, content="Cache warm already in progress")
+    background_tasks.add_task(_warm_v1_forecast_cache, request.app, source, country, region_type)
+    return Response(status_code=202, content="Cache refresh triggered")
+
+
+@router.post(
+    "/{source}/{country}/generation/refresh",
+    include_in_schema=False,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def refresh_generation_cache(
+    source: ValidSource,
+    country: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    auth: AuthDependency,
+    region_type: str = Query("gsp", description="Region type to refresh."),
+    observer: ValidObserver = "pvlive_in_day",
+) -> Response:
+    """Trigger a background re-warm of the generation timeseries cache. Requires ocf:admin."""
+    if "ocf:admin" not in auth.get("permissions", []):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    flag_key = f"{source}:{country}:{region_type}:{observer}"
+    if _generation_cache_warming.get(flag_key):
+        return Response(status_code=202, content="Cache warm already in progress")
+    background_tasks.add_task(
+        _warm_v1_generation_cache, request.app, source, country, region_type, observer,
+    )
+    return Response(status_code=202, content="Cache refresh triggered")
