@@ -148,6 +148,35 @@ def _to_uuid(val: str | UUID) -> UUID:
     return UUID(val) if isinstance(val, str) else val
 
 
+async def _resolve_region_id(
+    region_id: str,
+    cfg: CountryConfig,
+    energy_type: models.EnergyType,
+    db: models.StorageInterface,
+) -> UUID:
+    """Resolve a region_id path param: 'national' slug → nation UUID, else parse as UUID."""
+    if region_id != "national":
+        try:
+            return UUID(region_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="region_id must be 'national' or a valid UUID.",
+            ) from None
+    nations = await db.get_locations(
+        energy_type=energy_type,
+        location_type=models.LocationType.NATION,
+        authdata={},
+    )
+    for n in nations:
+        if n.name.lower() == cfg.nation_name.lower():
+            return n.uuid
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"National region for '{cfg.nation_name}' not found.",
+    )
+
+
 def _timeseries_window(
     start_utc: dt.datetime | None,
     end_utc: dt.datetime | None,
@@ -562,24 +591,25 @@ async def get_country_regions(
 async def get_region(
     source: ValidSource,
     country: str,
-    region_id: UUID,
+    region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> RegionDetail:
     """Get details for a specific region."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
         energy_type=energy_type,
         location_type=None,
         authdata={}, # TODO: add auth when loosed on DP side
-        location_uuid=region_id,
+        location_uuid=resolved_id,
     )
     if len(locs) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{region_id}' not found.",
+            detail=f"Region '{resolved_id}' not found.",
         )
     return _location_to_detail(locs[0], cfg)
 
@@ -591,7 +621,7 @@ async def get_region(
 async def get_region_forecast(
     source: ValidSource,
     country: str,
-    region_id: UUID,
+    region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: dt.datetime | None = Query(
@@ -615,26 +645,27 @@ async def get_region_forecast(
 ) -> ForecastResponse:
     """Get the forecast for a specific region."""
     energy_type = _energy_type_for(source)
-    _country_config(country)  # validate country
+    cfg = _country_config(country)
+    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     # Resolve the region to determine its LocationType
     locs = await db.get_locations(
         energy_type=energy_type,
         location_type=None,
         authdata={}, # TODO: add auth when loosed on DP side
-        location_uuid=region_id,
+        location_uuid=resolved_id,
     )
     if len(locs) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{region_id}' not found.",
+            detail=f"Region '{resolved_id}' not found.",
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     pgvs = await db.get_predicted_generation(
-        location_uuid=region_id,
+        location_uuid=resolved_id,
         window_start=start_utc or now - dt.timedelta(days=2),
         window_end=end_utc or now + dt.timedelta(days=2),
         energy_type=energy_type,
@@ -673,31 +704,32 @@ async def get_region_forecast_last_updated(
     request: Request,
     source: ValidSource,
     country: str,
-    region_id: UUID,
+    region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     model: str | None = Query(None, description="Forecast model name."),
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region."""
     energy_type = _energy_type_for(source)
-    _country_config(country)  # validate country
+    cfg = _country_config(country)
+    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
         energy_type=energy_type,
         location_type=None,
         authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=region_id,
+        location_uuid=resolved_id,
     )
     if len(locs) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{region_id}' not found.",
+            detail=f"Region '{resolved_id}' not found.",
         )
     location_type = locs[0].location_type or models.LocationType.NATION
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
-        location_uuid=region_id,
+        location_uuid=resolved_id,
         window_start=now - dt.timedelta(minutes=30),
         window_end=now + dt.timedelta(minutes=30),
         energy_type=energy_type,
@@ -720,7 +752,7 @@ async def get_region_forecast_last_updated(
 async def get_region_generation(
     source: ValidSource,
     country: str,
-    region_id: UUID,
+    region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
@@ -735,26 +767,27 @@ async def get_region_generation(
 ) -> GenerationResponse:
     """Get observed generation data for a specific region."""
     energy_type = _energy_type_for(source)
-    _country_config(country)  # validate country
+    cfg = _country_config(country)
+    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     # Resolve the region to determine its LocationType
     locs = await db.get_locations(
         energy_type=energy_type,
         location_type=None,
         authdata={}, # TODO: add auth when loosed on DP side
-        location_uuid=region_id,
+        location_uuid=resolved_id,
     )
     if len(locs) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{region_id}' not found.",
+            detail=f"Region '{resolved_id}' not found.",
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(
-        location_uuid=region_id,
+        location_uuid=resolved_id,
         window_start=start_utc or now - dt.timedelta(days=5),
         window_end=end_utc or now,
         energy_type=energy_type,
