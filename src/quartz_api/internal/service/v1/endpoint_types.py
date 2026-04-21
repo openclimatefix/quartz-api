@@ -50,7 +50,8 @@ ValidSource = Annotated[
     str,
     Path(
         description="The energy source type.",
-        pattern="^(wind|solar)$",
+        enum=["solar", "wind"],
+        examples=["solar"],
     ),
 ]
 
