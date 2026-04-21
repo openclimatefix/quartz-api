@@ -155,6 +155,23 @@ def _to_uuid(val: str | UUID) -> UUID:
     return UUID(val) if isinstance(val, str) else val
 
 
+def _validate_model(
+    model: str | None,
+    rt: "RegionTypeConfig | None",
+    region_type_label: str,
+) -> None:
+    """Raise 400 if model is provided but not listed for the region type."""
+    if model is None or rt is None or not rt.forecast_models:
+        return
+    valid = {f.name for f in rt.forecast_models}
+    if model not in valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Model '{model}' is not available for region type '{region_type_label}'. "
+                   f"Available: {sorted(valid)}",
+        )
+
+
 async def _resolve_region_id(
     region_id: str,
     cfg: CountryConfig,
@@ -729,6 +746,7 @@ async def get_region_forecast(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
+    _validate_model(model, cfg.location_type_to_region_type(location_type), location_type.name)
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     pgvs = await db.get_predicted_generation(
@@ -890,7 +908,7 @@ async def get_forecasts_snapshot(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: str = Query(..., description="Region type (e.g. 'gsp', 'national')."),
-    model_name: str | None = Query(None, description="Forecast model name."),
+    model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
     timestamp: dt.datetime | None = Query(
         None,
@@ -908,6 +926,7 @@ async def get_forecasts_snapshot(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown region type '{region_type}' for {country.upper()}.",
         )
+    _validate_model(model_name, rt, rt.type)
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
