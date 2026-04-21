@@ -247,7 +247,7 @@ class StorageClient(models.StorageInterface):
                 if "p10" in v.get("other_statistics_fractions", {}) and \
                     "p90" in v.get("other_statistics_fractions", {})
                 else {},
-                metadata=v["metadata"],
+                metadata=v.get("metadata", {}),
             )
             for v in resp["values"]
         ]
