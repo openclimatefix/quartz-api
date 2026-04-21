@@ -21,6 +21,7 @@ from quartz_api.internal.service.uk_national.cache import key_builder
 
 from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig
 from .endpoint_types import (
+    CountryDetail,
     ForecastMatrix,
     ForecastModel,
     ForecastResponse,
@@ -39,6 +40,7 @@ from .endpoint_types import (
     RegionSummary,
     RegionType,
     Source,
+    ValidForecastModel,
     ValidObserver,
     ValidSource,
 )
@@ -233,11 +235,11 @@ async def _warm_v1_forecast_cache(
             authdata={},
         )
         nation = next(
-            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
         )
         if nation is None:
             log.warning(
-                "v1 forecast cache warm: nation '%s' not found", cfg.nation_name
+                "v1 forecast cache warm: nation '%s' not found", cfg.nation_name,
             )
             return
 
@@ -305,7 +307,7 @@ async def _warm_v1_forecast_cache(
         )
     except Exception:
         log.exception(
-            "v1 forecast cache warm failed: %s/%s/%s", source, country, region_type
+            "v1 forecast cache warm failed: %s/%s/%s", source, country, region_type,
         )
     finally:
         _forecast_cache_warming[flag_key] = False
@@ -325,7 +327,7 @@ async def _warm_v1_generation_cache(
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
             log.warning(
-                "v1 generation cache warm skipped: storage client not configured"
+                "v1 generation cache warm skipped: storage client not configured",
             )
             return
 
@@ -345,11 +347,11 @@ async def _warm_v1_generation_cache(
             authdata={},
         )
         nation = next(
-            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
         )
         if nation is None:
             log.warning(
-                "v1 generation cache warm: nation '%s' not found", cfg.nation_name
+                "v1 generation cache warm: nation '%s' not found", cfg.nation_name,
             )
             return
 
@@ -436,12 +438,12 @@ async def _warm_all_v1_caches(app: object) -> None:
                 continue
             if rt.forecast_models:
                 tasks.append(
-                    _warm_v1_forecast_cache(app, source, country_code, rt.type)
+                    _warm_v1_forecast_cache(app, source, country_code, rt.type),
                 )
             for gen_src in cfg.generation_sources:
                 tasks.append(
                     _warm_v1_generation_cache(
-                        app, source, country_code, rt.type, gen_src.name
+                        app, source, country_code, rt.type, gen_src.name,
                     ),
                 )
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -476,24 +478,47 @@ async def get_sources(
 async def get_countries(
     db: models.StorageClientDependency,
     auth: AuthDependency,
-) -> list[RegionDetail]:
-    """List available countries with their nation-level region details."""
+) -> list[CountryDetail]:
+    """List available countries with full capability manifest (region types, models, sources)."""
     nations = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
         authdata=auth,
     )
-    return [
-        RegionDetail(
-            id=n.uuid,
-            name=n.name,
-            type="national",
-            capacity_kW=n.capacity_kilowatts,
-            latitude=n.latitude,
-            longitude=n.longitude,
+    result = []
+    for country_code, cfg in COUNTRIES.items():
+        nation = next(
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
         )
-        for n in nations
-    ]
+        if nation is None:
+            continue
+        result.append(
+            CountryDetail(
+                country=country_code,
+                nation_id=nation.uuid,
+                name=nation.name,
+                capacity_kW=nation.capacity_kilowatts,
+                latitude=nation.latitude,
+                longitude=nation.longitude,
+                region_types=[
+                    RegionType(
+                        type=rt.type,
+                        label=rt.label,
+                        level=rt.level,
+                        forecast_models=[
+                            ForecastModel(name=f.name, label=f.label)
+                            for f in rt.forecast_models
+                        ],
+                    )
+                    for rt in cfg.region_types
+                ],
+                generation_sources=[
+                    GenerationSource(source=gs.source, name=gs.name, label=gs.label)
+                    for gs in cfg.generation_sources
+                ],
+            ),
+        )
+    return result
 
 
 @router.get(
@@ -683,7 +708,7 @@ async def get_region_forecast(
         None,
         description="Forecast horizon filter in minutes.",
     ),
-    model: str | None = Query(None, description="Forecast model name."),
+    model: ValidForecastModel | None = None,
 ) -> ForecastResponse:
     """Get the forecast for a specific region."""
     energy_type = _energy_type_for(source)
@@ -750,7 +775,7 @@ async def get_region_forecast_last_updated(
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    model: str | None = Query(None, description="Forecast model name."),
+    model: ValidForecastModel | None = None,
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region."""
     energy_type = _energy_type_for(source)
@@ -959,7 +984,7 @@ async def get_forecasts_timeseries(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs."
+        None, description="Limit to specific region UUIDs.",
     ),
 ) -> ForecastMatrix:
     """Get forecast timeseries for all (or selected) regions across a time window.
@@ -1103,7 +1128,7 @@ async def get_generation_timeseries(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs."
+        None, description="Limit to specific region UUIDs.",
     ),
 ) -> GenerationMatrix:
     """Get observed generation timeseries for all (or selected) regions across a time window.
@@ -1185,7 +1210,7 @@ async def refresh_forecasts_cache(
     if _forecast_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
-        _warm_v1_forecast_cache, request.app, source, country, region_type
+        _warm_v1_forecast_cache, request.app, source, country, region_type,
     )
     return Response(status_code=202, content="Cache refresh triggered")
 
