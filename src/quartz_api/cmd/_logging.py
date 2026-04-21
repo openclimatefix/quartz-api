@@ -37,10 +37,12 @@ class JsonFormatter(logging.Formatter):
             "pid": record.process,
         }
 
-        # Add custom extra attributes if they exist
         for extra_attr in ["trace_id", "process_time", "client_ip", "user_id", "request_url"]:
             if hasattr(record, extra_attr):
                 base[extra_attr] = getattr(record, extra_attr)
+
+        if record.exc_info:
+            base["exc"] = self.formatException(record.exc_info)
 
         return json.dumps(base, ensure_ascii=False)
 

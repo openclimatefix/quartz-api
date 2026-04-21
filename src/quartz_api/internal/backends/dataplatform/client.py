@@ -150,6 +150,11 @@ class StorageClient(models.StorageInterface):
                 latest_versions_only=True,
             )
             resp = await self.dpc.ListForecasters(req)
+            if not resp.forecasters:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                )
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
@@ -300,6 +305,11 @@ class StorageClient(models.StorageInterface):
                 latest_versions_only=True,
             )
             resp = await self.dpc.ListForecasters(req)
+            if not resp.forecasters:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                )
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
