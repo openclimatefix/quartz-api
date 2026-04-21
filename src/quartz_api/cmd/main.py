@@ -47,6 +47,24 @@ logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
+_AUTO_AUTHORIZE_JS = """
+<script>
+(function () {
+  document.addEventListener('click', (e) => {
+    // Only trigger on the top-level Authorize button, not buttons inside the modal.
+    if (!e.target.closest('.btn.authorize') || e.target.closest('.dialog-ux')) return;
+    setTimeout(() => {
+      const modal = document.querySelector('.dialog-ux');
+      if (!modal) return;
+      const btn = Array.from(modal.querySelectorAll('button'))
+        .find(b => b.textContent.trim() === 'Authorize');
+      if (btn) btn.click();
+    }, 50);
+  });
+})();
+</script>
+"""
+
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -118,6 +136,57 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
     return openapi_schema
 
 
+
+def _create_v1_app(conf: ConfigTree, auth_openapi_config: dict[str, str] | None) -> FastAPI:
+    """Create and configure the v1 FastAPI sub-application."""
+    v1_mod = importlib.import_module(service.__name__ + ".v1")
+
+    v1_app = FastAPI(
+        title="Quartz API v1",
+        version=importlib.metadata.version("quartz_api"),
+        description=v1_mod.__doc__ or "",
+        openapi_tags=[{"name": "v1", "description": "v1 API routes."}],
+        docs_url=None,
+        redoc_url=None,
+        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
+        swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": True},
+        swagger_ui_parameters={"persistAuthorization": True},
+    )
+
+    if auth_openapi_config:
+        v1_app.swagger_ui_init_oauth = {
+            "usePkceWithAuthorizationCodeGrant": True,
+            "clientId": conf.get_string("auth0.client_id"),
+            "scopes": "openid profile email",
+            "additionalQueryStringParams": {"audience": auth_openapi_config["audience"]},
+        }
+
+    v1_app.state.limiter = ratelimit.limiter
+    v1_app.include_router(v1_mod.router)
+    v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
+
+    @v1_app.get("/docs/oauth2-redirect", include_in_schema=False)
+    async def v1_swagger_redirect() -> HTMLResponse:
+        """OAuth2 redirect handler for v1 Swagger UI token exchange."""
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @v1_app.get("/docs", include_in_schema=False)
+    async def v1_swagger_ui(request: Request) -> HTMLResponse:
+        """Serve v1 Swagger UI with auto-authorize JS injected."""
+        root_path = request.scope.get("root_path", "").rstrip("/")
+        html = get_swagger_ui_html(
+            openapi_url=root_path + v1_app.openapi_url,
+            title=v1_app.title,
+            oauth2_redirect_url=root_path + v1_app.swagger_ui_oauth2_redirect_url,
+            init_oauth=v1_app.swagger_ui_init_oauth,
+            swagger_ui_parameters=v1_app.swagger_ui_parameters,
+        )
+        patched = html.body.decode().replace("</body>", _AUTO_AUTHORIZE_JS + "</body>")
+        return HTMLResponse(patched)
+
+    return v1_app
+
+
 @asynccontextmanager
 async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     """Configure FastAPI app instance with startup and shutdown events."""
@@ -171,7 +240,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     warm_v1_task = None
     if "v1" in conf.get_string("api.routers").split(","):
         from quartz_api.internal.service.v1.router import _warm_all_v1_caches
-        warm_v1_task = asyncio.create_task(_warm_all_v1_caches(server))
+        v1_app = server.state.v1_app
+        v1_app.dependency_overrides[models.get_storage_client] = lambda: storage
+        warm_v1_task = asyncio.create_task(_warm_all_v1_caches(v1_app))
 
     yield
 
@@ -211,11 +282,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
 
-    # Register rate limiter
-    server.state.limiter = ratelimit.limiter
-    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    server.add_middleware(SlowAPIMiddleware)
-
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
 
@@ -249,26 +315,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             init_oauth=server.swagger_ui_init_oauth,
             swagger_ui_parameters=server.swagger_ui_parameters,
         )
-        # Inject a small script that auto-clicks through the Authorize modal so
-        # the user only needs to press the top-level "Authorize" button once.
-        auto_authorize_js = """
-<script>
-(function () {
-  document.addEventListener('click', (e) => {
-    // Only trigger on the top-level Authorize button, not buttons inside the modal.
-    if (!e.target.closest('.btn.authorize') || e.target.closest('.dialog-ux')) return;
-    setTimeout(() => {
-      const modal = document.querySelector('.dialog-ux');
-      if (!modal) return;
-      const btn = Array.from(modal.querySelectorAll('button'))
-        .find(b => b.textContent.trim() === 'Authorize');
-      if (btn) btn.click();
-    }, 50);
-  });
-})();
-</script>
-"""
-        patched = html.body.decode().replace("</body>", auto_authorize_js + "</body>")
+        patched = html.body.decode().replace("</body>", _AUTO_AUTHORIZE_JS + "</body>")
         return HTMLResponse(patched)
 
     # Setup sentry, if configured
@@ -288,6 +335,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         log.warning("No routers configured. The API will not have any endpoints.")
     else:
         for r in conf.get_string("api.routers").split(","):
+            if r == "v1":
+                continue  # handled as a sub-app below, after auth config is resolved
             try:
                 mod = importlib.import_module(service.__name__ + f".{r}")
                 server.include_router(mod.router)
@@ -298,8 +347,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             except ModuleNotFoundError as e:
                 raise OSError(f"No such router router '{r}'") from e
 
-    # Store auth instance for middleware
-    auth_instance = None
     auth_openapi_config: dict[str, str] | None = None
 
     # Override dependencies according to configuration
@@ -341,10 +388,19 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Customize the OpenAPI schema (after auth config is resolved)
     server.openapi = lambda: _custom_openapi(server, auth_openapi_config)
 
+    # Mount v1 as a sub-app (after auth config is resolved so v1 gets OAuth2 config)
+    if "v1" in conf.get_string("api.routers").split(","):
+        v1_app = _create_v1_app(conf, auth_openapi_config)
+        server.state.v1_app = v1_app
+        server.mount("/v1", v1_app)
+
     timezone: str = conf.get_string("api.timezone")
     server.dependency_overrides[models.get_timezone] = lambda: ZoneInfo(key=timezone)
 
     # Add middlewares
+    server.state.limiter = ratelimit.limiter
+    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_middleware(SlowAPIMiddleware)
     server.add_middleware(
         CORSMiddleware,
         allow_origins=conf.get_string("api.origins").split(","),
@@ -354,11 +410,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     if conf.get_string("backend.source") != "dataplatform":
         server.add_middleware(audit.RequestLoggerMiddleware)
-    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth_instance)
-
-    # update description
-    server.description = description
-
+    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=None)
     if conf.get_string("apitally.client_id") != "":
         server.add_middleware(
             ApitallyMiddleware,
@@ -370,10 +422,13 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             log_response_body=True,
             capture_logs=True,
         )
-
     server.add_middleware(trace.TracerMiddleware)
 
+    # update description
+    server.description = description
+
     return server
+
 
 conf = ConfigFactory.parse_file((pathlib.Path(__file__).parent / "server.conf").as_posix())
 server = _create_server(conf)
