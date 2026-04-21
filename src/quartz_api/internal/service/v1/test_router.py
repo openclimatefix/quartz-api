@@ -62,7 +62,7 @@ class FixedUUIDStorageClient(StorageClient):
 
 def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(router, prefix="/v1")
     app.dependency_overrides[models.get_storage_client] = lambda: db
     app.dependency_overrides[_auth_dep] = lambda: {
         "sub": "test|user",
@@ -168,9 +168,9 @@ async def test_get_generation_sources(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
-async def test_unknown_country_returns_404(client: AsyncClient) -> None:
+async def test_unknown_country_returns_422(client: AsyncClient) -> None:
     resp = await client.get("/v1/XX/solar/region-types")
-    assert resp.status_code == 404
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
