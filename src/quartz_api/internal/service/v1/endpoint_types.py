@@ -10,6 +10,25 @@ from pydantic import BaseModel, Field
 from .country_config import COUNTRIES
 
 
+def _get_forecast_model_names() -> tuple[str, ...]:
+    """Extract all unique forecast model names from country configs."""
+    names: set[str] = set()
+    for country_cfg in COUNTRIES.values():
+        for rt in country_cfg.region_types:
+            for m in rt.forecast_models:
+                names.add(m.name)
+    return tuple(sorted(names))
+
+
+ValidForecastModel = Annotated[
+    str,
+    Query(
+        description="Forecast model name.",
+        enum=list(_get_forecast_model_names()),
+    ),
+]
+
+
 def _get_observer_sources() -> tuple[str, ...]:
     """Extract all unique observer source names from country configs."""
     sources = set()
@@ -75,6 +94,19 @@ class RegionType(BaseModel):
     label: str
     level: int
     forecast_models: list[ForecastModel] = []
+
+
+class CountryDetail(BaseModel):
+    """Full capability manifest for a country — region types, models, and generation sources."""
+
+    country: str
+    nation_id: UUID
+    name: str
+    capacity_kW: float
+    latitude: float
+    longitude: float
+    region_types: list[RegionType] = []
+    generation_sources: list[GenerationSource] = []
 
 
 class RegionSummary(BaseModel):

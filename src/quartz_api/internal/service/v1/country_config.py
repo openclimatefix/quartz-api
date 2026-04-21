@@ -78,14 +78,14 @@ _NATIONAL_FORECAST_MODELS = (
     ForecastModel(name="pvnet_intraday", label="PVNet Intraday"),
     ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead"),
     ForecastModel(
-        name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)"
+        name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)",
     ),
     ForecastModel(
         name="pvnet_intraday_met_office_only",
         label="PVNet Intraday (Met Office only)",
     ),
     ForecastModel(
-        name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)"
+        name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)",
     ),
 )
 
@@ -120,10 +120,10 @@ COUNTRIES: dict[str, CountryConfig] = {
         ),
         generation_sources=(
             GenerationSource(
-                source="solar", name="pvlive_in_day", label="PV Live Estimated"
+                source="solar", name="pvlive_in_day", label="PV Live Estimated",
             ),
             GenerationSource(
-                source="solar", name="pvlive_day_after", label="PV Live Updated"
+                source="solar", name="pvlive_day_after", label="PV Live Updated",
             ),
         ),
     ),
@@ -150,14 +150,14 @@ COUNTRIES: dict[str, CountryConfig] = {
                         label="Regional PV 2h (ECMWF, Adjusted)",
                     ),
                     ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)"
+                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)",
                     ),
                     ForecastModel(
                         name="nl_regional_48h_pv_ecmwf_adjust",
                         label="Regional PV 48h (ECMWF, Adjusted)",
                     ),
                     ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)"
+                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)",
                     ),
                     ForecastModel(
                         name="nl_regional_pv_ecmwf_sat_adjust",
@@ -203,14 +203,14 @@ COUNTRIES: dict[str, CountryConfig] = {
                         label="Regional PV 2h (ECMWF, Adjusted)",
                     ),
                     ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)"
+                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)",
                     ),
                     ForecastModel(
                         name="nl_regional_48h_pv_ecmwf_adjust",
                         label="Regional PV 48h (ECMWF, Adjusted)",
                     ),
                     ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)"
+                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)",
                     ),
                     ForecastModel(
                         name="nl_regional_pv_ecmwf_sat_adjust",
