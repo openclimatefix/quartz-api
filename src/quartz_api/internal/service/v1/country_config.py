@@ -77,12 +77,16 @@ _NATIONAL_FORECAST_MODELS = (
     ForecastModel(name="blend", label="Blend"),
     ForecastModel(name="pvnet_intraday", label="PVNet Intraday"),
     ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead"),
-    ForecastModel(name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)"),
+    ForecastModel(
+        name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)"
+    ),
     ForecastModel(
         name="pvnet_intraday_met_office_only",
         label="PVNet Intraday (Met Office only)",
     ),
-    ForecastModel(name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)"),
+    ForecastModel(
+        name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)"
+    ),
 )
 
 COUNTRIES: dict[str, CountryConfig] = {
@@ -115,12 +119,16 @@ COUNTRIES: dict[str, CountryConfig] = {
             ),
         ),
         generation_sources=(
-            GenerationSource(source="solar", name="pvlive_in_day", label="PV Live Estimated"),
-            GenerationSource(source="solar", name="pvlive_day_after", label="PV Live Updated"),
+            GenerationSource(
+                source="solar", name="pvlive_in_day", label="PV Live Estimated"
+            ),
+            GenerationSource(
+                source="solar", name="pvlive_day_after", label="PV Live Updated"
+            ),
         ),
     ),
     "NL": CountryConfig(
-        nation_name="nl",
+        nation_name="nl_national",
         region_types=(
             RegionTypeConfig(
                 type="national",
@@ -128,14 +136,95 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=0,
                 location_type=LocationType.NATION,
                 source_types=("solar",),
+                forecast_models=(
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_mo_sat_adjust",
+                        label="Regional PV (ECMWF + Met Office + Satellite, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_mo_sat",
+                        label="Regional PV (ECMWF + Met Office + Satellite)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_2h_pv_ecmwf_adjust",
+                        label="Regional PV 2h (ECMWF, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)"
+                    ),
+                    ForecastModel(
+                        name="nl_regional_48h_pv_ecmwf_adjust",
+                        label="Regional PV 48h (ECMWF, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)"
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_sat_adjust",
+                        label="Regional PV (ECMWF + Satellite, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_sat",
+                        label="Regional PV (ECMWF + Satellite)",
+                    ),
+                    ForecastModel(
+                        name="nl_national_pv_ecmwf_sat_small_adjust",
+                        label="National PV (ECMWF + Satellite, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_national_pv_ecmwf_sat_small",
+                        label="National PV (ECMWF + Satellite)",
+                    ),
+                    ForecastModel(
+                        name="nl_36_simple_site_adjust",
+                        label="36h Simple Site (Adjusted)",
+                    ),
+                    ForecastModel(name="nl_36_simple_site", label="36h Simple Site"),
+                    ForecastModel(name="ned_nl_national", label="NED National"),
+                ),
             ),
             RegionTypeConfig(
                 type="netbeheerder",
                 label="Network Operator",
                 level=10,
-                location_type=LocationType.DNO,
-                source_types=(),
+                location_type=LocationType.REGION,
+                source_types=("solar",),
+                forecast_models=(
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_mo_sat_adjust",
+                        label="Regional PV (ECMWF + Met Office + Satellite, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_mo_sat",
+                        label="Regional PV (ECMWF + Met Office + Satellite)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_2h_pv_ecmwf_adjust",
+                        label="Regional PV 2h (ECMWF, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)"
+                    ),
+                    ForecastModel(
+                        name="nl_regional_48h_pv_ecmwf_adjust",
+                        label="Regional PV 48h (ECMWF, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)"
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_sat_adjust",
+                        label="Regional PV (ECMWF + Satellite, Adjusted)",
+                    ),
+                    ForecastModel(
+                        name="nl_regional_pv_ecmwf_sat",
+                        label="Regional PV (ECMWF + Satellite)",
+                    ),
+                ),
             ),
+        ),
+        generation_sources=(
+            GenerationSource(source="solar", name="nednl", label="NED NL Initial"),
         ),
     ),
 }
