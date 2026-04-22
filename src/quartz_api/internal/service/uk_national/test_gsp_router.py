@@ -117,7 +117,7 @@ async def test_gsp_pvlive_specific(api_client, mock_storage: AsyncMock):
 
 
 @pytest.mark.asyncio
-async def test_gsp_forecast_all_filtered_compact_unit(
+async def test_gsp_forecast_all_filtered_compact(
     api_client,
     mock_storage: AsyncMock,
 ):
@@ -194,7 +194,7 @@ async def test_gsp_forecast_all_default(api_client, mock_storage: AsyncMock):
 
 
 @pytest.mark.asyncio
-async def test_gsp_pvlive_all_routing_logic_unit(
+async def test_gsp_pvlive_all_routing_logic(
     api_client,
     mock_storage: AsyncMock,
 ):
@@ -224,7 +224,7 @@ async def test_gsp_pvlive_all_routing_logic_unit(
 
 
 @pytest.mark.asyncio
-async def test_gsp_pvlive_all_grouping_unit(api_client, mock_storage: AsyncMock):
+async def test_gsp_pvlive_all_grouping(api_client, mock_storage: AsyncMock):
     """Verifies that /pvlive/all correctly groups generation data by datetime."""
     frozen_time = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
 

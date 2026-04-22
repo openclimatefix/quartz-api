@@ -36,6 +36,7 @@ from quartz_api.internal.backends import (
 )
 from quartz_api.internal.middleware import audit, auth, ratelimit, sentry, trace
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
 
 from ._logging import setup_json_logging
 
@@ -124,9 +125,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             raise ValueError(f"Unknown backend: {backend_type}")
 
     server.dependency_overrides[models.get_storage_client] = lambda: storage
+    warm_task: asyncio.Task | None = None
 
     if "uk_national" in conf.get_string("api.routers"):
-        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
         warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
     yield

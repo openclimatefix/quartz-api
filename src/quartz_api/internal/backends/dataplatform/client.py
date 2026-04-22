@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.struct_pb2 import Struct
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from typing_extensions import override
@@ -30,6 +30,24 @@ location_type_map: dict[models.LocationType, common_pb2.LocationType] = {
 
 
 _DP_SERVICE = "ocf.dp.DataPlatformDataService"
+
+def struct_to_dict(pb_struct: Struct) -> dict[str, str | float | bool]:
+    """Convert a protobuf struct to a python dictionary.
+
+    Ignores any recursive elements, i.e. the struct has to be flat.
+    """
+    out = {}
+    for key, value_msg in pb_struct.fields.items():
+        kind = value_msg.WhichOneof("kind")
+
+        if kind == "number_value":
+            out[key] = value_msg.number_value
+        elif kind == "string_value":
+            out[key] = value_msg.string_value
+        elif kind == "bool_value":
+            out[key] = value_msg.bool_value
+
+    return out
 
 
 class StorageClient(models.StorageInterface):
@@ -181,7 +199,7 @@ class StorageClient(models.StorageInterface):
                     forecaster_name=forecaster.forecaster_name,
                     forecaster_version=forecaster.forecaster_version,
                     plevels_kilowatts=plevels,
-                    metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
+                    metadata=struct_to_dict(v.metadata) if v.metadata is not None else {},
                 ))
 
             return out
@@ -296,7 +314,7 @@ class StorageClient(models.StorageInterface):
                 -> list[models.PredictedGenerationValue]:
             out: list[models.PredictedGenerationValue] = [
                 models.PredictedGenerationValue(
-                    power_kilowatts=v.value_fraction * v.effective_capacity_watts / 1000,
+                    power_kilowatts=int(v.value_fraction * v.effective_capacity_watts) / 1000,
                     valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     location_uuid=UUID(v.location_uuid),
                     capacity_kilowatts=v.effective_capacity_watts / 1000,
@@ -304,7 +322,7 @@ class StorageClient(models.StorageInterface):
                     forecaster_version=forecaster.forecaster_version,
                     created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                    metadata=MessageToDict(v.metadata) if v.metadata is not None else {},
+                    metadata=struct_to_dict(v.metadata) if v.metadata is not None else {},
                 )
                 for v in resp.values
             ]
@@ -393,7 +411,7 @@ class StorageClient(models.StorageInterface):
                     capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                     latitude=loc.latlng.latitude,
                     longitude=loc.latlng.longitude,
-                    metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
+                    metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},
                 )
                 for loc in resp.locations
             ]
@@ -447,7 +465,7 @@ class StorageClient(models.StorageInterface):
             capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
-            metadata=MessageToDict(loc.metadata) if loc.metadata is not None else {},
+            metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},
         )
 
 

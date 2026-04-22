@@ -132,6 +132,42 @@ def mock_get_latest_forecasts(
         ],
     )
 
+def mock_get_forecast_at_timestamp(
+    req: messages_pb2.GetForecastAtTimestampRequest,
+    metadata: object | None = None,  # noqa: ARG001
+) -> messages_pb2.GetForecastAtTimestampResponse:
+    return messages_pb2.GetForecastAtTimestampResponse(
+        timestamp_utc=req.timestamp_utc,
+        values=[
+            messages_pb2.GetForecastAtTimestampResponse.Value(
+                location_uuid=uuid,
+                value_fraction=0.8,
+                effective_capacity_watts=int(1e6),
+                created_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=1),
+                initialization_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=2),
+                metadata=Struct(fields={}),
+            )
+            for uuid in req.location_uuids
+        ],
+    )
+
+
+def mock_get_observations_at_timestamp(
+    req: messages_pb2.GetObservationsAtTimestampRequest,
+    metadata: object | None = None,  # noqa: ARG001
+) -> messages_pb2.GetObservationsAtTimestampResponse:
+    return messages_pb2.GetObservationsAtTimestampResponse(
+        timestamp_utc=req.timestamp_utc,
+        values=[
+            messages_pb2.GetObservationsAtTimestampResponse.Value(
+                location_uuid=uuid,
+                value_fraction=0.5,
+                effective_capacity_watts=int(1e6),
+            )
+            for uuid in req.location_uuids
+        ],
+    )
+
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
@@ -434,5 +470,75 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     actual_values = [v.power_kilowatts for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)
 
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_get_predicted_generation_snapshot(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        client = StorageClient.from_dp(client_mock)
+        
+        client_mock.ListForecasters = AsyncMock(side_effect=mock_list_locations) # Reusing for generic struct
+        client_mock.GetForecastAtTimestamp = AsyncMock(side_effect=mock_get_forecast_at_timestamp)
+        client_mock.ListForecasters = AsyncMock(
+            return_value=messages_pb2.ListForecastersResponse(
+                forecasters=[messages_pb2.Forecaster(forecaster_name="blend", forecaster_version="1.3.0")]
+            )
+        )
 
-# TODO add test for get_latest_forecasts
+        test_uuids = [uuid.uuid4(), uuid.uuid4()]
+        
+        with self.assertRaises(ValueError):
+            await client.get_predicted_generation_snapshot(
+                location_uuids=test_uuids,
+                snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+                energy_type=models.EnergyType.SOLAR,
+                authdata={"sub": "access_user"},
+                forecaster_name=None,
+            )
+
+        resp = await client.get_predicted_generation_snapshot(
+            location_uuids=test_uuids,
+            snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "access_user"},
+            forecaster_name="blend",
+            # forecaster_version is omitted to force ListForecasters call
+        )
+
+        self.assertEqual(len(resp), 2)
+        client_mock.ListForecasters.assert_called_once()
+        client_mock.GetForecastAtTimestamp.assert_called_once()
+        self.assertEqual(resp[0].power_kilowatts, 800.0)
+
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_get_actual_generation_snapshot(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        client = StorageClient.from_dp(client_mock)
+        client_mock.GetObservationsAtTimestamp = AsyncMock(side_effect=mock_get_observations_at_timestamp)
+
+        test_uuids = [uuid.uuid4(), uuid.uuid4()]
+
+        with self.assertRaises(ValueError):
+            await client.get_actual_generation_snapshot(
+                location_uuids=test_uuids,
+                snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+                energy_type=models.EnergyType.SOLAR,
+                authdata={"sub": "access_user"},
+                observer_name=None,
+            )
+
+        resp = await client.get_actual_generation_snapshot(
+            location_uuids=test_uuids,
+            snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "access_user"},
+            observer_name="test_observer",
+        )
+
+        self.assertEqual(len(resp), 2)
+        client_mock.GetObservationsAtTimestamp.assert_called_once()
+        
+        self.assertEqual(resp[0].power_kilowatts, 500.0)
+
