@@ -476,17 +476,20 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
     ) -> None:
         client = StorageClient.from_dp(client_mock)
-        
-        client_mock.ListForecasters = AsyncMock(side_effect=mock_list_locations) # Reusing for generic struct
+
+        client_mock.ListForecasters = AsyncMock(side_effect=mock_list_locations)
         client_mock.GetForecastAtTimestamp = AsyncMock(side_effect=mock_get_forecast_at_timestamp)
         client_mock.ListForecasters = AsyncMock(
             return_value=messages_pb2.ListForecastersResponse(
-                forecasters=[messages_pb2.Forecaster(forecaster_name="blend", forecaster_version="1.3.0")]
-            )
+                forecasters=[messages_pb2.Forecaster(
+                    forecaster_name="blend",
+                    forecaster_version="1.3.0",
+                )],
+            ),
         )
 
         test_uuids = [uuid.uuid4(), uuid.uuid4()]
-        
+
         with self.assertRaises(ValueError):
             await client.get_predicted_generation_snapshot(
                 location_uuids=test_uuids,
@@ -516,7 +519,9 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
     ) -> None:
         client = StorageClient.from_dp(client_mock)
-        client_mock.GetObservationsAtTimestamp = AsyncMock(side_effect=mock_get_observations_at_timestamp)
+        client_mock.GetObservationsAtTimestamp = AsyncMock(
+            side_effect=mock_get_observations_at_timestamp,
+        )
 
         test_uuids = [uuid.uuid4(), uuid.uuid4()]
 
@@ -539,6 +544,6 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(resp), 2)
         client_mock.GetObservationsAtTimestamp.assert_called_once()
-        
+
         self.assertEqual(resp[0].power_kilowatts, 500.0)
 
