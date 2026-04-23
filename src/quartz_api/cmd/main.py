@@ -17,13 +17,13 @@ import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
+from scalar_fastapi import get_scalar_api_reference
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -46,24 +46,6 @@ log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
-
-_AUTO_AUTHORIZE_JS = """
-<script>
-(function () {
-  document.addEventListener('click', (e) => {
-    // Only trigger on the top-level Authorize button, not buttons inside the modal.
-    if (!e.target.closest('.btn.authorize') || e.target.closest('.dialog-ux')) return;
-    setTimeout(() => {
-      const modal = document.querySelector('.dialog-ux');
-      if (!modal) return;
-      const btn = Array.from(modal.querySelectorAll('button'))
-        .find(b => b.textContent.trim() === 'Authorize');
-      if (btn) btn.click();
-    }, 50);
-  });
-})();
-</script>
-"""
 
 
 class GetHealthResponse(BaseModel):
@@ -141,48 +123,38 @@ def _create_v1_app(conf: ConfigTree, auth_openapi_config: dict[str, str] | None)
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
 
+    scalar_auth: dict = {}
+    if auth_openapi_config:
+        scalar_auth = {
+            "preferredSecurityScheme": "oauth2",
+            "oauth2": {
+                "clientId": conf.get_string("auth0.client_id"),
+                "scopes": "openid profile email",
+            },
+        }
+
     v1_app = FastAPI(
         title="Quartz API v1",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
-        openapi_tags=[{"name": "v1", "description": "v1 API routes."}],
         docs_url=None,
         redoc_url=None,
-        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
-        swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": True},
-        swagger_ui_parameters={"persistAuthorization": True},
     )
-
-    if auth_openapi_config:
-        v1_app.swagger_ui_init_oauth = {
-            "usePkceWithAuthorizationCodeGrant": True,
-            "clientId": conf.get_string("auth0.client_id"),
-            "scopes": "openid profile email",
-            "additionalQueryStringParams": {"audience": auth_openapi_config["audience"]},
-        }
 
     v1_app.state.limiter = ratelimit.limiter
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
 
-    @v1_app.get("/docs/oauth2-redirect", include_in_schema=False)
-    async def v1_swagger_redirect() -> HTMLResponse:
-        """OAuth2 redirect handler for v1 Swagger UI token exchange."""
-        return get_swagger_ui_oauth2_redirect_html()
-
     @v1_app.get("/docs", include_in_schema=False)
-    async def v1_swagger_ui(request: Request) -> HTMLResponse:
-        """Serve v1 Swagger UI with auto-authorize JS injected."""
+    async def v1_scalar_docs(request: Request) -> HTMLResponse:
+        """Serve Scalar API reference for v1."""
         root_path = request.scope.get("root_path", "").rstrip("/")
-        html = get_swagger_ui_html(
+        return get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
-            oauth2_redirect_url=root_path + v1_app.swagger_ui_oauth2_redirect_url,
-            init_oauth=v1_app.swagger_ui_init_oauth,
-            swagger_ui_parameters=v1_app.swagger_ui_parameters,
+            authentication=scalar_auth,
+            persist_auth=True,
         )
-        patched = html.body.decode().replace("</body>", _AUTO_AUTHORIZE_JS + "</body>")
-        return HTMLResponse(patched)
 
     return v1_app
 
@@ -271,13 +243,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 "description": "Routes providing information about the API.",
             },
         ],
-        docs_url=None,  # served manually below so we can inject auto-authorize JS
+        docs_url=None,
         redoc_url=None,
-        swagger_ui_oauth2_redirect_url="/swagger/oauth2-redirect",
-        swagger_ui_init_oauth={
-            "usePkceWithAuthorizationCodeGrant": True,
-        },
-        swagger_ui_parameters={"persistAuthorization": True},
     )
 
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
@@ -300,23 +267,14 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         """Render ReDoc HTML."""
         return FileResponse(static_dir / "redoc.html")
 
-    @server.get("/swagger/oauth2-redirect", include_in_schema=False)
-    async def swagger_ui_redirect() -> HTMLResponse:
-        """OAuth2 redirect handler for Swagger UI token exchange."""
-        return get_swagger_ui_oauth2_redirect_html()
-
-    @server.get("/swagger", include_in_schema=False)
-    async def swagger_ui(request: Request) -> HTMLResponse:  # noqa: ARG001
-        """Serve Swagger UI with auto-authorize JS injected."""
-        html = get_swagger_ui_html(
+    @server.get("/scalar", include_in_schema=False)
+    async def scalar_ui(request: Request) -> HTMLResponse:  # noqa: ARG001
+        """Serve Scalar API reference."""
+        return get_scalar_api_reference(
             openapi_url=server.openapi_url,
             title=server.title,
-            oauth2_redirect_url=server.swagger_ui_oauth2_redirect_url,
-            init_oauth=server.swagger_ui_init_oauth,
-            swagger_ui_parameters=server.swagger_ui_parameters,
+            persist_auth=True,
         )
-        patched = html.body.decode().replace("</body>", _AUTO_AUTHORIZE_JS + "</body>")
-        return HTMLResponse(patched)
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
@@ -375,12 +333,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             description += auth_description
 
             auth_openapi_config = {"domain": domain, "audience": audience}
-            server.swagger_ui_init_oauth = {
-                "usePkceWithAuthorizationCodeGrant": True,
-                "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
-                "additionalQueryStringParams": {"audience": audience},
-            }
 
         case _:
             raise ValueError("Invalid Auth0 configuration")
