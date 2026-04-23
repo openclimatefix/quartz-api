@@ -99,7 +99,8 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
 
     if auth_config:
         domain = auth_config["domain"]
-        audience = auth_config["audience"]  # noqa: F841
+        audience = auth_config["audience"]
+        client_id = auth_config.get("client_id", "")
 
         # Replace the auto-generated HTTPBearer scheme with a proper OAuth2
         # authorization code flow so Swagger UI shows the Auth0 redirect button.
@@ -110,7 +111,12 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
             "type": "oauth2",
             "flows": {
                 "authorizationCode": {
-                    "authorizationUrl": f"https://{domain}/authorize",
+                    # client_id and audience must be in the URL — Scalar/Swagger
+                    # do not inject them automatically for Auth0.
+                    "authorizationUrl": (
+                        f"https://{domain}/authorize"
+                        f"?client_id={client_id}&audience={audience}"
+                    ),
                     "tokenUrl": f"https://{domain}/oauth/token",
                     "scopes": {
                         "openid": "OpenID",
@@ -363,7 +369,11 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             )
             description += auth_description
 
-            auth_openapi_config = {"domain": domain, "audience": audience}
+            auth_openapi_config = {
+                "domain": domain,
+                "audience": audience,
+                "client_id": conf.get_string("auth0.client_id"),
+            }
             server.swagger_ui_init_oauth = {
                 "usePkceWithAuthorizationCodeGrant": True,
                 "clientId": conf.get_string("auth0.client_id"),
