@@ -71,22 +71,73 @@ class CountryConfig:
         return None
 
 
-_BLEND_ONLY = (ForecastModel(name="blend", label="Blend"),)
+# Maps DP forecaster_name → human-readable label.
+# Add an entry here whenever a new forecaster is registered in the data platform.
+FORECASTER_LABELS: dict[str, str] = {
+    # GB — blend
+    "blend": "Blend",
+    "blend_adjust": "Blend (Adjusted)",
+    # GB — PVNet intraday
+    "pvnet_intra_allbells0": "PVNet Intraday",
+    "pvnet_intra_allbells0_adjust": "PVNet Intraday (Adjusted)",
+    "pvnet_intra_allbells30": "PVNet Intraday 30min",
+    "pvnet_intra_allbells30_adjust": "PVNet Intraday 30min (Adjusted)",
+    "pvnet_intra_sat30": "PVNet Intraday Satellite 30min",
+    "pvnet_intra_sat30_adjust": "PVNet Intraday Satellite 30min (Adjusted)",
+    # GB — PVNet day-ahead
+    "pvnet_day_ahead": "PVNet Day Ahead",
+    "pvnet_day_ahead_adjust": "PVNet Day Ahead (Adjusted)",
+    "pvnet_da_2nwp": "PVNet Day Ahead (2 NWP)",
+    "pvnet_da_2nwp_adjust": "PVNet Day Ahead (2 NWP, Adjusted)",
+    "pvnet_da_ecmwf": "PVNet Day Ahead (ECMWF)",
+    "pvnet_da_ecmwf_adjust": "PVNet Day Ahead (ECMWF, Adjusted)",
+    "pvnet_da_ukv": "PVNet Day Ahead (UKV)",
+    "pvnet_da_ukv_adjust": "PVNet Day Ahead (UKV, Adjusted)",
+    # GB — PVNet single-input
+    "pvnet_ecmwf": "PVNet Intraday (ECMWF only)",
+    "pvnet_ecmwf_adjust": "PVNet Intraday (ECMWF only, Adjusted)",
+    "pvnet_sat_only": "PVNet Intraday (Satellite only)",
+    "pvnet_sat_only_adjust": "PVNet Intraday (Satellite only, Adjusted)",
+    "pvnet_ukv_only": "PVNet Intraday (Met Office only)",
+    "pvnet_ukv_only_adjust": "PVNet Intraday (Met Office only, Adjusted)",
+    # GB — PVNet v2 / cloud
+    "pvnet_v2": "PVNet v2",
+    "pvnet_v2_adjust": "PVNet v2 (Adjusted)",
+    "pvnet_cloud": "PVNet Cloud",
+    "pvnet_cloud_adjust": "PVNet Cloud (Adjusted)",
+    # NL — regional
+    "nl_regional_pv_ecmwf_mo_sat_adjust": "Regional PV (ECMWF + Met Office + Satellite, Adjusted)",
+    "nl_regional_pv_ecmwf_mo_sat": "Regional PV (ECMWF + Met Office + Satellite)",
+    "nl_regional_2h_pv_ecmwf_adjust": "Regional PV 2h (ECMWF, Adjusted)",
+    "nl_regional_2h_pv_ecmwf": "Regional PV 2h (ECMWF)",
+    "nl_regional_48h_pv_ecmwf_adjust": "Regional PV 48h (ECMWF, Adjusted)",
+    "nl_regional_48h_pv_ecmwf": "Regional PV 48h (ECMWF)",
+    "nl_regional_pv_ecmwf_sat_adjust": "Regional PV (ECMWF + Satellite, Adjusted)",
+    "nl_regional_pv_ecmwf_sat": "Regional PV (ECMWF + Satellite)",
+    # NL — national
+    "nl_national_pv_ecmwf_sat_small_adjust": "National PV (ECMWF + Satellite, Adjusted)",
+    "nl_national_pv_ecmwf_sat_small": "National PV (ECMWF + Satellite)",
+    "nl_36_simple_site_adjust": "36h Simple Site (Adjusted)",
+    "nl_36_simple_site": "36h Simple Site",
+    "ned_nl_national": "NED National",
+}
 
-_NATIONAL_FORECAST_MODELS = (
-    ForecastModel(name="blend", label="Blend"),
-    ForecastModel(name="pvnet_intraday", label="PVNet Intraday"),
-    ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead"),
-    ForecastModel(
-        name="pvnet_intraday_ecmwf_only", label="PVNet Intraday (ECMWF only)",
-    ),
-    ForecastModel(
-        name="pvnet_intraday_met_office_only",
-        label="PVNet Intraday (Met Office only)",
-    ),
-    ForecastModel(
-        name="pvnet_intraday_sat_only", label="PVNet Intraday (Satellite only)",
-    ),
+
+def _model(name: str) -> ForecastModel:
+    """Build a ForecastModel using the central label map (falls back to the raw name)."""
+    return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name))
+
+
+_BLEND_ONLY = (_model("blend"),)
+
+_GB_NATIONAL_FORECAST_MODELS = (
+    _model("blend"),
+    _model("blend_adjust"),
+    _model("pvnet_intra_allbells0"),
+    _model("pvnet_day_ahead"),
+    _model("pvnet_ecmwf"),
+    _model("pvnet_ukv_only"),
+    _model("pvnet_sat_only"),
 )
 
 COUNTRIES: dict[str, CountryConfig] = {
@@ -99,7 +150,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=0,
                 location_type=LocationType.NATION,
                 source_types=("solar",),
-                forecast_models=_NATIONAL_FORECAST_MODELS,
+                forecast_models=_GB_NATIONAL_FORECAST_MODELS,
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -137,50 +188,19 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=(
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_mo_sat_adjust",
-                        label="Regional PV (ECMWF + Met Office + Satellite, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_mo_sat",
-                        label="Regional PV (ECMWF + Met Office + Satellite)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf_adjust",
-                        label="Regional PV 2h (ECMWF, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf_adjust",
-                        label="Regional PV 48h (ECMWF, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_sat_adjust",
-                        label="Regional PV (ECMWF + Satellite, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_sat",
-                        label="Regional PV (ECMWF + Satellite)",
-                    ),
-                    ForecastModel(
-                        name="nl_national_pv_ecmwf_sat_small_adjust",
-                        label="National PV (ECMWF + Satellite, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_national_pv_ecmwf_sat_small",
-                        label="National PV (ECMWF + Satellite)",
-                    ),
-                    ForecastModel(
-                        name="nl_36_simple_site_adjust",
-                        label="36h Simple Site (Adjusted)",
-                    ),
-                    ForecastModel(name="nl_36_simple_site", label="36h Simple Site"),
-                    ForecastModel(name="ned_nl_national", label="NED National"),
+                    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
+                    _model("nl_regional_pv_ecmwf_mo_sat"),
+                    _model("nl_regional_2h_pv_ecmwf_adjust"),
+                    _model("nl_regional_2h_pv_ecmwf"),
+                    _model("nl_regional_48h_pv_ecmwf_adjust"),
+                    _model("nl_regional_48h_pv_ecmwf"),
+                    _model("nl_regional_pv_ecmwf_sat_adjust"),
+                    _model("nl_regional_pv_ecmwf_sat"),
+                    _model("nl_national_pv_ecmwf_sat_small_adjust"),
+                    _model("nl_national_pv_ecmwf_sat_small"),
+                    _model("nl_36_simple_site_adjust"),
+                    _model("nl_36_simple_site"),
+                    _model("ned_nl_national"),
                 ),
             ),
             RegionTypeConfig(
@@ -190,36 +210,14 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.REGION,
                 source_types=("solar",),
                 forecast_models=(
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_mo_sat_adjust",
-                        label="Regional PV (ECMWF + Met Office + Satellite, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_mo_sat",
-                        label="Regional PV (ECMWF + Met Office + Satellite)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf_adjust",
-                        label="Regional PV 2h (ECMWF, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_2h_pv_ecmwf", label="Regional PV 2h (ECMWF)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf_adjust",
-                        label="Regional PV 48h (ECMWF, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_48h_pv_ecmwf", label="Regional PV 48h (ECMWF)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_sat_adjust",
-                        label="Regional PV (ECMWF + Satellite, Adjusted)",
-                    ),
-                    ForecastModel(
-                        name="nl_regional_pv_ecmwf_sat",
-                        label="Regional PV (ECMWF + Satellite)",
-                    ),
+                    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
+                    _model("nl_regional_pv_ecmwf_mo_sat"),
+                    _model("nl_regional_2h_pv_ecmwf_adjust"),
+                    _model("nl_regional_2h_pv_ecmwf"),
+                    _model("nl_regional_48h_pv_ecmwf_adjust"),
+                    _model("nl_regional_48h_pv_ecmwf"),
+                    _model("nl_regional_pv_ecmwf_sat_adjust"),
+                    _model("nl_regional_pv_ecmwf_sat"),
                 ),
             ),
         ),
