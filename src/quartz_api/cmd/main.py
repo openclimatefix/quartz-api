@@ -246,7 +246,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     warm_v1_task = None
     if "v1" in conf.get_string("api.routers").split(","):
-        from quartz_api.internal.service.v1.router import _warm_all_v1_caches
+        from quartz_api.internal.service.v1.cache import _warm_all_v1_caches
         v1_app = server.state.v1_app
         v1_app.dependency_overrides[models.get_storage_client] = lambda: storage
         warm_v1_task = asyncio.create_task(_warm_all_v1_caches(v1_app))
