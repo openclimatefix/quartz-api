@@ -101,7 +101,7 @@ class CountryDetail(BaseModel):
     """Full capability manifest for a country — region types, models, and generation sources."""
 
     country: str
-    nation_id: UUID
+    region_id: UUID
     name: str
     capacity_kW: float
     latitude: float

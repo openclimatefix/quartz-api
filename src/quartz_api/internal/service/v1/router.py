@@ -529,7 +529,7 @@ async def get_countries(
         result.append(
             CountryDetail(
                 country=country_code,
-                nation_id=nation.uuid,
+                region_id=nation.uuid,
                 name=nation.name,
                 capacity_kW=nation.capacity_kilowatts,
                 latitude=nation.latitude,
