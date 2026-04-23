@@ -113,15 +113,14 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
         security_schemes.pop("HTTPBearer", None)
         security_schemes["oauth2"] = {
             "type": "oauth2",
-            "x-scalar-client-id": client_id,
             "flows": {
                 "authorizationCode": {
-                    # client_id and audience must be in the URL — Scalar/Swagger
-                    # do not inject them automatically for Auth0.
-                    "authorizationUrl": (
-                        f"https://{domain}/authorize"
-                        f"?client_id={client_id}&audience={audience}"
-                    ),
+                    # Scalar reads x-scalar-secret-client-id and injects client_id
+                    # into the authorization URL automatically.
+                    "x-scalar-secret-client-id": client_id,
+                    # audience is not a standard OAuth2 param; embed it in the URL
+                    # so Auth0 receives it on the redirect.
+                    "authorizationUrl": f"https://{domain}/authorize?audience={audience}",
                     "tokenUrl": f"https://{domain}/oauth/token",
                     "scopes": {
                         "openid": "OpenID",
