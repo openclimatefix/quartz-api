@@ -17,6 +17,7 @@ import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi_cache import FastAPICache
@@ -46,6 +47,24 @@ log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
+
+_AUTO_AUTHORIZE_JS = """
+<script>
+(function () {
+  document.addEventListener('click', (e) => {
+    // Only trigger on the top-level Authorize button, not buttons inside the modal.
+    if (!e.target.closest('.btn.authorize') || e.target.closest('.dialog-ux')) return;
+    setTimeout(() => {
+      const modal = document.querySelector('.dialog-ux');
+      if (!modal) return;
+      const btn = Array.from(modal.querySelectorAll('button'))
+        .find(b => b.textContent.trim() === 'Authorize');
+      if (btn) btn.click();
+    }, 50);
+  });
+})();
+</script>
+"""
 
 
 class GetHealthResponse(BaseModel):
@@ -245,6 +264,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         ],
         docs_url=None,
         redoc_url=None,
+        swagger_ui_oauth2_redirect_url="/swagger/oauth2-redirect",
+        swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": True},
+        swagger_ui_parameters={"persistAuthorization": True},
     )
 
     FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
@@ -267,14 +289,23 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         """Render ReDoc HTML."""
         return FileResponse(static_dir / "redoc.html")
 
-    @server.get("/scalar", include_in_schema=False)
-    async def scalar_ui(request: Request) -> HTMLResponse:  # noqa: ARG001
-        """Serve Scalar API reference."""
-        return get_scalar_api_reference(
+    @server.get("/swagger/oauth2-redirect", include_in_schema=False)
+    async def swagger_ui_redirect() -> HTMLResponse:
+        """OAuth2 redirect handler for Swagger UI token exchange."""
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @server.get("/swagger", include_in_schema=False)
+    async def swagger_ui(request: Request) -> HTMLResponse:  # noqa: ARG001
+        """Serve Swagger UI with auto-authorize JS injected."""
+        html = get_swagger_ui_html(
             openapi_url=server.openapi_url,
             title=server.title,
-            persist_auth=True,
+            oauth2_redirect_url=server.swagger_ui_oauth2_redirect_url,
+            init_oauth=server.swagger_ui_init_oauth,
+            swagger_ui_parameters=server.swagger_ui_parameters,
         )
+        patched = html.body.decode().replace("</body>", _AUTO_AUTHORIZE_JS + "</body>")
+        return HTMLResponse(patched)
 
     # Setup sentry, if configured
     if conf.get_string("sentry.dsn") != "":
@@ -333,6 +364,12 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             description += auth_description
 
             auth_openapi_config = {"domain": domain, "audience": audience}
+            server.swagger_ui_init_oauth = {
+                "usePkceWithAuthorizationCodeGrant": True,
+                "clientId": conf.get_string("auth0.client_id"),
+                "scopes": "openid profile email",
+                "additionalQueryStringParams": {"audience": audience},
+            }
 
         case _:
             raise ValueError("Invalid Auth0 configuration")
