@@ -109,6 +109,7 @@ def _custom_openapi(server: FastAPI, auth_config: dict[str, str] | None = None) 
         security_schemes.pop("HTTPBearer", None)
         security_schemes["oauth2"] = {
             "type": "oauth2",
+            "x-scalar-client-id": client_id,
             "flows": {
                 "authorizationCode": {
                     # client_id and audience must be in the URL — Scalar/Swagger
