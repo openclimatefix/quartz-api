@@ -171,10 +171,14 @@ COUNTRIES: dict[str, CountryConfig] = {
         ),
         generation_sources=(
             GenerationSource(
-                source="solar", name="pvlive_in_day", label="PV Live Estimated",
+                source="solar",
+                name="pvlive_in_day",
+                label="PV Live Estimated",
             ),
             GenerationSource(
-                source="solar", name="pvlive_day_after", label="PV Live Updated",
+                source="solar",
+                name="pvlive_day_after",
+                label="PV Live Updated",
             ),
         ),
     ),
@@ -188,14 +192,6 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=(
-                    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
-                    _model("nl_regional_pv_ecmwf_mo_sat"),
-                    _model("nl_regional_2h_pv_ecmwf_adjust"),
-                    _model("nl_regional_2h_pv_ecmwf"),
-                    _model("nl_regional_48h_pv_ecmwf_adjust"),
-                    _model("nl_regional_48h_pv_ecmwf"),
-                    _model("nl_regional_pv_ecmwf_sat_adjust"),
-                    _model("nl_regional_pv_ecmwf_sat"),
                     _model("nl_national_pv_ecmwf_sat_small_adjust"),
                     _model("nl_national_pv_ecmwf_sat_small"),
                     _model("nl_36_simple_site_adjust"),
