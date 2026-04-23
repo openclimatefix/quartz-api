@@ -19,7 +19,12 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.cache import key_builder
 
-from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig
+from .country_config import (
+    COUNTRIES,
+    VALID_COUNTRY_CODES,
+    CountryConfig,
+    RegionTypeConfig,
+)
 from .endpoint_types import (
     CountryDetail,
     ForecastMatrix,
@@ -157,7 +162,7 @@ def _to_uuid(val: str | UUID) -> UUID:
 
 def _validate_model(
     model: str | None,
-    rt: "RegionTypeConfig | None",
+    rt: RegionTypeConfig | None,
     region_type_label: str,
 ) -> None:
     """Raise 400 if model is provided but not listed for the region type."""
@@ -168,7 +173,7 @@ def _validate_model(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Model '{model}' is not available for region type '{region_type_label}'. "
-                   f"Available: {sorted(valid)}",
+            f"Available: {sorted(valid)}",
         )
 
 
@@ -252,11 +257,13 @@ async def _warm_v1_forecast_cache(
             authdata={},
         )
         nation = next(
-            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()),
+            None,
         )
         if nation is None:
             log.warning(
-                "v1 forecast cache warm: nation '%s' not found", cfg.nation_name,
+                "v1 forecast cache warm: nation '%s' not found",
+                cfg.nation_name,
             )
             return
 
@@ -324,7 +331,10 @@ async def _warm_v1_forecast_cache(
         )
     except Exception:
         log.exception(
-            "v1 forecast cache warm failed: %s/%s/%s", source, country, region_type,
+            "v1 forecast cache warm failed: %s/%s/%s",
+            source,
+            country,
+            region_type,
         )
     finally:
         _forecast_cache_warming[flag_key] = False
@@ -364,11 +374,13 @@ async def _warm_v1_generation_cache(
             authdata={},
         )
         nation = next(
-            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()),
+            None,
         )
         if nation is None:
             log.warning(
-                "v1 generation cache warm: nation '%s' not found", cfg.nation_name,
+                "v1 generation cache warm: nation '%s' not found",
+                cfg.nation_name,
             )
             return
 
@@ -460,7 +472,11 @@ async def _warm_all_v1_caches(app: object) -> None:
             for gen_src in cfg.generation_sources:
                 tasks.append(
                     _warm_v1_generation_cache(
-                        app, source, country_code, rt.type, gen_src.name,
+                        app,
+                        source,
+                        country_code,
+                        rt.type,
+                        gen_src.name,
                     ),
                 )
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -505,7 +521,8 @@ async def get_countries(
     result = []
     for country_code, cfg in COUNTRIES.items():
         nation = next(
-            (n for n in nations if n.name.lower() == cfg.nation_name.lower()), None,
+            (n for n in nations if n.name.lower() == cfg.nation_name.lower()),
+            None,
         )
         if nation is None:
             continue
@@ -746,7 +763,11 @@ async def get_region_forecast(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
-    _validate_model(model, cfg.location_type_to_region_type(location_type), location_type.name)
+    _validate_model(
+        model,
+        cfg.location_type_to_region_type(location_type),
+        location_type.name,
+    )
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     pgvs = await db.get_predicted_generation(
@@ -1003,7 +1024,8 @@ async def get_forecasts_timeseries(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs.",
+        None,
+        description="Limit to specific region UUIDs.",
     ),
 ) -> ForecastMatrix:
     """Get forecast timeseries for all (or selected) regions across a time window.
@@ -1147,7 +1169,8 @@ async def get_generation_timeseries(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs.",
+        None,
+        description="Limit to specific region UUIDs.",
     ),
 ) -> GenerationMatrix:
     """Get observed generation timeseries for all (or selected) regions across a time window.
@@ -1229,7 +1252,11 @@ async def refresh_forecasts_cache(
     if _forecast_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
-        _warm_v1_forecast_cache, request.app, source, country, region_type,
+        _warm_v1_forecast_cache,
+        request.app,
+        source,
+        country,
+        region_type,
     )
     return Response(status_code=202, content="Cache refresh triggered")
 
