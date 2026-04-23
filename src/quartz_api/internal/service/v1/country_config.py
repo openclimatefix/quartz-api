@@ -27,6 +27,7 @@ class RegionTypeConfig:
     location_type: LocationType
     source_types: tuple[str, ...] = ()
     forecast_models: tuple[ForecastModel, ...] = ()
+    default_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,33 @@ _GB_NATIONAL_FORECAST_MODELS = (
     _model("pvnet_sat_only"),
 )
 
+_NL_NATIONAL_FORECAST_MODELS = (
+    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
+    _model("nl_regional_pv_ecmwf_mo_sat"),
+    _model("nl_regional_2h_pv_ecmwf_adjust"),
+    _model("nl_regional_2h_pv_ecmwf"),
+    _model("nl_regional_48h_pv_ecmwf_adjust"),
+    _model("nl_regional_48h_pv_ecmwf"),
+    _model("nl_regional_pv_ecmwf_sat_adjust"),
+    _model("nl_regional_pv_ecmwf_sat"),
+    _model("nl_national_pv_ecmwf_sat_small_adjust"),
+    _model("nl_national_pv_ecmwf_sat_small"),
+    _model("nl_36_simple_site_adjust"),
+    _model("nl_36_simple_site"),
+    _model("ned_nl_national"),
+)
+
+_NL_REGIONAL_FORECAST_MODELS = (
+    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
+    _model("nl_regional_pv_ecmwf_mo_sat"),
+    _model("nl_regional_2h_pv_ecmwf_adjust"),
+    _model("nl_regional_2h_pv_ecmwf"),
+    _model("nl_regional_48h_pv_ecmwf_adjust"),
+    _model("nl_regional_48h_pv_ecmwf"),
+    _model("nl_regional_pv_ecmwf_sat_adjust"),
+    _model("nl_regional_pv_ecmwf_sat"),
+)
+
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         nation_name="uk",
@@ -151,6 +179,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
+                default_model="blend_adjust",
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -159,6 +188,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.GSP,
                 source_types=("solar",),
                 forecast_models=_BLEND_ONLY,
+                default_model="blend",
             ),
             RegionTypeConfig(
                 type="dno",
@@ -167,6 +197,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.DNO,
                 source_types=("solar",),
                 forecast_models=_BLEND_ONLY,
+                default_model="blend",
             ),
         ),
         generation_sources=(
@@ -191,13 +222,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=0,
                 location_type=LocationType.NATION,
                 source_types=("solar",),
-                forecast_models=(
-                    _model("nl_national_pv_ecmwf_sat_small_adjust"),
-                    _model("nl_national_pv_ecmwf_sat_small"),
-                    _model("nl_36_simple_site_adjust"),
-                    _model("nl_36_simple_site"),
-                    _model("ned_nl_national"),
-                ),
+                forecast_models=_NL_NATIONAL_FORECAST_MODELS,
+                default_model="nl_regional_pv_ecmwf_mo_sat_adjust",
             ),
             RegionTypeConfig(
                 type="netbeheerder",
@@ -205,16 +231,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=10,
                 location_type=LocationType.REGION,
                 source_types=("solar",),
-                forecast_models=(
-                    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
-                    _model("nl_regional_pv_ecmwf_mo_sat"),
-                    _model("nl_regional_2h_pv_ecmwf_adjust"),
-                    _model("nl_regional_2h_pv_ecmwf"),
-                    _model("nl_regional_48h_pv_ecmwf_adjust"),
-                    _model("nl_regional_48h_pv_ecmwf"),
-                    _model("nl_regional_pv_ecmwf_sat_adjust"),
-                    _model("nl_regional_pv_ecmwf_sat"),
-                ),
+                forecast_models=_NL_REGIONAL_FORECAST_MODELS,
+                default_model="nl_regional_pv_ecmwf_mo_sat_adjust",
             ),
         ),
         generation_sources=(

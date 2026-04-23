@@ -763,11 +763,9 @@ async def get_region_forecast(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
-    _validate_model(
-        model,
-        cfg.location_type_to_region_type(location_type),
-        location_type.name,
-    )
+    rt = cfg.location_type_to_region_type(location_type)
+    _validate_model(model, rt, location_type.name)
+    model = model or (rt.default_model if rt else None)
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     pgvs = await db.get_predicted_generation(
@@ -833,6 +831,8 @@ async def get_region_forecast_last_updated(
             detail=f"Region '{resolved_id}' not found.",
         )
     location_type = locs[0].location_type or models.LocationType.NATION
+    rt = cfg.location_type_to_region_type(location_type)
+    model = model or (rt.default_model if rt else None)
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
@@ -948,6 +948,7 @@ async def get_forecasts_snapshot(
             detail=f"Unknown region type '{region_type}' for {country.upper()}.",
         )
     _validate_model(model_name, rt, rt.type)
+    model_name = model_name or rt.default_model
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
