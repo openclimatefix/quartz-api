@@ -2,12 +2,13 @@ import dataclasses
 import datetime as dt
 import unittest
 import uuid
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
-from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf import dp
 from fastapi import HTTPException
+from google.protobuf.struct_pb2 import Struct
 from grpc_requests import Client
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 
 from quartz_api.internal import models
 
@@ -17,35 +18,33 @@ TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
 
 def mock_list_locations(
-    req: dp.ListLocationsRequest,
-    metadata: object | None = None,  # noqa: ARG001
-) -> dp.ListLocationsResponse:
+    req: messages_pb2.ListLocationsRequest,
+    metadata: object | None = None,
+) -> messages_pb2.ListLocationsResponse:
     if req.user_oauth_id_filter != "access_user":
-        return dp.ListLocationsResponse(locations=[])
+        return messages_pb2.ListLocationsResponse(locations=[])
 
     match req.location_type_filter:
-        case dp.LocationType.SITE:
+        case common_pb2.LOCATION_TYPE_SITE:
             capacity = 1e3
-        case dp.LocationType.PRIMARY_SUBSTATION:
+        case common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION:
             capacity = 1e5
         case _:
             capacity = 1e6
 
-    return dp.ListLocationsResponse(
+    metadata = Struct()
+    metadata.update({"orientation": 180.0, "tilt": 30.0})
+
+    return messages_pb2.ListLocationsResponse(
         locations=[
-            dp.ListLocationsResponseLocationSummary(
+            messages_pb2.ListLocationsResponse.LocationSummary(
                 location_name="mock_location",
                 location_uuid=str(uuid.uuid4()),
-                energy_source=dp.EnergySource.SOLAR,
-                effective_capacity_watts=capacity,
+                energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
+                effective_capacity_watts=int(capacity),
                 location_type=req.location_type_filter,
-                latlng=dp.LatLng(51.5, -0.1),
-                metadata=Struct(
-                    fields={
-                        "orientation": Value(number_value=180.0),
-                        "tilt": Value(number_value=30.0),
-                    },
-                ),
+                latlng=common_pb2.LatLng(latitude=51.5, longitude=-0.1),
+                metadata=metadata,
             ),
         ],
     )
@@ -73,15 +72,17 @@ def mock_get_forecast_sync(
     }
 
 def mock_get_forecast(
-    req: dp.GetForecastAsTimeseriesRequest,
+    req: messages_pb2.GetForecastAsTimeseriesRequest,
     metadata: object | None = None,  # noqa: ARG001
-) -> dp.GetForecastAsTimeseriesResponse:
-    return dp.GetForecastAsTimeseriesResponse(
+) -> messages_pb2.GetForecastAsTimeseriesResponse:
+    return messages_pb2.GetForecastAsTimeseriesResponse(
+        location_uuid=req.location_uuid,
+        location_name="mock_location",
         values=[
-            dp.GetForecastAsTimeseriesResponseValue(
+            messages_pb2.GetForecastAsTimeseriesResponse.Value(
                 target_timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 p50_value_fraction=0.5,
-                effective_capacity_watts=1e6,
+                effective_capacity_watts=int(1e6),
                 initialization_timestamp_utc=TEST_TIMESTAMP_UTC
                 - dt.timedelta(minutes=req.horizon_mins),
                 created_timestamp_utc=TEST_TIMESTAMP_UTC
@@ -95,15 +96,16 @@ def mock_get_forecast(
 
 
 def mock_get_observations(
-    _: dp.GetObservationsAsTimeseriesRequest,
+    req: messages_pb2.GetObservationsAsTimeseriesRequest,
     metadata: object | None = None,  # noqa: ARG001
-) -> dp.GetObservationsAsTimeseriesResponse:
-    return dp.GetObservationsAsTimeseriesResponse(
+) -> messages_pb2.GetObservationsAsTimeseriesResponse:
+    return messages_pb2.GetObservationsAsTimeseriesResponse(
+        location_uuid=req.location_uuid,
         values=[
-            dp.GetObservationsAsTimeseriesResponseValue(
+            messages_pb2.GetObservationsAsTimeseriesResponse.Value(
                 timestamp_utc=TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
                 value_fraction=0.5,
-                effective_capacity_watts=1e6,
+                effective_capacity_watts=int(1e6),
             )
             for i in range(5)
         ],
@@ -111,26 +113,68 @@ def mock_get_observations(
 
 
 def mock_get_latest_forecasts(
-    req: dp.GetLatestForecastsRequest,
+    req: messages_pb2.GetLatestForecastsRequest,
     metadata: object | None = None,  # noqa: ARG001
-) -> dp.GetLatestForecastsResponse:
+) -> messages_pb2.GetLatestForecastsResponse:
     t = req.pivot_timestamp_utc - dt.timedelta(hours=1)
     forecaster_name = f"mock_forecaster_{t.day}{t.hour}"
-    return dp.GetLatestForecastsResponse(
+    return messages_pb2.GetLatestForecastsResponse(
         forecasts=[
-            dp.GetLatestForecastsResponseForecast(
+            messages_pb2.GetLatestForecastsResponse.Forecast(
                 initialization_timestamp_utc=t,
                 created_timestamp_utc=t - dt.timedelta(hours=1),
-                forecaster=dp.Forecaster(forecaster_name, forecaster_version="1.0"),
+                forecaster=messages_pb2.Forecaster(
+                    forecaster_name=forecaster_name,
+                    forecaster_version="1.0",
+                ),
                 location_uuid=req.location_uuid,
             ),
         ],
     )
 
+def mock_get_forecast_at_timestamp(
+    req: messages_pb2.GetForecastAtTimestampRequest,
+    metadata: object | None = None,  # noqa: ARG001
+) -> messages_pb2.GetForecastAtTimestampResponse:
+    return messages_pb2.GetForecastAtTimestampResponse(
+        timestamp_utc=req.timestamp_utc,
+        values=[
+            messages_pb2.GetForecastAtTimestampResponse.Value(
+                location_uuid=uuid,
+                value_fraction=0.8,
+                effective_capacity_watts=int(1e6),
+                created_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=1),
+                initialization_timestamp_utc=TEST_TIMESTAMP_UTC - dt.timedelta(hours=2),
+                metadata=Struct(fields={}),
+            )
+            for uuid in req.location_uuids
+        ],
+    )
+
+
+def mock_get_observations_at_timestamp(
+    req: messages_pb2.GetObservationsAtTimestampRequest,
+    metadata: object | None = None,  # noqa: ARG001
+) -> messages_pb2.GetObservationsAtTimestampResponse:
+    return messages_pb2.GetObservationsAtTimestampResponse(
+        timestamp_utc=req.timestamp_utc,
+        values=[
+            messages_pb2.GetObservationsAtTimestampResponse.Value(
+                location_uuid=uuid,
+                value_fraction=0.5,
+                effective_capacity_watts=int(1e6),
+            )
+            for uuid in req.location_uuids
+        ],
+    )
+
 
 class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
-    async def test_get_locations(self, client_mock: dp.DataPlatformDataServiceStub) -> None:
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_get_locations(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
         @dataclasses.dataclass
         class TestCase:
             name: str
@@ -152,7 +196,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         client = StorageClient.from_dp(client_mock)
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
 
             with self.subTest(tc.name):
                 resp = await client.get_locations(authdata=tc.authdata,
@@ -160,11 +204,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                                                   energy_type=models.EnergyType.SOLAR)
                 self.assertEqual(len(resp), tc.expected_num_locations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     @patch("grpc_requests.Client")
     async def test_get_site_forecast(
         self,
-        client_mock: dp.DataPlatformDataServiceStub,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
         _: Client,
     ) -> None:
         @dataclasses.dataclass
@@ -190,12 +234,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
-        client.set_sync_client("localhost", "50051")
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
-            client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
-            client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
-            client.svc.GetForecastAsTimeseries = Mock(side_effect=mock_get_forecast_sync)
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.GetForecastAsTimeseries = AsyncMock(side_effect=mock_get_forecast)
+            client_mock.GetLatestForecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
 
             with self.subTest(tc.name):
                 if tc.should_error:
@@ -219,10 +261,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(len(resp), 5)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     async def test_get_site_generation(
         self,
-        client_mock: dp.DataPlatformDataServiceStub,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -248,8 +290,8 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         client = StorageClient.from_dp(client_mock)
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
-            client_mock.get_observations_as_timeseries = AsyncMock(
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.GetObservationsAsTimeseries = AsyncMock(
                 side_effect=mock_get_observations,
             )
 
@@ -277,10 +319,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(len(resp), 5)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     async def test_get_substations(
         self,
-        client_mock: dp.DataPlatformDataServiceStub,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -303,7 +345,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         client = StorageClient.from_dp(client_mock)
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
 
             with self.subTest(tc.name):
                 resp = await client.get_locations(authdata=tc.authdata,
@@ -311,10 +353,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                                                   energy_type=models.EnergyType.SOLAR)
                 self.assertEqual(len(resp), tc.expected_num_substations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     async def test_get_substation(
         self,
-        client_mock: dp.DataPlatformDataServiceStub,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -343,7 +385,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         client = StorageClient.from_dp(client_mock)
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
 
             with self.subTest(tc.name):
                 if tc.should_error:
@@ -364,11 +406,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNotNone(resp)
                     self.assertEqual(len(resp), tc.number_of_locations)
 
-    @patch("dp_sdk.ocf.dp.DataPlatformDataServiceStub")
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     @patch("grpc_requests.Client")
     async def test_get_substation_forecast(
         self,
-        client_mock: dp.DataPlatformDataServiceStub,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
         _: Client,
     ) -> None:
         @dataclasses.dataclass
@@ -400,12 +442,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         ]
 
         client = StorageClient.from_dp(client_mock)
-        client.set_sync_client("localhost", "50051")
         for tc in testcases:
-            client_mock.list_locations = AsyncMock(side_effect=mock_list_locations)
-            client_mock.get_forecast_as_timeseries = AsyncMock(side_effect=mock_get_forecast)
-            client_mock.get_latest_forecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
-            client.svc.GetForecastAsTimeseries = Mock(side_effect=mock_get_forecast_sync)
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.GetForecastAsTimeseries = AsyncMock(side_effect=mock_get_forecast)
+            client_mock.GetLatestForecasts = AsyncMock(side_effect=mock_get_latest_forecasts)
 
             with self.subTest(tc.name):
                 if tc.should_error:
@@ -430,5 +470,80 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     actual_values = [v.power_kilowatts for v in resp]
                     self.assertListEqual(actual_values, tc.expected_values)
 
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_get_predicted_generation_snapshot(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        client = StorageClient.from_dp(client_mock)
 
-# TODO add test for get_latest_forecasts
+        client_mock.ListForecasters = AsyncMock(side_effect=mock_list_locations)
+        client_mock.GetForecastAtTimestamp = AsyncMock(side_effect=mock_get_forecast_at_timestamp)
+        client_mock.ListForecasters = AsyncMock(
+            return_value=messages_pb2.ListForecastersResponse(
+                forecasters=[messages_pb2.Forecaster(
+                    forecaster_name="blend",
+                    forecaster_version="1.3.0",
+                )],
+            ),
+        )
+
+        test_uuids = [uuid.uuid4(), uuid.uuid4()]
+
+        with self.assertRaises(ValueError):
+            await client.get_predicted_generation_snapshot(
+                location_uuids=test_uuids,
+                snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+                energy_type=models.EnergyType.SOLAR,
+                authdata={"sub": "access_user"},
+                forecaster_name=None,
+            )
+
+        resp = await client.get_predicted_generation_snapshot(
+            location_uuids=test_uuids,
+            snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "access_user"},
+            forecaster_name="blend",
+            # forecaster_version is omitted to force ListForecasters call
+        )
+
+        self.assertEqual(len(resp), 2)
+        client_mock.ListForecasters.assert_called_once()
+        client_mock.GetForecastAtTimestamp.assert_called_once()
+        self.assertEqual(resp[0].power_kilowatts, 800.0)
+
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_get_actual_generation_snapshot(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        client = StorageClient.from_dp(client_mock)
+        client_mock.GetObservationsAtTimestamp = AsyncMock(
+            side_effect=mock_get_observations_at_timestamp,
+        )
+
+        test_uuids = [uuid.uuid4(), uuid.uuid4()]
+
+        with self.assertRaises(ValueError):
+            await client.get_actual_generation_snapshot(
+                location_uuids=test_uuids,
+                snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+                energy_type=models.EnergyType.SOLAR,
+                authdata={"sub": "access_user"},
+                observer_name=None,
+            )
+
+        resp = await client.get_actual_generation_snapshot(
+            location_uuids=test_uuids,
+            snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "access_user"},
+            observer_name="test_observer",
+        )
+
+        self.assertEqual(len(resp), 2)
+        client_mock.GetObservationsAtTimestamp.assert_called_once()
+
+        self.assertEqual(resp[0].power_kilowatts, 500.0)
+

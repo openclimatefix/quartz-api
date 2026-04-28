@@ -99,7 +99,7 @@ async def get_national_forecast(
     forecast_horizon_minutes: int | None = None,
     include_metadata: bool = False,
     model_name: ModelName = ModelName.blend,
-    trend_adjuster_on: bool | None = True,
+    trend_adjuster_on: bool = True,
 ) -> NationalForecast | list[NationalForecastValue]:
     """Fetch national forecasts.
 

@@ -27,7 +27,7 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 )
 async def get_substations(
     db: models.StorageClientDependency,
-    _: AuthDependency,
+    auth: AuthDependency, # noqa: ARG001
     substation_type: Literal["primary"] = "primary",
 ) -> list[Substation]:
     """Get all substations.
@@ -132,7 +132,7 @@ async def get_all_substation_forecast_at_one_timestamp(
     _: AuthDependency,
     datetime_utc: Annotated[
         dt.datetime,
-        Query(default_factory=lambda: pd.Timestamp.utcnow().floor("30T").to_pydatetime()),
+        Query(default_factory=lambda: pd.Timestamp.utcnow().floor("30min").to_pydatetime()),
     ],
 ) -> OneDatetimeManyForecastValues:
     """Get forecasted generation values of all substations at a specific timestamp."""

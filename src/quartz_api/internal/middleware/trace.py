@@ -1,13 +1,17 @@
 """Middleware to log API requests to the database."""
 
+import collections
 import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
+from typing import Any
 
+import grpc.aio
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from typing_extensions import override
 
 CORR_HEADER = "X-Request-Id"
 PROC_TIME_HEADER = "X-Process-Time"
@@ -66,3 +70,36 @@ class TracerMiddleware(BaseHTTPMiddleware):
         response.headers[CORR_HEADER] = trace_id
 
         return response
+
+# See https://github.com/grpc/grpc/blob/master/examples/python/interceptors/headers/header_manipulator_client_interceptor.py
+class _ClientCallDetails(
+    collections.namedtuple(
+        "_ClientCallDetails", ("method", "timeout", "metadata", "credentials", "wait_for_ready"),
+    ),
+    grpc.aio.ClientCallDetails,
+):
+    pass
+
+class TraceInterceptor(grpc.aio.UnaryUnaryClientInterceptor):
+    """GRPC Interceptor to add tracing information to outgoing GRPC requests."""
+
+    @override
+    async def intercept_unary_unary(
+            self,
+            continuation: Callable[[grpc.HandlerCallDetails], Awaitable[grpc.RpcMethodHandler]],
+            client_call_details: grpc.aio.ClientCallDetails,
+            request: Any,
+        ) -> Any:
+        trace_id = get_trace_id()
+
+        new_metadata = list(client_call_details.metadata or [])
+        new_metadata.append(("traceid", trace_id))
+        new_details: grpc.aio.ClientCallDetails = _ClientCallDetails(
+            method=client_call_details.method,
+            timeout=client_call_details.timeout,
+            metadata=new_metadata,
+            credentials=client_call_details.credentials,
+            wait_for_ready=client_call_details.wait_for_ready,
+        )
+
+        return await continuation(new_details, request)

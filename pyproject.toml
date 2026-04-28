@@ -19,7 +19,7 @@ authors = [
 classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
-    "dp-sdk",
+    "dp-sdk >= 0.25.0,<1.0.0",
     "fastapi>=0.105.0",
     "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
@@ -44,7 +44,6 @@ dev = [
     "unittest-xml-reporting >= 3.2.0",
     "pytest >= 8.0.0",
     "pytest-cov >= 4.1.0",
-    "pytest-asyncio",
     "testcontainers >= 3.7.1",
     "ruff >= 0.1.7",
     "ruff-lsp >= 0.0.48",
@@ -56,14 +55,13 @@ dev = [
     "types-grpcio>=1.0.0.20251009",
     "sqlalchemy-stubs>=0.4",
     "psycopg2-binary>=2.9.11",
-    "freezegun>=1.5.5",
     "ty>=0.0.25",
     "pyinstrument>=5.1.2",
+    "time-machine[dateutil]>=3.2.0",
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.24.5/dp_sdk-0.24.5-py3-none-any.whl" }
-
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 
 [project.urls]
 repository = "https://github.com/openclimatefix/quartz-api"

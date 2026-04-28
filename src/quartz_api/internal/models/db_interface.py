@@ -1,13 +1,13 @@
 """Defines the domain interface for interacting with a backend."""
 
 import abc
+import dataclasses
 import datetime as dt
 from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
 
 
 class EnergyType(Enum):
@@ -27,39 +27,43 @@ class LocationType(Enum):
     NATION = 5
 
 
-class GenerationValue(BaseModel):
-    """Base class for generation values."""
+@dataclasses.dataclass(slots=True)
+class PredictedGenerationValue:
+    """Predicted generation value with additional metadata."""
 
     power_kilowatts: float
     valid_timestamp: dt.datetime
     location_uuid: UUID
     capacity_kilowatts: float
 
-
-class PredictedGenerationValue(GenerationValue):
-    """Predicted generation value with additional metadata."""
-
-    created_timestamp: dt.datetime | None = None
-    init_timestamp: dt.datetime | None = None
     forecaster_name: str
     forecaster_version: str
+    created_timestamp: dt.datetime | None = None
+    init_timestamp: dt.datetime | None = None
     """Dictionary of probabilistic levels for the forecast.
 
     Keys are the level names (e.g., 'p10', 'p50', 'p90'),
     and values are the corresponding power values in kW."""
-    plevels_kilowatts: dict[str, float] = Field(default_factory=dict)
+    plevels_kilowatts: dict[str, float] = dataclasses.field(default_factory=dict)
 
     # metadata: Additional metadata about the forecast
-    metadata: dict[str, str | float] = Field(default_factory=dict)
+    metadata: dict[str, str | float] = dataclasses.field(default_factory=dict)
 
 
-class ActualGenerationValue(GenerationValue):
+@dataclasses.dataclass(slots=True)
+class ActualGenerationValue:
     """Generation value recorded by an observer."""
+
+    power_kilowatts: float
+    valid_timestamp: dt.datetime
+    location_uuid: UUID
+    capacity_kilowatts: float
 
     observer_name: str
 
 
-class Location(BaseModel):
+@dataclasses.dataclass(slots=True)
+class Location:
     """A location that has tracked or forecasted generation data."""
 
     uuid: UUID
@@ -67,7 +71,7 @@ class Location(BaseModel):
     latitude: float
     longitude: float
     capacity_kilowatts: float
-    metadata: dict[str, str | int | float] = Field(default_factory=dict)
+    metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 
 class StorageInterface(abc.ABC):

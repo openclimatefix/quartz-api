@@ -9,18 +9,17 @@ import os
 import pathlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from zoneinfo import ZoneInfo
 
+import grpc
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
-from dp_sdk.ocf import dp
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from grpclib.client import Channel
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from slowapi import _rate_limit_exceeded_handler
@@ -33,16 +32,13 @@ from quartz_api.internal import models, service
 from quartz_api.internal.backends import (
     DataPlatformStorage,
     DummyStorage,
-    EnrichedChannel,
     QuartzStorage,
 )
 from quartz_api.internal.middleware import audit, auth, ratelimit, sentry, trace
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
 
 from ._logging import setup_json_logging
-
-if TYPE_CHECKING:
-    from grpclib.client import Channel
 
 log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
@@ -88,7 +84,6 @@ def _custom_openapi(server: FastAPI) -> dict[str, Any]:
 async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     """Configure FastAPI app instance with startup and shutdown events."""
     storage: models.StorageInterface | None = None
-    grpc_channel: Channel | None = None
 
     match conf.get_string("backend.source"):
         case "quartzdb":
@@ -99,16 +94,15 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             storage = DummyStorage()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            grpc_channel = EnrichedChannel(
-                host=conf.get_string("backend.dataplatform.host"),
-                port=conf.get_int("backend.dataplatform.port"),
+            from ocf.dp.dp_data import service_pb2_grpc
+            trace_interceptor = trace.TraceInterceptor()
+            grpc_channel = grpc.aio.insecure_channel(
+                target=conf.get_string("backend.dataplatform.host") \
+                    + ":" + conf.get_string("backend.dataplatform.port"),
+                    interceptors=[trace_interceptor],
             )
-            client = dp.DataPlatformDataServiceStub(channel=grpc_channel)
+            client = service_pb2_grpc.DataPlatformDataServiceStub(grpc_channel)
             storage = DataPlatformStorage.from_dp(dp_client=client)
-            storage.set_sync_client(
-                host=conf.get_string("backend.dataplatform.host"),
-                port=conf.get_int("backend.dataplatform.port"),
-            )
 
             if "uk_national" in conf.get_string("api.routers").split(","):
                 # Populate the GSP ID to UUID mapping
@@ -131,10 +125,9 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             raise ValueError(f"Unknown backend: {backend_type}")
 
     server.dependency_overrides[models.get_storage_client] = lambda: storage
+    warm_task: asyncio.Task | None = None
 
-    warm_task = None
     if "uk_national" in conf.get_string("api.routers"):
-        from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
         warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
     yield
@@ -144,7 +137,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 
     gsp_id_map.clear()
     if grpc_channel:
-        grpc_channel.close()
+        await grpc_channel.close()
 
 
 def _create_server(conf: ConfigTree) -> FastAPI:
@@ -152,6 +145,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     setup_json_logging(level=logging.getLevelName(conf.get_string("api.loglevel").upper()))
     description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
+        debug=True,
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",

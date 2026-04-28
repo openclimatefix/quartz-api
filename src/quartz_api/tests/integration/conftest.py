@@ -3,81 +3,126 @@
 import datetime
 import os
 import time
+import typing
 from importlib.metadata import version
 from uuid import UUID
 
+import grpc.aio
 import pytest_asyncio
-from betterproto.lib.google.protobuf import Struct, Value
-from dp_sdk.ocf import dp
-from grpclib.client import Channel
+from google.protobuf.struct_pb2 import Struct, Value
+from httpx import ASGITransport, AsyncClient
+from ocf.dp.dp import common_pb2
+from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
+from pyhocon import ConfigFactory, ConfigTree
 from testcontainers.core.container import DockerContainer
+from testcontainers.core.network import Network
 from testcontainers.postgres import PostgresContainer
 
+from quartz_api.cmd.main import _create_server
 from quartz_api.internal import models
+from quartz_api.internal.backends import DataPlatformStorage
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+
+auth_dep = typing.get_args(AuthDependency)[1].dependency
 
 
 @pytest_asyncio.fixture(scope="session")
-async def dp_client() -> dp.DataPlatformDataServiceStub:
+async def dp_client() -> service_pb2_grpc.DataPlatformDataServiceStub:
     """Fixture to spin up a PostgreSQL container for the entire test session.
 
     This fixture uses `testcontainers` to start a fresh PostgreSQL container and provides
     the connection URL dynamically for use in other fixtures.
     """
-    # we use a specific postgres image with postgis and pgpartman installed
-    # TODO make a release of this, not using logging tag.
-    with PostgresContainer(
-        f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
-        username="postgres",
-        password="postgres",  # noqa S106
-        dbname="postgres",
-        env={"POSTGRES_HOST": "db"},
-    ) as postgres:
-        database_url = postgres.get_connection_url()
-        # we need to get ride of psycopg2, so the go driver works
-        database_url = database_url.replace("postgresql+psycopg2", "postgres")
-        # we need to change to host.docker.internal so the data platform container can see it
-        # https://stackoverflow.com/questions/46973456/docker-access-localhost-port-from-container
-        database_url = database_url.replace("localhost", "host.docker.internal")
+    with Network() as network:
+        database_url = "postgresql://postgres:postgres@db:5432/postgres?sslmode=disable"
+        # we use a specific postgres image with postgis and pgpartman installed
+        with (
+            PostgresContainer(
+                f"ghcr.io/openclimatefix/data-platform-pgdb:{version('dp_sdk')}",
+                username="postgres",
+                password="postgres",  # noqa S106
+                dbname="postgres",
+            )
+            .with_network(network)
+            .with_network_aliases("db"),
+            DockerContainer(
+                image=f"ghcr.io/openclimatefix/data-platform:{version('dp_sdk')}",
+                env={"DATABASE_URL": database_url},
+                ports=[50051],
+                platform="linux/amd64",
+            ).with_network(network) as data_platform_server,
+        ):
+            time.sleep(2)
+            try:
+                port = data_platform_server.get_exposed_port(50051)
+            except Exception as e:
+                raise e
 
-        with DockerContainer(
-            image=f"ghcr.io/openclimatefix/data-platform:{version('dp_sdk')}",
-            env={"DATABASE_URL": database_url},
-            ports=[50051],
-        ) as data_platform_server:
-            time.sleep(1)  # Give some time for the server to start
-
-            port = data_platform_server.get_exposed_port(50051)
             host = data_platform_server.get_container_host_ip()
             os.environ["DATA_PLATFORM_HOST"] = host
             os.environ["DATA_PLATFORM_PORT"] = str(port)
 
-            channel = Channel(host=host, port=port)
-            client = dp.DataPlatformDataServiceStub(channel)
+            channel = grpc.aio.insecure_channel(target=f"{host}:{port}")
+            await channel.channel_ready()
+
+            client = service_pb2_grpc.DataPlatformDataServiceStub(channel)
+
             yield client
-            channel.close()
+            await channel.close()
+
+            os.environ.pop("DATA_PLATFORM_HOST", None)
+            os.environ.pop("DATA_PLATFORM_PORT", None)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def make_forecasters(dp_client: dp.DataPlatformDataServiceStub) -> None:
+async def config_all_routers() -> None:
+    """Fixture to provide configuration with all routers enabled."""
+    os.environ["ROUTERS"] = "uk_national,substations,sites,regions"
+    os.environ["SOURCE"] = "dataplatform"
+    yield ConfigFactory.parse_file("src/quartz_api/cmd/server.conf")
+    os.environ.pop("ROUTERS", None)
+    os.environ.pop("SOURCE", None)
+
+@pytest_asyncio.fixture(scope="module")
+async def api_client_dataplatform(
+    config_all_routers: ConfigTree,
+    dp_client: service_pb2_grpc.DataPlatformDataServiceStub,
+) -> AsyncClient:
+    """Returns a TestClient for the FastAPI application."""
+    app = _create_server(config_all_routers)
+
+    db_instance = DataPlatformStorage.from_dp(dp_client=dp_client)
+    app.dependency_overrides[models.get_storage_client] = lambda: db_instance
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture(scope="session")
+async def make_forecasters(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> None:
     """Make forecasters."""
     for model_name in ["blend", "blend_adjust"]:
-        create_forecaster_request = dp.CreateForecasterRequest(
+        create_forecaster_request = messages_pb2.CreateForecasterRequest(
             name=model_name,
             version="1.3.0",
         )
-        _ = await dp_client.create_forecaster(create_forecaster_request)
+        _ = await dp_client.CreateForecaster(create_forecaster_request)
 
 
-def forecast(location_uuid: str, name: str, init_time_utc: datetime) -> dp.CreateForecastRequest:
+def forecast(
+    location_uuid: str,
+    name: str,
+    init_time_utc: datetime.datetime,
+) -> messages_pb2.CreateForecastRequest:
     """Create a forecast request."""
-    return dp.CreateForecastRequest(
+    return messages_pb2.CreateForecastRequest(
         location_uuid=location_uuid,
-        energy_source=dp.EnergySource.SOLAR,
+        energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
         init_time_utc=init_time_utc,
-        forecaster=dp.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
+        forecaster=messages_pb2.Forecaster(forecaster_name=name, forecaster_version="1.3.0"),
         values=[
-            dp.CreateForecastRequestForecastValue(
+            messages_pb2.CreateForecastRequest.ForecastValue(
                 horizon_mins=i * 30,
                 p50_fraction=i * 0.05,
                 other_statistics_fractions={"p10": i * 0.06, "p90": i * 0.04},
@@ -92,8 +137,8 @@ def make_location(
     name: str,
     gsp_id: int,
     metadata: dict,
-    location_type: dp.LocationType = dp.LocationType.NATION,
-) -> dp.CreateLocationRequest:
+    location_type: common_pb2.LocationType = common_pb2.LocationType.LOCATION_TYPE_NATION,
+) -> messages_pb2.CreateLocationRequest:
     """Create a location request."""
     lat = float(gsp_id)
     lon = float(gsp_id)
@@ -101,9 +146,9 @@ def make_location(
         f"POLYGON(({lon - 0.5} {lat - 0.5}, {lon + 0.5} {lat - 0.5}, "
         f"{lon + 0.5} {lat + 0.5}, {lon - 0.5} {lat + 0.5}, {lon - 0.5} {lat - 0.5}))"
     )
-    create_location_request = dp.CreateLocationRequest(
+    create_location_request = messages_pb2.CreateLocationRequest(
         location_name=name,
-        energy_source=dp.EnergySource.SOLAR,
+        energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
         geometry_wkt=polygon_wkt,
         location_type=location_type,
         effective_capacity_watts=10_000_000,
@@ -115,48 +160,32 @@ def make_location(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def gsp_locations(dp_client: dp.DataPlatformDataServiceStub) -> list[UUID]:
+async def gsp_locations(dp_client: service_pb2_grpc.DataPlatformDataServiceStub) -> list[UUID]:
     """Make national location."""
-    # add location gsp 1 to 10
+    # add location gsp 0 to 10
     location_uuids = []
-    for i in range(1, 11):
-        metadata = Struct(fields={"gsp_id": Value(number_value=i)})
+    gsp_id_map.clear()
+    for i in range(0, 11):
+        metadata = Struct()
+        metadata.update({"gsp_id": int(i)})
         create_location_request = make_location(
-            name=f"gsp_{i}",
+            name=f"gsp_{i}" if i > 0 else "uk",
             gsp_id=i,
             metadata=metadata,
-            location_type=dp.LocationType.GSP,
+            location_type=common_pb2.LocationType.LOCATION_TYPE_GSP
+            if i > 0
+            else common_pb2.LocationType.LOCATION_TYPE_NATION,
         )
-        res = await dp_client.create_location(create_location_request)
+        res = await dp_client.CreateLocation(create_location_request)
         location_uuids.append(res.location_uuid)
 
         gsp_id_map[i] = models.Location(
             uuid=UUID(res.location_uuid),
-            metadata={"gsp_id": i},
-            name="uk",
+            metadata={"gsp_id": int(i)},
+            name=res.location_name,
             latitude=0,
             longitude=0,
             capacity_kilowatts=res.effective_capacity_watts / 1000,
         )
 
     return location_uuids
-
-
-@pytest_asyncio.fixture(scope="session")
-async def national_location(dp_client: dp.DataPlatformDataServiceStub) -> dp.CreateLocationResponse:
-    """Make national location."""
-    # add location gsp 0
-    metadata = Struct(fields={"gsp_id": Value(number_value=0)})
-    create_location_request = make_location(name="uk", gsp_id=0, metadata=metadata)
-    create_location_response = await dp_client.create_location(create_location_request)
-
-    gsp_id_map[0] = models.Location(
-        uuid=UUID(create_location_response.location_uuid),
-        metadata={"gsp_id": 0},
-        name="uk",
-        latitude=0,
-        longitude=0,
-        capacity_kilowatts=create_location_response.effective_capacity_watts / 1000,
-    )
-
-    return create_location_response
