@@ -19,11 +19,11 @@ from quartz_api.internal.service.uk_national.cache import key_builder
 
 from ..cache import _generation_cache_warming, _warm_v1_generation_cache
 from ..endpoint_types import (
-    GenerationMatrix,
     GenerationResponse,
     GenerationSnapshot,
     GenerationValue,
-    RegionGenerationTimeSeries,
+    RegionGeneration,
+    RegionGenerationMatrix,
     RegionGenerationValue,
     ValidObserver,
     ValidSource,
@@ -177,7 +177,7 @@ async def get_generation_period(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
-) -> GenerationMatrix:
+) -> RegionGenerationMatrix:
     """Get observed generation for all (or selected) regions across a time window.
 
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
@@ -219,14 +219,14 @@ async def get_generation_period(
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
-    region_series: list[RegionGenerationTimeSeries] = []
+    region_series: list[RegionGeneration] = []
     for r, raw in zip(regions, raw_list, strict=True):
         if raw is None:
             continue
         all_values = [GenerationValue.model_validate(v) for v in json.loads(raw)]
         windowed = [v for v in all_values if win_start <= v.time <= win_end]
         region_series.append(
-            RegionGenerationTimeSeries(
+            RegionGeneration(
                 region_id=_to_uuid(r.uuid),
                 capacity_kW=r.capacity_kilowatts,
                 values=windowed,
@@ -234,7 +234,7 @@ async def get_generation_period(
         )
 
     metadata = json.loads(raw_meta)
-    return GenerationMatrix(**metadata, regions=region_series)
+    return RegionGenerationMatrix(**metadata, regions=region_series)
 
 
 @router.post(

@@ -352,7 +352,7 @@ async def test_get_generation_period_cold_cache_returns_503(client: AsyncClient)
 
 @pytest.mark.anyio
 async def test_get_forecasts_period_warm_cache(client: AsyncClient) -> None:
-    """Period endpoint returns ForecastMatrix (may have empty regions) when _meta is cached."""
+    """Period endpoint returns RegionForecastMatrix (may have empty regions) when _meta is cached."""
     await _set_forecast_meta()
     resp = await client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 200
@@ -363,7 +363,7 @@ async def test_get_forecasts_period_warm_cache(client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_get_generation_period_warm_cache(client: AsyncClient) -> None:
-    """Generation period endpoint returns GenerationMatrix when _meta is cached."""
+    """Generation period endpoint returns RegionGenerationMatrix when _meta is cached."""
     observer = "pvlive_in_day"
     meta = {"observer_name": observer}
     prefix = FastAPICache.get_prefix()
