@@ -52,8 +52,12 @@ async def get_region_generation(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
-    start_utc: dt.datetime | None = Query(None, description="Start of generation window (UTC)."),
-    end_utc: dt.datetime | None = Query(None, description="End of generation window (UTC)."),
+    start_utc: dt.datetime | None = Query(
+        None, description="Start of generation window (UTC)."
+    ),
+    end_utc: dt.datetime | None = Query(
+        None, description="End of generation window (UTC)."
+    ),
 ) -> GenerationResponse:
     """Get observed generation data for a specific region."""
     energy_type = _energy_type_for(source)
@@ -110,7 +114,8 @@ async def get_generation_snapshot(
     region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
     observer: ValidObserver = "pvlive_in_day",
     timestamp: dt.datetime | None = Query(
-        None, description="Observation target timestamp (UTC).",
+        None,
+        description="Observation target timestamp (UTC).",
     ),
 ) -> GenerationSnapshot:
     """Get observed generation for all regions of a given type at a specific timestamp."""
@@ -134,6 +139,12 @@ async def get_generation_snapshot(
             location_type=location_type,
             authdata=auth,
             enclosing_location_uuid=_to_uuid(nation.uuid),
+        )
+
+    if len(regions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No regions found for type '{location_type}' in {country.upper()}.",
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -176,7 +187,9 @@ async def get_generation_period(
     observer: ValidObserver = "pvlive_in_day",
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
-    region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
+    region_ids: list[UUID] | None = Query(
+        None, description="Limit to specific region UUIDs."
+    ),
 ) -> RegionGenerationMatrix:
     """Get observed generation for all (or selected) regions across a time window.
 
@@ -214,6 +227,13 @@ async def get_generation_period(
         authdata=auth,
         enclosing_location_uuid=_to_uuid(nation.uuid),
     )
+
+    if len(regions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No regions found for type '{rt.location_type}' in {country.upper()}.",
+        )
+
     if region_ids is not None:
         id_set = set(region_ids)
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]

@@ -220,6 +220,12 @@ async def get_forecasts_snapshot(
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
 
+    if len(regions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No regions found for type '{location_type}' in {country.upper()}.",
+        )
+
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
@@ -324,6 +330,13 @@ async def get_forecasts_period(
         authdata=auth,
         enclosing_location_uuid=_to_uuid(nation.uuid),
     )
+
+    if len(regions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No regions found for type '{rt.location_type}' in {country.upper()}.",
+        )
+
     if region_ids is not None:
         id_set = set(region_ids)
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
