@@ -197,7 +197,7 @@ class GenerationSnapshot(BaseModel):
     values: list[RegionGenerationValue]
 
 
-class RegionForecastTimeSeries(BaseModel):
+class RegionForecast(BaseModel):
     """Forecast time series for one region — used in matrix responses."""
 
     region_id: UUID
@@ -205,17 +205,17 @@ class RegionForecastTimeSeries(BaseModel):
     values: list[ForecastValue]
 
 
-class ForecastMatrix(BaseModel):
+class RegionForecastMatrix(BaseModel):
     """Forecast time series for all regions across a time window."""
 
     model_name: str | None = None
     model_version: str | None = None
     created_time: dt.datetime | None = None
     init_time: dt.datetime | None = None
-    regions: list[RegionForecastTimeSeries]
+    regions: list[RegionForecast]
 
 
-class RegionGenerationTimeSeries(BaseModel):
+class RegionGeneration(BaseModel):
     """Generation time series for one region — used in matrix responses."""
 
     region_id: UUID
@@ -223,8 +223,8 @@ class RegionGenerationTimeSeries(BaseModel):
     values: list[GenerationValue]
 
 
-class GenerationMatrix(BaseModel):
+class RegionGenerationMatrix(BaseModel):
     """Observed generation time series for all regions across a time window."""
 
     observer_name: str | None = None
-    regions: list[RegionGenerationTimeSeries]
+    regions: list[RegionGeneration]

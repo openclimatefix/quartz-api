@@ -19,11 +19,11 @@ from quartz_api.internal.service.uk_national.cache import key_builder
 
 from ..cache import _forecast_cache_warming, _warm_v1_forecast_cache
 from ..endpoint_types import (
-    ForecastMatrix,
     ForecastResponse,
     ForecastSnapshot,
     ForecastValue,
-    RegionForecastTimeSeries,
+    RegionForecast,
+    RegionForecastMatrix,
     RegionForecastValue,
     ValidForecastModel,
     ValidSource,
@@ -52,8 +52,12 @@ async def get_region_forecast(
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    start_utc: dt.datetime | None = Query(None, description="Start of forecast window (UTC)."),
-    end_utc: dt.datetime | None = Query(None, description="End of forecast window (UTC)."),
+    start_utc: dt.datetime | None = Query(
+        None, description="Start of forecast window (UTC)."
+    ),
+    end_utc: dt.datetime | None = Query(
+        None, description="End of forecast window (UTC)."
+    ),
     creation_limit_utc: dt.datetime | None = Query(
         None,
         description=(
@@ -187,7 +191,9 @@ async def get_forecasts_snapshot(
     region_type: str = Query(..., description="Region type (e.g. 'gsp', 'national')."),
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
-    timestamp: dt.datetime | None = Query(None, description="Forecast target timestamp (UTC)."),
+    timestamp: dt.datetime | None = Query(
+        None, description="Forecast target timestamp (UTC)."
+    ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp."""
     energy_type = _energy_type_for(source)
@@ -278,8 +284,10 @@ async def get_forecasts_period(
     region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
-    region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
-) -> ForecastMatrix:
+    region_ids: list[UUID] | None = Query(
+        None, description="Limit to specific region UUIDs."
+    ),
+) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
 
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
@@ -321,14 +329,14 @@ async def get_forecasts_period(
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
-    region_series: list[RegionForecastTimeSeries] = []
+    region_series: list[RegionForecast] = []
     for r, raw in zip(regions, raw_list, strict=True):
         if raw is None:
             continue
         all_values = [ForecastValue.model_validate(v) for v in json.loads(raw)]
         windowed = [v for v in all_values if win_start <= v.time <= win_end]
         region_series.append(
-            RegionForecastTimeSeries(
+            RegionForecast(
                 region_id=_to_uuid(r.uuid),
                 capacity_kW=r.capacity_kilowatts,
                 values=windowed,
@@ -336,7 +344,7 @@ async def get_forecasts_period(
         )
 
     metadata = json.loads(raw_meta)
-    return ForecastMatrix(**metadata, regions=region_series)
+    return RegionForecastMatrix(**metadata, regions=region_series)
 
 
 @router.post(
