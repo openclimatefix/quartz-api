@@ -1,4 +1,4 @@
-"""Forecast routes — per-region timeseries, snapshots, and matrix endpoints."""
+"""Forecast routes — per-region, snapshot, and period matrix endpoints."""
 
 # ruff: noqa: ARG001, B008
 
@@ -266,10 +266,11 @@ async def get_forecasts_snapshot(
 
 
 @router.get(
-    "/{country}/{source}/forecasts/timeseries",
+    "/{country}/{source}/forecasts/period",
     status_code=status.HTTP_200_OK,
+    summary="Get Forecasts for Period",
 )
-async def get_forecasts_timeseries(
+async def get_forecasts_period(
     source: ValidSource,
     country: CountryCode,
     db: models.StorageClientDependency,
@@ -279,7 +280,7 @@ async def get_forecasts_timeseries(
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
 ) -> ForecastMatrix:
-    """Get forecast timeseries for all (or selected) regions across a time window.
+    """Get forecasts for all (or selected) regions across a time window.
 
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
     yet been populated — retry after 60 seconds.
@@ -351,7 +352,7 @@ async def refresh_forecasts_cache(
     auth: AuthDependency,
     region_type: str = Query("gsp", description="Region type to refresh."),
 ) -> Response:
-    """Trigger a background re-warm of the forecast timeseries cache. Requires ocf:admin."""
+    """Trigger a background re-warm of the forecast period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source}:{country}:{region_type}"
