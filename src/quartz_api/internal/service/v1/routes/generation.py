@@ -163,10 +163,11 @@ async def get_generation_snapshot(
 
 
 @router.get(
-    "/{country}/{source}/generation/timeseries",
+    "/{country}/{source}/generation/period",
     status_code=status.HTTP_200_OK,
+    summary="Get Generation for Period",
 )
-async def get_generation_timeseries(
+async def get_generation_period(
     source: ValidSource,
     country: CountryCode,
     db: models.StorageClientDependency,
@@ -177,7 +178,7 @@ async def get_generation_timeseries(
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(None, description="Limit to specific region UUIDs."),
 ) -> GenerationMatrix:
-    """Get observed generation timeseries for all (or selected) regions across a time window.
+    """Get observed generation for all (or selected) regions across a time window.
 
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
     yet been populated — retry after 60 seconds.
@@ -250,7 +251,7 @@ async def refresh_generation_cache(
     region_type: str = Query("gsp", description="Region type to refresh."),
     observer: ValidObserver = "pvlive_in_day",
 ) -> Response:
-    """Trigger a background re-warm of the generation timeseries cache. Requires ocf:admin."""
+    """Trigger a background re-warm of the generation period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source}:{country}:{region_type}:{observer}"

@@ -321,40 +321,40 @@ async def test_get_forecasts_snapshot_invalid_region_type_returns_400(
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_invalid_region_type_returns_400(
+async def test_get_forecasts_period_invalid_region_type_returns_400(
     client: AsyncClient,
 ) -> None:
-    resp = await client.get("/v1/GB/solar/forecasts/timeseries?region_type=unknown_type")
+    resp = await client.get("/v1/GB/solar/forecasts/period?region_type=unknown_type")
     assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------
-# Timeseries (matrix) endpoints — cold cache → 503
+# Period (matrix) endpoints — cold cache → 503
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_cold_cache_returns_503(client: AsyncClient) -> None:
-    """Timeseries endpoint must 503 when cache has not been pre-warmed."""
+async def test_get_forecasts_period_cold_cache_returns_503(client: AsyncClient) -> None:
+    """Period endpoint must 503 when cache has not been pre-warmed."""
     FastAPICache.init(InMemoryBackend(), prefix="cold")
-    resp = await client.get("/v1/GB/solar/forecasts/timeseries?region_type=gsp")
+    resp = await client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 503
     assert "Retry-After" in resp.headers
 
 
 @pytest.mark.anyio
-async def test_get_generation_timeseries_cold_cache_returns_503(client: AsyncClient) -> None:
+async def test_get_generation_period_cold_cache_returns_503(client: AsyncClient) -> None:
     FastAPICache.init(InMemoryBackend(), prefix="cold2")
-    resp = await client.get("/v1/GB/solar/generation/timeseries?region_type=gsp")
+    resp = await client.get("/v1/GB/solar/generation/period?region_type=gsp")
     assert resp.status_code == 503
     assert "Retry-After" in resp.headers
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_warm_cache(client: AsyncClient) -> None:
-    """Timeseries endpoint returns ForecastMatrix (may have empty regions) when _meta is cached."""
+async def test_get_forecasts_period_warm_cache(client: AsyncClient) -> None:
+    """Period endpoint returns ForecastMatrix (may have empty regions) when _meta is cached."""
     await _set_forecast_meta()
-    resp = await client.get("/v1/GB/solar/forecasts/timeseries?region_type=gsp")
+    resp = await client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 200
     body = resp.json()
     assert body["model_name"] == "blend"
@@ -362,8 +362,8 @@ async def test_get_forecasts_timeseries_warm_cache(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None:
-    """Generation timeseries returns GenerationMatrix when _meta is cached."""
+async def test_get_generation_period_warm_cache(client: AsyncClient) -> None:
+    """Generation period endpoint returns GenerationMatrix when _meta is cached."""
     observer = "pvlive_in_day"
     meta = {"observer_name": observer}
     prefix = FastAPICache.get_prefix()
@@ -375,7 +375,7 @@ async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None
     )
 
     resp = await client.get(
-        f"/v1/GB/solar/generation/timeseries?region_type=gsp&observer={observer}",
+        f"/v1/GB/solar/generation/period?region_type=gsp&observer={observer}",
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -384,19 +384,19 @@ async def test_get_generation_timeseries_warm_cache(client: AsyncClient) -> None
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_region_ids_filter(client: AsyncClient) -> None:
+async def test_get_forecasts_period_region_ids_filter(client: AsyncClient) -> None:
     """region_ids filter reduces result to matching regions only."""
     await _set_forecast_meta()
     non_existent_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/forecasts/timeseries?region_type=gsp&region_ids={non_existent_id}",
+        f"/v1/GB/solar/forecasts/period?region_type=gsp&region_ids={non_existent_id}",
     )
     assert resp.status_code == 200
     assert resp.json()["regions"] == []
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_window_includes_cached_values(
+async def test_get_forecasts_period_window_includes_cached_values(
     fixed_uuid_client: AsyncClient,
 ) -> None:
     """Values within the requested window are returned; values outside are excluded."""
@@ -412,7 +412,7 @@ async def test_get_forecasts_timeseries_window_includes_cached_values(
 
     # Narrow window: only t_early should be included
     resp = await fixed_uuid_client.get(
-        "/v1/GB/solar/forecasts/timeseries",
+        "/v1/GB/solar/forecasts/period",
         params={
             "region_type": "gsp",
             "start_utc": (t_early - dt.timedelta(minutes=1)).isoformat(),
@@ -427,7 +427,7 @@ async def test_get_forecasts_timeseries_window_includes_cached_values(
 
 
 @pytest.mark.anyio
-async def test_get_forecasts_timeseries_window_excludes_out_of_range_values(
+async def test_get_forecasts_period_window_excludes_out_of_range_values(
     fixed_uuid_client: AsyncClient,
 ) -> None:
     """Values outside the requested window are not returned."""
@@ -441,7 +441,7 @@ async def test_get_forecasts_timeseries_window_excludes_out_of_range_values(
 
     # Window starts after the cached value — should be empty
     resp = await fixed_uuid_client.get(
-        "/v1/GB/solar/forecasts/timeseries",
+        "/v1/GB/solar/forecasts/period",
         params={
             "region_type": "gsp",
             "start_utc": (now - dt.timedelta(hours=1)).isoformat(),
