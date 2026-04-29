@@ -26,6 +26,7 @@ from ..endpoint_types import (
     RegionForecastMatrix,
     RegionForecastValue,
     ValidForecastModel,
+    ValidRegionType,
     ValidSource,
 )
 from ..helpers import (
@@ -188,7 +189,7 @@ async def get_forecasts_snapshot(
     country: CountryCode,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: str = Query(..., description="Region type (e.g. 'gsp', 'national')."),
+    region_type: ValidRegionType,
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
     timestamp: dt.datetime | None = Query(
@@ -287,7 +288,7 @@ async def get_forecasts_period(
     country: CountryCode,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    region_type: ValidRegionType,
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
@@ -371,7 +372,7 @@ async def refresh_forecasts_cache(
     background_tasks: BackgroundTasks,
     request: Request,
     auth: AuthDependency,
-    region_type: str = Query("gsp", description="Region type to refresh."),
+    region_type: ValidRegionType = "gsp",
 ) -> Response:
     """Trigger a background re-warm of the forecast period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):

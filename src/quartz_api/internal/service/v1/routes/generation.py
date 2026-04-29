@@ -26,6 +26,7 @@ from ..endpoint_types import (
     RegionGenerationMatrix,
     RegionGenerationValue,
     ValidObserver,
+    ValidRegionType,
     ValidSource,
 )
 from ..helpers import (
@@ -111,7 +112,7 @@ async def get_generation_snapshot(
     country: CountryCode,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    region_type: ValidRegionType,
     observer: ValidObserver = "pvlive_in_day",
     timestamp: dt.datetime | None = Query(
         None,
@@ -183,7 +184,7 @@ async def get_generation_period(
     country: CountryCode,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: str = Query(..., description="Region type (e.g. 'gsp')."),
+    region_type: ValidRegionType,
     observer: ValidObserver = "pvlive_in_day",
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
@@ -268,7 +269,7 @@ async def refresh_generation_cache(
     background_tasks: BackgroundTasks,
     request: Request,
     auth: AuthDependency,
-    region_type: str = Query("gsp", description="Region type to refresh."),
+    region_type: ValidRegionType = "gsp",
     observer: ValidObserver = "pvlive_in_day",
 ) -> Response:
     """Trigger a background re-warm of the generation period cache. Requires ocf:admin."""
