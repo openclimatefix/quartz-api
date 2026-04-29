@@ -29,6 +29,28 @@ ValidForecastModel = Annotated[
 ]
 
 
+def _get_region_type_names() -> tuple[str, ...]:
+    """Extract all unique region type slugs from country configs."""
+    names: set[str] = set()
+    for country_cfg in COUNTRIES.values():
+        for rt in country_cfg.region_types:
+            names.add(rt.type)
+    return tuple(sorted(names))
+
+
+ValidRegionType = Annotated[
+    str,
+    Query(
+        description=(
+            "Region type slug (e.g. 'gsp', 'national'). "
+            "Valid values are country-specific — see `/{country}/{source}/region-types`. "
+            "The enum lists all types across all countries."
+        ),
+        enum=list(_get_region_type_names()),
+    ),
+]
+
+
 def _get_observer_sources() -> tuple[str, ...]:
     """Extract all unique observer source names from country configs."""
     sources = set()
