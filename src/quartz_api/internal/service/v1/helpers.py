@@ -110,6 +110,24 @@ def _to_uuid(val: str | UUID) -> UUID:
     return UUID(val) if isinstance(val, str) else val
 
 
+def _check_region_type(
+    cfg: CountryConfig,
+    region_type: str | None,
+    country: str,
+) -> RegionTypeConfig | None:
+    """Validate region_type against config, raising 400 with available types if unknown."""
+    if region_type is None:
+        return None
+    rt = cfg.get_region_type(region_type)
+    if rt is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown region type '{region_type}' for {country.upper()}. "
+            f"Available: {[r.type for r in cfg.region_types]}",
+        )
+    return rt
+
+
 def _validate_model(
     model: str | None,
     rt: RegionTypeConfig | None,
