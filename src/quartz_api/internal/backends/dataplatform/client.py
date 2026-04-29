@@ -58,6 +58,7 @@ class StorageClient(models.StorageInterface):
         Should work as the Data Platform API has gRPC reflection.
         """
         from grpc_requests import Client
+
         self._sync_client = Client.get_by_endpoint(f"{host}:{port}")
         # Pre-warm service discovery so the first real call isn't slow.
         self.svc = self._sync_client.service(_DP_SERVICE)
@@ -75,22 +76,26 @@ class StorageClient(models.StorageInterface):
         svc = self._sync_client.service(_DP_SERVICE)
 
         if forecaster_version is None:
-            resp = svc.ListForecasters({
-                "forecaster_names_filter": [forecaster_name],
-                "latest_versions_only": True,
-            })
+            resp = svc.ListForecasters(
+                {
+                    "forecaster_names_filter": [forecaster_name],
+                    "latest_versions_only": True,
+                }
+            )
             forecaster_name = resp["forecasters"][0]["forecaster_name"]
             forecaster_version = resp["forecasters"][0]["forecaster_version"]
 
-        resp = svc.GetForecastAtTimestamp({
-            "location_uuids": [str(uuid) for uuid in location_uuids],
-            "energy_source": energy_type_map[energy_type].value,
-            "timestamp_utc": snapshot_timestamp_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "forecaster": {
-                "forecaster_name": forecaster_name,
-                "forecaster_version": forecaster_version,
-            },
-        })
+        resp = svc.GetForecastAtTimestamp(
+            {
+                "location_uuids": [str(uuid) for uuid in location_uuids],
+                "energy_source": energy_type_map[energy_type].value,
+                "timestamp_utc": snapshot_timestamp_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "forecaster": {
+                    "forecaster_name": forecaster_name,
+                    "forecaster_version": forecaster_version,
+                },
+            }
+        )
 
         if not resp.get("values"):
             return []
@@ -98,14 +103,18 @@ class StorageClient(models.StorageInterface):
         valid_ts = dt.datetime.fromisoformat(resp["timestamp_utc"])
         return [
             models.PredictedGenerationValue(
-                power_kilowatts=float(v.get("value_fraction", 0)) * float(v["effective_capacity_watts"]) / 1000,  # noqa: E501
+                power_kilowatts=float(v.get("value_fraction", 0))
+                * float(v["effective_capacity_watts"])
+                / 1000,  # noqa: E501
                 valid_timestamp=valid_ts,
                 location_uuid=UUID(v["location_uuid"]),
                 capacity_kilowatts=float(v["effective_capacity_watts"]) / 1000,
                 forecaster_name=forecaster_name,
                 forecaster_version=forecaster_version,
                 created_timestamp=dt.datetime.fromisoformat(v["created_timestamp_utc"]),
-                init_timestamp=dt.datetime.fromisoformat(v["initialization_timestamp_utc"]),
+                init_timestamp=dt.datetime.fromisoformat(
+                    v["initialization_timestamp_utc"]
+                ),
                 metadata=v.get("metadata", {}),
             )
             for v in resp["values"]
@@ -134,10 +143,13 @@ class StorageClient(models.StorageInterface):
 
         # Limit the creation time if not set
         if created_cutoff is None:
-            created_cutoff = dt.datetime.now(tz=dt.UTC) - \
-                dt.timedelta(minutes=forecast_horizon_minutes)
+            created_cutoff = dt.datetime.now(tz=dt.UTC) - dt.timedelta(
+                minutes=forecast_horizon_minutes
+            )
 
-        oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        oauth_id: str | None = (
+            get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        )
         req = dp.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
@@ -178,7 +190,8 @@ class StorageClient(models.StorageInterface):
             req = dp.GetLatestForecastsRequest(
                 location_uuid=str(location_uuid),
                 energy_source=energy_type_map[energy_type],
-                pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=window_start
+                - dt.timedelta(minutes=forecast_horizon_minutes),
             )
             resp = await self.dpc.get_latest_forecasts(req)
             if len(resp.forecasts) == 0:
@@ -221,7 +234,7 @@ class StorageClient(models.StorageInterface):
         resp = self.svc.GetForecastAsTimeseries(req)
 
         if location_type == models.LocationType.SUBSTATION:
-        # Spoof the forecast values so that the capacity and id corresponds to the substation
+            # Spoof the forecast values so that the capacity and id corresponds to the substation
             for v in resp["values"]:
                 v["location_uuid"] = location_uuid
                 v["effective_capacity_watts"] = location.effective_capacity_watts
@@ -229,8 +242,9 @@ class StorageClient(models.StorageInterface):
         out: list[models.PredictedGenerationValue] = [
             models.PredictedGenerationValue(
                 power_kilowatts=int(
-                    float(v["effective_capacity_watts"]) \
-                        * float(v.get("p50_value_fraction", 0)) / 1000,
+                    float(v["effective_capacity_watts"])
+                    * float(v.get("p50_value_fraction", 0))
+                    / 1000,
                 ),
                 valid_timestamp=v["target_timestamp_utc"],
                 location_uuid=location_uuid,
@@ -239,25 +253,28 @@ class StorageClient(models.StorageInterface):
                 init_timestamp=v["initialization_timestamp_utc"],
                 forecaster_name=forecaster.forecaster_name,
                 forecaster_version=forecaster.forecaster_version,
-                plevels_kilowatts={
-                    "p10": int(
-                        float(v["effective_capacity_watts"]) \
-                            * float(v["other_statistics_fractions"].get("p10", 0)) / 1000.0,
-                    ),
-                    "p90": int(
-                        float(v["effective_capacity_watts"]) \
-                            * float(v["other_statistics_fractions"].get("p90", 0)) / 1000.0,
-                    ),
-                }
-                if "p10" in v.get("other_statistics_fractions", {}) and \
-                    "p90" in v.get("other_statistics_fractions", {})
-                else {},
+                plevels_kilowatts=(
+                    {
+                        "p10": int(
+                            float(v["effective_capacity_watts"])
+                            * float(v["other_statistics_fractions"].get("p10", 0))
+                            / 1000.0,
+                        ),
+                        "p90": int(
+                            float(v["effective_capacity_watts"])
+                            * float(v["other_statistics_fractions"].get("p90", 0))
+                            / 1000.0,
+                        ),
+                    }
+                    if "p10" in v.get("other_statistics_fractions", {})
+                    and "p90" in v.get("other_statistics_fractions", {})
+                    else {}
+                ),
                 metadata=v.get("metadata", {}),
             )
             for v in resp["values"]
         ]
         return out
-
 
     @override
     async def put_predicted_generation(
@@ -267,7 +284,9 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError("Data platform backend doesn't support forecast input yet.")
+        raise NotImplementedError(
+            "Data platform backend doesn't support forecast input yet."
+        )
 
     @override
     async def get_actual_generation(
@@ -305,7 +324,9 @@ class StorageClient(models.StorageInterface):
         out: list[models.ActualGenerationValue] = [
             models.ActualGenerationValue(
                 valid_timestamp=value.timestamp_utc,
-                power_kilowatts=int(value.effective_capacity_watts * value.value_fraction / 1000.0),
+                power_kilowatts=int(
+                    value.effective_capacity_watts * value.value_fraction / 1000.0
+                ),
                 location_uuid=str(location_uuid),
                 capacity_kilowatts=int(value.effective_capacity_watts / 1000.0),
                 observer_name=observer_name,
@@ -323,7 +344,9 @@ class StorageClient(models.StorageInterface):
         location_type: models.LocationType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError("Data platform backend does not yet support writing generation")
+        raise NotImplementedError(
+            "Data platform backend does not yet support writing generation"
+        )
 
     @override
     async def get_predicted_generation_snapshot(
@@ -349,7 +372,9 @@ class StorageClient(models.StorageInterface):
 
         if forecaster_version is None:
             req = dp.ListForecastersRequest(
-                forecaster_names_filter=[forecaster_name] if forecaster_name is not None else [],
+                forecaster_names_filter=(
+                    [forecaster_name] if forecaster_name is not None else []
+                ),
                 latest_versions_only=True,
             )
             resp = await self.dpc.list_forecasters(req)
@@ -441,31 +466,44 @@ class StorageClient(models.StorageInterface):
             case models.EnergyType.WIND, models.LocationType.REGION:
                 # get_wind_regions had no auth
                 oauth_id: str | None = None
-            case models.EnergyType.SOLAR, models.LocationType.NATION | models.LocationType.GSP:
+            case (
+                models.EnergyType.SOLAR,
+                models.LocationType.NATION | models.LocationType.GSP,
+            ):
                 # get_solar_regions had no auth
                 oauth_id = None
             case _, models.LocationType.SUBSTATION:
                 # get substations had optional auth (?) (temporary while we onboard?)
-                oauth_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
             case _, models.LocationType.SITE:
                 # get_sites had auth
                 oauth_id = get_oauth_id_from_sub(authdata["sub"])
             case _, None:
                 # No location type filter — used by v1 API for listing all region types
-                oauth_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
             case _:
-                oauth_id = get_oauth_id_from_sub(authdata["sub"])
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
 
         req = dp.ListLocationsRequest(
             energy_source_filter=energy_type_map[energy_type],
-            location_type_filter=location_type_map[location_type]
-            if location_type is not None
-            else None,
+            location_type_filter=(
+                location_type_map[location_type] if location_type is not None else None
+            ),
             user_oauth_id_filter=oauth_id,
-            location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
-            enclosing_location_uuid_filter=str(enclosing_location_uuid)
-            if enclosing_location_uuid is not None
-            else None,
+            location_uuids_filter=(
+                [str(location_uuid)] if location_uuid is not None else []
+            ),
+            enclosing_location_uuid_filter=(
+                str(enclosing_location_uuid)
+                if enclosing_location_uuid is not None
+                else None
+            ),
         )
         resp = await self.dpc.list_locations(req)
         out: list[models.Location] = [
@@ -490,7 +528,9 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> models.Location:
-        raise NotImplementedError("Data platform backend doesn't yet support location writing.")
+        raise NotImplementedError(
+            "Data platform backend doesn't yet support location writing."
+        )
 
     @override
     async def log_api_call(
