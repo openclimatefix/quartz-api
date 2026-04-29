@@ -83,8 +83,9 @@ class AuthClient:
                 raise e
 
             # set the apitally consumer, this means we can see who has used which routes
-            email = claims["https://openclimatefix.org/email"]
-            set_consumer(request,identifier=email)
+            if EMAIL_KEY in claims:
+                email = claims[EMAIL_KEY]
+                set_consumer(request, identifier=email)
 
             return claims
 
