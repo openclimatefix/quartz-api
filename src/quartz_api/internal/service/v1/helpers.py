@@ -157,7 +157,7 @@ async def _resolve_region_id(
             return UUID(region_id)
         except ValueError:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="region_id must be 'national' or a valid UUID.",
             ) from None
     nations = await db.get_locations(
