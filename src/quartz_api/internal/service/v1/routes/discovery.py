@@ -1,4 +1,4 @@
-"""Capability routes — sources, countries, region types, and generation sources."""
+"""Discovery routes — sources, countries, region types, and generation sources."""
 
 # ruff: noqa: ARG001
 
@@ -19,7 +19,7 @@ from ..endpoint_types import (
 )
 from ..helpers import CountryCode, _country_config, _energy_type_for
 
-router = APIRouter(tags=["Capability"])
+router = APIRouter(tags=["Discovery"])
 
 
 @router.get("/sources", status_code=status.HTTP_200_OK)
