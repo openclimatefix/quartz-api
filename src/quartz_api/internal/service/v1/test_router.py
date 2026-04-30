@@ -60,6 +60,87 @@ class FixedUUIDStorageClient(StorageClient):
         )
 
 
+class NullLocationsForUUIDClient(StorageClient):
+    """Returns an empty list for any untyped location lookup that filters by UUID.
+
+    Simulates "region not found in the data platform" for 404 path tests.
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if location_type is None and location_uuid is not None:
+            return []
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
+class NationResponseClient(StorageClient):
+    """Returns a NATION-type location for untyped lookups with a specific UUID.
+
+    Used to test model validation for national region types (e.g. blend_adjust).
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if location_type is None and location_uuid is not None:
+            return [
+                models.Location(
+                    uuid=location_uuid,
+                    name="uk",
+                    latitude=54.0,
+                    longitude=-2.0,
+                    capacity_kilowatts=15_000_000,
+                    location_type=models.LocationType.NATION,
+                ),
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
+class EmptyForecastClient(StorageClient):
+    """Returns an empty list for get_predicted_generation.
+
+    Simulates no-forecast-found responses (e.g. for last-updated 404 tests).
+    """
+
+    async def get_predicted_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        return []
+
+
 def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
     app = FastAPI()
     app.include_router(router, prefix="/v1")
@@ -98,6 +179,42 @@ async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest_asyncio.fixture
+async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client that returns empty for location lookups with a UUID filter."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(NullLocationsForUUIDClient(), [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client that returns NATION-type locations for untyped UUID lookups."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(NationResponseClient(), [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client that returns no forecast data from get_predicted_generation."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(EmptyForecastClient(), [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def fixed_uuid_generation_client() -> AsyncGenerator[AsyncClient, None]:
+    """FixedUUIDStorageClient-backed client for generation period window tests."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(FixedUUIDStorageClient(), [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
 async def _set_forecast_meta() -> None:
     """Inject a minimal forecast _meta key into the current cache backend."""
     now = dt.datetime.now(tz=dt.UTC)
@@ -122,6 +239,32 @@ async def _set_fixed_region_values(values: list[dict]) -> None:
     backend = FastAPICache.get_backend()
     await backend.set(
         f"{prefix}:v1:timeseries:GB:solar:gsp:{_FIXED_GSP_UUID}",
+        json.dumps(values).encode(),
+        expire=3600,
+    )
+
+
+async def _set_generation_meta(observer: str = "pvlive_in_day") -> None:
+    """Inject a minimal generation _meta key into the current cache backend."""
+    meta = {"observer_name": observer}
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    await backend.set(
+        f"{prefix}:v1:timeseries:generation:GB:solar:gsp:{observer}:_meta",
+        json.dumps(meta).encode(),
+        expire=3600,
+    )
+
+
+async def _set_fixed_generation_values(
+    values: list[dict],
+    observer: str = "pvlive_in_day",
+) -> None:
+    """Inject per-region generation cache values for _FIXED_GSP_UUID."""
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    await backend.set(
+        f"{prefix}:v1:timeseries:generation:GB:solar:gsp:{observer}:{_FIXED_GSP_UUID}",
         json.dumps(values).encode(),
         expire=3600,
     )
@@ -485,3 +628,502 @@ async def test_refresh_generation_as_admin(admin_client: AsyncClient) -> None:
         "/v1/GB/solar/generation/refresh?region_type=gsp&observer=pvlive_in_day",
     )
     assert resp.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+# Region browsing — branch logic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_regions_no_filter_returns_all(client: AsyncClient) -> None:
+    """No filters: response includes nation plus child region types."""
+    resp = await client.get("/v1/GB/solar/regions")
+    assert resp.status_code == 200
+    regions = resp.json()
+    assert isinstance(regions, list)
+    assert len(regions) >= 1
+
+
+@pytest.mark.anyio
+async def test_get_regions_national_type_returns_nation(client: AsyncClient) -> None:
+    """region_type=national returns only the nation region."""
+    resp = await client.get("/v1/GB/solar/regions?region_type=national")
+    assert resp.status_code == 200
+    regions = resp.json()
+    assert len(regions) == 1
+    assert regions[0]["type"] == "national"
+
+
+@pytest.mark.anyio
+async def test_get_regions_parent_id_returns_children(client: AsyncClient) -> None:
+    """parent_id with any UUID returns child locations (DummyDB always responds)."""
+    parent_id = str(uuid4())
+    resp = await client.get(f"/v1/GB/solar/regions?parent_id={parent_id}")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+@pytest.mark.anyio
+async def test_get_regions_parent_id_with_region_type(client: AsyncClient) -> None:
+    """parent_id + region_type=gsp returns GSP children of that parent."""
+    parent_id = str(uuid4())
+    resp = await client.get(f"/v1/GB/solar/regions?parent_id={parent_id}&region_type=gsp")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+@pytest.mark.anyio
+async def test_get_regions_parent_not_in_country_404(null_uuid_client: AsyncClient) -> None:
+    """parent_id not found within the country boundary returns 404."""
+    parent_id = str(uuid4())
+    resp = await null_uuid_client.get(f"/v1/GB/solar/regions?parent_id={parent_id}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) -> None:
+    """Region type valid for NL (netbeheerder) is unknown for GB → 400."""
+    resp = await client.get("/v1/GB/solar/regions?region_type=netbeheerder")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Per-region forecast — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_invalid_model_for_region_type_400(
+    client: AsyncClient,
+) -> None:
+    """Model valid for national but not for GSP returns 400.
+
+    DummyDB returns a GSP location for untyped lookups; pvnet_intra_allbells0 is not
+    in the GSP model list.
+    """
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intra_allbells0",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_blend_adjust_on_national_200(
+    nation_response_client: AsyncClient,
+) -> None:
+    """blend_adjust is a valid model for national region type — returns 200."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=blend_adjust",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_creation_limit_utc(client: AsyncClient) -> None:
+    """creation_limit_utc passes through to backend — endpoint returns 200."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast",
+        params={"creation_limit_utc": dt.datetime.now(tz=dt.UTC).isoformat()},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_horizon_minutes(client: AsyncClient) -> None:
+    """forecast_horizon_minutes passes through to backend — endpoint returns 200."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?forecast_horizon_minutes=1440",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_start_and_end_utc(client: AsyncClient) -> None:
+    """Explicit start_utc + end_utc window is accepted — endpoint returns 200."""
+    region_id = str(uuid4())
+    now = dt.datetime.now(tz=dt.UTC)
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast",
+        params={
+            "start_utc": (now - dt.timedelta(days=1)).isoformat(),
+            "end_utc": now.isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    assert "values" in resp.json()
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_invalid_region_id_format_422(
+    client: AsyncClient,
+) -> None:
+    """Non-UUID, non-'national' region_id string returns 422."""
+    resp = await client.get("/v1/GB/solar/regions/NATIONAL/forecast")
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Per-region forecast — last-updated
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_last_updated_explicit_model(
+    client: AsyncClient,
+) -> None:
+    """Explicit model param is accepted; last-updated returns 200 when forecasts exist."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model=blend",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_last_updated_no_recent_forecasts_404(
+    empty_forecast_client: AsyncClient,
+) -> None:
+    """last-updated returns 404 when no forecasts exist in the ±30-min window."""
+    region_id = str(uuid4())
+    resp = await empty_forecast_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated",
+    )
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Per-region generation — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_day_after_observer(client: AsyncClient) -> None:
+    """observer=pvlive_day_after is a valid alternative observer — returns 200."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?observer=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_time_window(client: AsyncClient) -> None:
+    """Explicit start_utc + end_utc window is forwarded — endpoint returns 200."""
+    region_id = str(uuid4())
+    now = dt.datetime.now(tz=dt.UTC)
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation",
+        params={
+            "start_utc": (now - dt.timedelta(days=3)).isoformat(),
+            "end_utc": now.isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_invalid_observer_422(client: AsyncClient) -> None:
+    """observer not matching the allowed pattern returns 422."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?observer=not_a_real_observer",
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Per-region — 404 on missing region
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_region_by_id_not_found_404(null_uuid_client: AsyncClient) -> None:
+    """Region lookup returning empty list from DP yields 404."""
+    region_id = str(uuid4())
+    resp = await null_uuid_client.get(f"/v1/GB/solar/regions/{region_id}")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Forecast snapshot — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_explicit_timestamp(client: AsyncClient) -> None:
+    """Explicit timestamp is used instead of floored-now — returns 200."""
+    ts = "2026-04-17T12:00:00Z"
+    resp = await client.get(
+        f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&timestamp={ts}",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time"].startswith("2026-04-17T12:00:00")
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_invalid_model_name_400(
+    client: AsyncClient,
+) -> None:
+    """model_name not in the GSP model list returns 400."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model_name=not_a_model",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_model_version_passthrough(
+    client: AsyncClient,
+) -> None:
+    """model_version is forwarded to the backend — endpoint returns 200."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model_version=1.2.3",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_model_name_and_version(
+    client: AsyncClient,
+) -> None:
+    """model_name + model_version together are accepted — returns 200."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model_name=blend&model_version=1.0.0",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_naive_timestamp_gets_utc(
+    client: AsyncClient,
+) -> None:
+    """Naive (tz-unaware) timestamp is accepted and treated as UTC — returns 200."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&timestamp=2026-04-17T12:00:00",
+    )
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Generation snapshot — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_generation_snapshot_day_after_observer(client: AsyncClient) -> None:
+    """observer=pvlive_day_after is passed to the backend — returns 200."""
+    resp = await client.get(
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_generation_snapshot_explicit_timestamp(client: AsyncClient) -> None:
+    """Explicit timestamp is used for the generation snapshot — returns 200."""
+    ts = "2026-04-17T10:30:00Z"
+    resp = await client.get(
+        f"/v1/GB/solar/generation/snapshot?region_type=gsp&timestamp={ts}",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time"].startswith("2026-04-17T10:30:00")
+
+
+@pytest.mark.anyio
+async def test_get_generation_snapshot_invalid_observer_422(
+    client: AsyncClient,
+) -> None:
+    """observer not matching the allowed pattern returns 422."""
+    resp = await client.get(
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer=bogus",
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_get_generation_snapshot_naive_timestamp_gets_utc(
+    client: AsyncClient,
+) -> None:
+    """Naive timestamp for generation snapshot is treated as UTC — returns 200."""
+    resp = await client.get(
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&timestamp=2026-04-17T10:30:00",
+    )
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Forecast period — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_period_start_and_end_utc(client: AsyncClient) -> None:
+    """Explicit start_utc + end_utc sub-queries the in-memory cache window."""
+    await _set_forecast_meta()
+    now = dt.datetime.now(tz=dt.UTC)
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/period",
+        params={
+            "region_type": "gsp",
+            "start_utc": (now - dt.timedelta(hours=1)).isoformat(),
+            "end_utc": now.isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    assert "regions" in resp.json()
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_period_multiple_region_ids_no_match(
+    client: AsyncClient,
+) -> None:
+    """region_ids with UUIDs not present in cache yields empty regions list."""
+    await _set_forecast_meta()
+    id1, id2 = str(uuid4()), str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/forecasts/period?region_type=gsp&region_ids={id1}&region_ids={id2}",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["regions"] == []
+
+
+# ---------------------------------------------------------------------------
+# Generation period — parameter combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_generation_period_day_after_observer_503(
+    client: AsyncClient,
+) -> None:
+    """pvlive_day_after uses a separate cache key — 503 when that key is cold."""
+    FastAPICache.init(InMemoryBackend(), prefix="cold_gen")
+    resp = await client.get(
+        "/v1/GB/solar/generation/period?region_type=gsp&observer=pvlive_day_after",
+    )
+    assert resp.status_code == 503
+    assert "Retry-After" in resp.headers
+
+
+@pytest.mark.anyio
+async def test_get_generation_period_warm_day_after(client: AsyncClient) -> None:
+    """pvlive_day_after generation period endpoint returns 200 when its cache is warm."""
+    await _set_generation_meta(observer="pvlive_day_after")
+    resp = await client.get(
+        "/v1/GB/solar/generation/period?region_type=gsp&observer=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_generation_period_start_and_end_utc(
+    fixed_uuid_generation_client: AsyncClient,
+) -> None:
+    """Explicit window sub-queries the generation cache; values outside are excluded."""
+    now = dt.datetime.now(tz=dt.UTC).replace(microsecond=0)
+    t_early = now - dt.timedelta(hours=3)
+    t_late = now + dt.timedelta(hours=3)
+
+    await _set_generation_meta()
+    await _set_fixed_generation_values([
+        {"time": t_early.isoformat(), "power_kW": 111.0},
+        {"time": t_late.isoformat(), "power_kW": 222.0},
+    ])
+
+    resp = await fixed_uuid_generation_client.get(
+        "/v1/GB/solar/generation/period",
+        params={
+            "region_type": "gsp",
+            "start_utc": (t_early - dt.timedelta(minutes=1)).isoformat(),
+            "end_utc": (t_early + dt.timedelta(minutes=1)).isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    regions = resp.json()["regions"]
+    assert len(regions) == 1
+    assert len(regions[0]["values"]) == 1
+    assert regions[0]["values"][0]["power_kW"] == 111.0
+
+
+@pytest.mark.anyio
+async def test_get_generation_period_region_ids_filter(client: AsyncClient) -> None:
+    """region_ids with non-matching UUIDs returns empty regions list."""
+    await _set_generation_meta()
+    non_existent = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/generation/period?region_type=gsp&region_ids={non_existent}",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["regions"] == []
+
+
+# ---------------------------------------------------------------------------
+# Admin refresh — non-default parameters
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_refresh_forecasts_non_default_region_type(
+    admin_client: AsyncClient,
+) -> None:
+    """refresh endpoint accepts non-default region_type (dno) — returns 202."""
+    resp = await admin_client.post("/v1/GB/solar/forecasts/refresh?region_type=dno")
+    assert resp.status_code == 202
+
+
+@pytest.mark.anyio
+async def test_refresh_generation_day_after_observer(admin_client: AsyncClient) -> None:
+    """refresh endpoint with pvlive_day_after observer triggers separate warm — 202."""
+    resp = await admin_client.post(
+        "/v1/GB/solar/generation/refresh?region_type=gsp&observer=pvlive_day_after",
+    )
+    assert resp.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+# Edge values / Tier 2
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_region_id_uppercase_national_422(client: AsyncClient) -> None:
+    """'NATIONAL' (wrong case) is not a valid UUID and not the 'national' slug → 422."""
+    resp = await client.get("/v1/GB/solar/regions/NATIONAL/generation")
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_country_lowercase_422(client: AsyncClient) -> None:
+    """Country code in lowercase is not a valid CountryCode enum value → 422."""
+    resp = await client.get("/v1/gb/solar/region-types")
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_snapshot_invalid_region_type_for_country_400(
+    client: AsyncClient,
+) -> None:
+    """netbeheerder is unknown for GB → 400 (valid for NL but not GB)."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=netbeheerder",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_get_generation_snapshot_invalid_region_type_for_country_400(
+    client: AsyncClient,
+) -> None:
+    """netbeheerder is unknown for GB → 400 on generation snapshot too."""
+    resp = await client.get(
+        "/v1/GB/solar/generation/snapshot?region_type=netbeheerder",
+    )
+    assert resp.status_code == 400
