@@ -85,7 +85,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
         },
     },
 )
-@cache(key_builder=key_builder)
+@cache(key_builder=key_builder, expire=30)
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
