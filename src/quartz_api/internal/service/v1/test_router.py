@@ -734,6 +734,30 @@ async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) ->
 
 
 @pytest.mark.anyio
+async def test_get_region_forecast_beyond_one_year_400(client: AsyncClient) -> None:
+    """start_utc older than 1 rolling year returns 400 with an extended-access message."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast",
+        params={"start_utc": (dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=400)).isoformat()},
+    )
+    assert resp.status_code == 400
+    assert "1-year" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_beyond_one_year_400(client: AsyncClient) -> None:
+    """start_utc older than 1 rolling year on generation endpoint returns 400."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation",
+        params={"start_utc": (dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=400)).isoformat()},
+    )
+    assert resp.status_code == 400
+    assert "1-year" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_get_region_forecast_invalid_model_for_region_type_400(
     client: AsyncClient,
 ) -> None:

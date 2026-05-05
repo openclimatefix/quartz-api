@@ -130,6 +130,26 @@ def _check_region_type(
     return rt
 
 
+_MAX_WINDOW_DAYS = 365
+
+
+def _validate_window(start_utc: dt.datetime | None) -> None:
+    """Raise 400 if start_utc is more than one rolling year in the past."""
+    if start_utc is None:
+        return
+    earliest = dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=_MAX_WINDOW_DAYS)
+    if start_utc.tzinfo is None:
+        start_utc = start_utc.replace(tzinfo=dt.UTC)
+    if start_utc < earliest:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "start_utc exceeds the 1-year rolling data limit. "
+                "Contact us at quartz@openclimatefix.org for access to extended history."
+            ),
+        )
+
+
 def _validate_model(
     model: str | None,
     rt: RegionTypeConfig | None,
