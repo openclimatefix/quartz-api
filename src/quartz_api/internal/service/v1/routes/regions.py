@@ -37,12 +37,17 @@ async def get_country_regions(
         None,
         description="List children of a specific region.",
     ),
+    name: str | None = Query(
+        None,
+        description="Filter by name (case-insensitive substring match).",
+    ),
 ) -> list[RegionDetail]:
-    """List regions for a country, optionally filtered by type or parent.
+    """List regions for a country, optionally filtered by type, parent, or name.
 
     - No filters: returns all regions of all configured types.
     - ``?region_type=gsp``: only GSP regions.
     - ``?parent_id={uuid}``: children of a specific region.
+    - ``?name=london``: regions whose name contains the given string.
     """
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
@@ -70,12 +75,12 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=parent_id,
         )
-        return [_location_to_detail(loc, cfg) for loc in locs]
+        return _apply_name_filter([_location_to_detail(loc, cfg) for loc in locs], name)
 
     if region_type is not None:
         rt = _check_region_type(cfg, region_type, country)
         if rt.location_type == models.LocationType.NATION:
-            return [_location_to_detail(nation, cfg)]
+            return _apply_name_filter([_location_to_detail(nation, cfg)], name)
 
         locs = await db.get_locations(
             energy_type=energy_type,
@@ -83,7 +88,7 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
-        return [_location_to_detail(loc, cfg) for loc in locs]
+        return _apply_name_filter([_location_to_detail(loc, cfg) for loc in locs], name)
 
     # No filters — combine all region types
     tasks = []
@@ -105,7 +110,14 @@ async def get_country_regions(
             raise result
         for loc in result:
             out.append(_location_to_detail(loc, cfg))
-    return out
+    return _apply_name_filter(out, name)
+
+
+def _apply_name_filter(regions: list[RegionDetail], name: str | None) -> list[RegionDetail]:
+    if name is None:
+        return regions
+    needle = name.lower()
+    return [r for r in regions if needle in r.name.lower()]
 
 
 @router.get("/{country}/{source}/regions/{region_id}", status_code=status.HTTP_200_OK)
