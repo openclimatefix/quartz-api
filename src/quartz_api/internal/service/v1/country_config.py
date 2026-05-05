@@ -28,6 +28,7 @@ class RegionTypeConfig:
     source_types: tuple[str, ...] = ()
     forecast_models: tuple[ForecastModel, ...] = ()
     default_model: str | None = None
+    metadata_fields: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 source_types=("solar",),
                 forecast_models=_BLEND_ONLY,
                 default_model="blend",
+                metadata_fields=("gsp_id",),
             ),
             RegionTypeConfig(
                 type="dno",
