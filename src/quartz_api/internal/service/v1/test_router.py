@@ -683,8 +683,8 @@ async def test_get_regions_parent_not_in_country_404(null_uuid_client: AsyncClie
 
 @pytest.mark.anyio
 async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) -> None:
-    """Region type valid for NL (netbeheerder) is unknown for GB → 400."""
-    resp = await client.get("/v1/GB/solar/regions?region_type=netbeheerder")
+    """Region type valid for NL (provinces) is unknown for GB → 400."""
+    resp = await client.get("/v1/GB/solar/regions?region_type=provinces")
     assert resp.status_code == 400
 
 
@@ -1111,9 +1111,9 @@ async def test_country_lowercase_422(client: AsyncClient) -> None:
 async def test_get_forecasts_snapshot_invalid_region_type_for_country_400(
     client: AsyncClient,
 ) -> None:
-    """netbeheerder is unknown for GB → 400 (valid for NL but not GB)."""
+    """provinces is unknown for GB → 400 (valid for NL but not GB)."""
     resp = await client.get(
-        "/v1/GB/solar/forecasts/snapshot?region_type=netbeheerder",
+        "/v1/GB/solar/forecasts/snapshot?region_type=provinces",
     )
     assert resp.status_code == 400
 
@@ -1122,8 +1122,8 @@ async def test_get_forecasts_snapshot_invalid_region_type_for_country_400(
 async def test_get_generation_snapshot_invalid_region_type_for_country_400(
     client: AsyncClient,
 ) -> None:
-    """netbeheerder is unknown for GB → 400 on generation snapshot too."""
+    """provinces is unknown for GB → 400 on generation snapshot too."""
     resp = await client.get(
-        "/v1/GB/solar/generation/snapshot?region_type=netbeheerder",
+        "/v1/GB/solar/generation/snapshot?region_type=provinces",
     )
     assert resp.status_code == 400
