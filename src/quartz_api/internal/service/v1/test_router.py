@@ -1,5 +1,6 @@
 """Unit tests for the v1 API router."""
 
+# ruff: noqa: ARG002
 
 import datetime as dt
 import json
@@ -302,6 +303,16 @@ async def test_get_region_types_has_forecast_models(client: AsyncClient) -> None
 
 
 @pytest.mark.anyio
+async def test_get_region_types_has_default_model(client: AsyncClient) -> None:
+    resp = await client.get("/v1/GB/solar/region-types")
+    assert resp.status_code == 200
+    for rt in resp.json():
+        assert "default_model" in rt
+    national = next(rt for rt in resp.json() if rt["type"] == "national")
+    assert national["default_model"] == "blend_adjust"
+
+
+@pytest.mark.anyio
 async def test_get_generation_sources(client: AsyncClient) -> None:
     resp = await client.get("/v1/GB/solar/generation-sources")
     assert resp.status_code == 200
@@ -495,7 +506,7 @@ async def test_get_generation_period_cold_cache_returns_503(client: AsyncClient)
 
 @pytest.mark.anyio
 async def test_get_forecasts_period_warm_cache(client: AsyncClient) -> None:
-    """Period endpoint returns RegionForecastMatrix (may have empty regions) when _meta is cached."""
+    """Period endpoint returns RegionForecastMatrix when _meta is cached."""
     await _set_forecast_meta()
     resp = await client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 200

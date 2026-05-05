@@ -23,7 +23,10 @@ def _get_forecast_model_names() -> tuple[str, ...]:
 ValidForecastModel = Annotated[
     str,
     Query(
-        description="Forecast model name.",
+        description=(
+            "Forecast model name. If omitted, the default model for the region type is used "
+            "(see `/{country}/{source}/region-types`)."
+        ),
         enum=list(_get_forecast_model_names()),
     ),
 ]
@@ -123,6 +126,7 @@ class RegionType(BaseModel):
     type: str
     label: str
     level: int
+    default_model: str | None = None
     forecast_models: list[ForecastModel] = []
 
 
