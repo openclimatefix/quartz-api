@@ -23,7 +23,7 @@ from ..helpers import (
     _to_uuid,
 )
 
-router = APIRouter(tags=["Regions"])
+router = APIRouter(tags=["Discovery"])
 
 
 @router.get("/{country}/{source}/regions", status_code=status.HTTP_200_OK)
