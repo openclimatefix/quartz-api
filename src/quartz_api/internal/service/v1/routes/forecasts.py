@@ -94,10 +94,10 @@ async def get_forecast(
     _validate_model(model, rt, location_type.name)
     model = model or (rt.default_model if rt else None)
 
-    now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
+    now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     pgvs = await db.get_predicted_generation(
         location_uuid=resolved_id,
-        window_start=start_utc or now - dt.timedelta(days=2),
+        window_start=start_utc or now,
         window_end=end_utc or now + dt.timedelta(days=2),
         energy_type=energy_type,
         location_type=location_type,
