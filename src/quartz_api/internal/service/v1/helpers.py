@@ -11,7 +11,12 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig, RegionTypeConfig
+from .country_config import (
+    COUNTRIES,
+    VALID_COUNTRY_CODES,
+    CountryConfig,
+    RegionTypeConfig,
+)
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
 
 # Derived at import time from country_config so Swagger renders a dropdown of valid values.
@@ -90,20 +95,22 @@ def _location_to_detail(
     country_cfg: CountryConfig,
 ) -> RegionDetail:
     """Convert an internal Location to a RegionDetail."""
-    region_type_name: str | None = None
-    if loc.location_type is not None:
-        rt = country_cfg.location_type_to_region_type(loc.location_type)
-        if rt is not None:
-            region_type_name = rt.type
+    rt = (
+        country_cfg.location_type_to_region_type(loc.location_type)
+        if loc.location_type
+        else None
+    )
+    # Filter for explicitly permitted properties
+    allowed = rt.metadata_fields if rt else ()
     return RegionDetail(
         id=loc.uuid,
         name=loc.name,
-        type=region_type_name,
+        type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         latitude=loc.latitude,
         longitude=loc.longitude,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
-        metadata=loc.metadata,
+        metadata={k: v for k, v in loc.metadata.items() if k in allowed},
     )
 
 
