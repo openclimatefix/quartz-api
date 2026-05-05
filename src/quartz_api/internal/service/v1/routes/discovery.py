@@ -10,6 +10,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..country_config import COUNTRIES
 from ..endpoint_types import (
+    Centroid,
     CountryDetail,
     ForecastModel,
     GenerationSource,
@@ -17,7 +18,6 @@ from ..endpoint_types import (
     Source,
     ValidSource,
 )
-from ..endpoint_types import Centroid
 from ..helpers import CountryCode, _country_config, _energy_type_for
 
 router = APIRouter(tags=["Discovery"])
@@ -67,6 +67,7 @@ async def get_countries(
                         type=rt.type,
                         label=rt.label,
                         level=rt.level,
+                        default_model=rt.default_model,
                         forecast_models=[
                             ForecastModel(name=f.name, label=f.label)
                             for f in rt.forecast_models
@@ -97,6 +98,7 @@ async def get_region_types(
             type=rt.type,
             label=rt.label,
             level=rt.level,
+            default_model=rt.default_model,
             forecast_models=[
                 ForecastModel(name=f.name, label=f.label) for f in rt.forecast_models
             ],
