@@ -226,8 +226,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 default_model="nl_regional_pv_ecmwf_mo_sat_adjust",
             ),
             RegionTypeConfig(
-                type="netbeheerder",
-                label="Network Operator",
+                type="provinces",
+                label="Provinces",
                 level=10,
                 location_type=LocationType.REGION,
                 source_types=("solar",),
