@@ -17,6 +17,7 @@ from ..endpoint_types import (
     Source,
     ValidSource,
 )
+from ..endpoint_types import Centroid
 from ..helpers import CountryCode, _country_config, _energy_type_for
 
 router = APIRouter(tags=["Discovery"])
@@ -60,6 +61,7 @@ async def get_countries(
                 capacity_kW=nation.capacity_kilowatts,
                 latitude=nation.latitude,
                 longitude=nation.longitude,
+                centroid=Centroid(lat=nation.latitude, lng=nation.longitude),
                 region_types=[
                     RegionType(
                         type=rt.type,

@@ -12,7 +12,7 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES, VALID_COUNTRY_CODES, CountryConfig, RegionTypeConfig
-from .endpoint_types import RegionDetail, RegionSummary
+from .endpoint_types import Centroid, RegionDetail, RegionSummary
 
 # Derived at import time from country_config so Swagger renders a dropdown of valid values.
 CountryCode = StrEnum("CountryCode", {k: k for k in COUNTRIES})
@@ -81,6 +81,7 @@ def _location_to_summary(
         capacity_kW=loc.capacity_kilowatts,
         latitude=loc.latitude,
         longitude=loc.longitude,
+        centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
     )
 
 
@@ -101,6 +102,7 @@ def _location_to_detail(
         capacity_kW=loc.capacity_kilowatts,
         latitude=loc.latitude,
         longitude=loc.longitude,
+        centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
         metadata=loc.metadata,
     )
 

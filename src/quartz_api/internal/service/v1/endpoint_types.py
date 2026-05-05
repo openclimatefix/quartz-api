@@ -88,6 +88,13 @@ ValidObserver = Annotated[
 ]
 
 
+class Centroid(BaseModel):
+    """Geographic centroid of a region."""
+
+    lat: float
+    lng: float
+
+
 class Source(BaseModel):
     """An available forecast source (energy type)."""
 
@@ -128,6 +135,7 @@ class CountryDetail(BaseModel):
     capacity_kW: float
     latitude: float
     longitude: float
+    centroid: Centroid
     region_types: list[RegionType] = []
     generation_sources: list[GenerationSource] = []
 
@@ -141,6 +149,7 @@ class RegionSummary(BaseModel):
     capacity_kW: float
     latitude: float
     longitude: float
+    centroid: Centroid
 
 
 class RegionDetail(RegionSummary):
