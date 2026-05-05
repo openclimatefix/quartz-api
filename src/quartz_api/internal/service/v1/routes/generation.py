@@ -37,6 +37,7 @@ from ..helpers import (
     _resolve_region_id,
     _timeseries_window,
     _to_uuid,
+    _validate_window,
 )
 
 router = APIRouter(tags=["Generation"])
@@ -78,6 +79,7 @@ async def get_generation(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
+    _validate_window(start_utc)
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(

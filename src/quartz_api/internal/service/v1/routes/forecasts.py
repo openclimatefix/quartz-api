@@ -38,6 +38,7 @@ from ..helpers import (
     _timeseries_window,
     _to_uuid,
     _validate_model,
+    _validate_window,
 )
 
 router = APIRouter(tags=["Forecasts"])
@@ -92,6 +93,7 @@ async def get_forecast(
     location_type = region.location_type or models.LocationType.NATION
     rt = cfg.location_type_to_region_type(location_type)
     _validate_model(model, rt, location_type.name)
+    _validate_window(start_utc)
     model = model or (rt.default_model if rt else None)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
