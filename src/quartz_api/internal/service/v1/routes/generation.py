@@ -82,7 +82,7 @@ async def get_generation(
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(
         location_uuid=resolved_id,
-        window_start=start_utc or now - dt.timedelta(days=5),
+        window_start=start_utc or now - dt.timedelta(days=1),
         window_end=end_utc or now,
         energy_type=energy_type,
         location_type=location_type,
