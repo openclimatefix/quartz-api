@@ -682,6 +682,35 @@ async def test_get_regions_parent_not_in_country_404(null_uuid_client: AsyncClie
 
 
 @pytest.mark.anyio
+async def test_get_regions_name_filter_returns_match(client: AsyncClient) -> None:
+    """?name= returns only regions whose name contains the substring (case-insensitive)."""
+    resp = await client.get("/v1/GB/solar/regions?name=dummy+gsp")
+    assert resp.status_code == 200
+    regions = resp.json()
+    assert all("dummy gsp" in r["name"].lower() for r in regions)
+
+
+@pytest.mark.anyio
+async def test_get_regions_name_filter_no_match_returns_empty(client: AsyncClient) -> None:
+    """?name= with no matching regions returns an empty list."""
+    resp = await client.get("/v1/GB/solar/regions?name=zzznomatch")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.anyio
+async def test_get_regions_name_filter_is_case_insensitive(client: AsyncClient) -> None:
+    """?name= match is case-insensitive."""
+    resp_lower = await client.get("/v1/GB/solar/regions?name=dummy+gsp")
+    resp_upper = await client.get("/v1/GB/solar/regions?name=DUMMY+GSP")
+    assert resp_lower.status_code == 200
+    assert resp_upper.status_code == 200
+    names_lower = [r["name"] for r in resp_lower.json()]
+    names_upper = [r["name"] for r in resp_upper.json()]
+    assert names_lower == names_upper
+
+
+@pytest.mark.anyio
 async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) -> None:
     """Region type valid for NL (provinces) is unknown for GB → 400."""
     resp = await client.get("/v1/GB/solar/regions?region_type=provinces")
