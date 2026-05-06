@@ -20,6 +20,9 @@ def _get_forecast_model_names() -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+# ValidForecastModel and ValidRegionType are evaluated once at import time so that
+# Swagger/Scalar renders a static dropdown of valid values.  The enum spans all
+# countries — per-country validation happens inside the route handlers.
 ValidForecastModel = Annotated[
     str,
     Query(

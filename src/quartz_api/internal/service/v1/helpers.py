@@ -240,7 +240,14 @@ def _get_permissions(auth: AuthDependency) -> frozenset[str]:
 def _check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     """Check country-level access. Returns True for full access, False for intraday-only.
 
-    Raises HTTP 403 if the user has no valid permission for this country.
+    Three-tier check (short-circuits on first match):
+      1. ALL_COUNTRY_PERMISSIONS (read:trial, read:partner) → full access to every country
+      2. cfg.permission (e.g. read:gb) → full access to this country
+      3. cfg.intraday_permission (e.g. read:uk-intraday) → intraday models only (False)
+      No match → HTTP 403
+
+    Callers store the bool as `is_intraday_only = not _check_country_access(...)` and
+    pass it to `_resolve_forecast_model` to apply model restrictions.
     """
     perms = _get_permissions(auth)
     if perms & ALL_COUNTRY_PERMISSIONS:
@@ -265,8 +272,11 @@ def _resolve_forecast_model(
 ) -> str | None:
     """Validate and resolve the forecast model, returning the internal DP name.
 
-    Accepts user-facing API names (slugs) and translates to internal names for the DP.
-    Applies intraday model restrictions for intraday-only users.
+    Some models have a user-facing slug (api_name) that differs from the internal DP
+    forecaster_name — e.g. pvnet_v2 is exposed as "pvnet_intraday".  This function:
+      1. Picks the default model if none was requested (intraday default for restricted users)
+      2. Validates intraday-only users can only request intraday models (HTTP 403 otherwise)
+      3. Translates the slug back to the raw DP forecaster_name before the backend call
     """
     if rt is None:
         return model

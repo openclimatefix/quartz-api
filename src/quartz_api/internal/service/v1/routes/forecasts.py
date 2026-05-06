@@ -325,6 +325,12 @@ async def get_forecasts_period(
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
 
+    # This endpoint is cache-only: all per-region timeseries are pre-warmed at startup
+    # (and refreshable via POST /forecasts/refresh).  No live DP calls are made per
+    # request — the cache is read and window/region filtering is applied in memory.
+    # Cache key layout:
+    #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:{uuid}  — per region values
+    #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:_meta   — shared model metadata
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
     base = f"{prefix}:v1:timeseries:{country.upper()}:{source}:{region_type}"

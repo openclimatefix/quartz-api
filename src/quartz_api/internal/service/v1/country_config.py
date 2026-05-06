@@ -38,8 +38,12 @@ class RegionTypeConfig:
     location_type: LocationType
     source_types: tuple[str, ...] = ()
     forecast_models: tuple[ForecastModel, ...] = ()
+    # default_model stores the internal DP forecaster_name, not the user-facing slug.
     default_model: str | None = None
     metadata_fields: tuple[str, ...] = ()
+    # intraday_models lists internal DP names of models accessible to intraday-only users.
+    # intraday_default_model is also an internal DP name.
+    # Both are resolved to user-facing slugs at runtime via forecast_models.
     intraday_models: tuple[str, ...] = ()
     intraday_default_model: str | None = None
 
