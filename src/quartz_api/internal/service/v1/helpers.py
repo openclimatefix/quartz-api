@@ -166,7 +166,7 @@ def _validate_model(
     """Raise 400 if model is provided but not listed for the region type."""
     if model is None or rt is None or not rt.forecast_models:
         return
-    valid = {f.name for f in rt.forecast_models}
+    valid = {f.api_name for f in rt.forecast_models}
     if model not in valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -237,11 +237,15 @@ def _resolve_forecast_model(
     rt: RegionTypeConfig | None,
     is_intraday_only: bool,
 ) -> str | None:
-    """Validate and resolve the forecast model, applying intraday restrictions where needed."""
+    """Validate and resolve the forecast model, returning the internal DP name.
+
+    Accepts user-facing API names (slugs) and translates to internal names for the DP.
+    Applies intraday model restrictions for intraday-only users.
+    """
     if rt is None:
         return model
     if is_intraday_only and rt.intraday_models:
-        allowed = frozenset(rt.intraday_models)
+        allowed = rt.intraday_api_names()
         if model is not None and model not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -250,9 +254,24 @@ def _resolve_forecast_model(
                     f"Intraday-accessible models: {sorted(allowed)}"
                 ),
             )
-        return model or rt.intraday_default_model
-    # Normal path: existing _validate_model already handles unknown model names.
-    return model or rt.default_model
+        _default_fm = (
+            rt.get_model_by_internal_name(rt.intraday_default_model)
+            if rt.intraday_default_model
+            else None
+        )
+        resolved_api = model or (
+            _default_fm.api_name if _default_fm else rt.intraday_default_model
+        )
+    else:
+        _default_fm = (
+            rt.get_model_by_internal_name(rt.default_model) if rt.default_model else None
+        )
+        resolved_api = model or (_default_fm.api_name if _default_fm else rt.default_model)
+    # Translate api_name → internal DP name before the backend call.
+    if resolved_api is not None:
+        fm = rt.get_model_by_api_name(resolved_api)
+        return fm.name if fm else resolved_api
+    return None
 
 
 def _timeseries_window(

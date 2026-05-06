@@ -11,10 +11,21 @@ from quartz_api.internal.models import LocationType
 
 @dataclass(frozen=True)
 class ForecastModel:
-    """A forecaster (model) available for a region type."""
+    """A forecaster (model) available for a region type.
+
+    `name` is the internal DP forecaster_name sent to the data platform.
+    `slug` is the user-facing API name (defaults to `name` when not set).
+    `label` is the human-readable display name.
+    """
 
     name: str
     label: str
+    slug: str | None = None
+
+    @property
+    def api_name(self) -> str:
+        """User-facing model name used in API params and enum values."""
+        return self.slug if self.slug is not None else self.name
 
 
 @dataclass(frozen=True)
@@ -31,6 +42,27 @@ class RegionTypeConfig:
     metadata_fields: tuple[str, ...] = ()
     intraday_models: tuple[str, ...] = ()
     intraday_default_model: str | None = None
+
+    def get_model_by_api_name(self, api_name: str) -> ForecastModel | None:
+        """Look up a ForecastModel by its user-facing API name (slug or internal name)."""
+        for fm in self.forecast_models:
+            if fm.api_name == api_name:
+                return fm
+        return None
+
+    def get_model_by_internal_name(self, name: str) -> ForecastModel | None:
+        """Look up a ForecastModel by its internal DP name."""
+        for fm in self.forecast_models:
+            if fm.name == name:
+                return fm
+        return None
+
+    def intraday_api_names(self) -> frozenset[str]:
+        """Return the set of user-facing names for models in intraday_models."""
+        internal = frozenset(self.intraday_models)
+        return frozenset(
+            fm.api_name for fm in self.forecast_models if fm.name in internal
+        )
 
 
 @dataclass(frozen=True)
@@ -129,17 +161,17 @@ FORECASTER_LABELS: dict[str, str] = {
 }
 
 
-def _model(name: str) -> ForecastModel:
+def _model(name: str, slug: str | None = None) -> ForecastModel:
     """Build a ForecastModel using the central label map (falls back to the raw name)."""
-    return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name))
+    return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name), slug=slug)
 
 
 # Intraday model names shared across GB region types.
 _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
-    "pvnet_intra_allbells0",
-    "pvnet_intra_allbells0_adjust",
-    "pvnet_intra_allbells30",
-    "pvnet_intra_allbells30_adjust",
+    # "pvnet_intra_allbells0",
+    # "pvnet_intra_allbells0_adjust",
+    # "pvnet_intra_allbells30",
+    # "pvnet_intra_allbells30_adjust",
     "pvnet_intra_sat30",
     "pvnet_intra_sat30_adjust",
     "pvnet_ecmwf",
@@ -150,57 +182,63 @@ _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
     "pvnet_ukv_only_adjust",
     "pvnet_v2",
     "pvnet_v2_adjust",
-    "pvnet_cloud",
-    "pvnet_cloud_adjust",
+    # "pvnet_cloud",
+    # "pvnet_cloud_adjust",
 )
 
 _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
     _model("pvnet_v2"),
-    _model("pvnet_intra_allbells0"),
+    _model("pvnet_v2_adjust"),
+    # _model("pvnet_intra_allbells0"),
     _model("pvnet_day_ahead"),
+    _model("pvnet_day_ahead_adjust"),
     _model("pvnet_ecmwf"),
+    _model("pvnet_ecmwf_adjust"),
     _model("pvnet_ukv_only"),
+    _model("pvnet_ukv_only_adjust"),
     _model("pvnet_sat_only"),
+    _model("pvnet_sat_only_adjust"),
 )
 
 _GB_GSP_FORECAST_MODELS = (
     _model("blend"),
+    _model("blend_adjust"),
     *(_model(m) for m in _GB_INTRADAY_MODEL_NAMES),
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
     _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat"),
-    _model("nl_regional_2h_pv_ecmwf_adjust"),
-    _model("nl_regional_2h_pv_ecmwf"),
-    _model("nl_regional_48h_pv_ecmwf_adjust"),
-    _model("nl_regional_48h_pv_ecmwf"),
-    _model("nl_regional_pv_ecmwf_sat_adjust"),
-    _model("nl_regional_pv_ecmwf_sat"),
-    _model("nl_national_pv_ecmwf_sat_small_adjust"),
-    _model("nl_national_pv_ecmwf_sat_small"),
-    _model("nl_36_simple_site_adjust"),
-    _model("nl_36_simple_site"),
+    # _model("nl_regional_2h_pv_ecmwf_adjust"),
+    # _model("nl_regional_2h_pv_ecmwf"),
+    # _model("nl_regional_48h_pv_ecmwf_adjust"),
+    # _model("nl_regional_48h_pv_ecmwf"),
+    # _model("nl_regional_pv_ecmwf_sat_adjust"),
+    # _model("nl_regional_pv_ecmwf_sat"),
+    # _model("nl_national_pv_ecmwf_sat_small_adjust"),
+    # _model("nl_national_pv_ecmwf_sat_small"),
+    # _model("nl_36_simple_site_adjust"),
+    # _model("nl_36_simple_site"),
     _model("ned_nl_national"),
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
     _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat"),
-    _model("nl_regional_2h_pv_ecmwf_adjust"),
-    _model("nl_regional_2h_pv_ecmwf"),
-    _model("nl_regional_48h_pv_ecmwf_adjust"),
-    _model("nl_regional_48h_pv_ecmwf"),
-    _model("nl_regional_pv_ecmwf_sat_adjust"),
-    _model("nl_regional_pv_ecmwf_sat"),
+    # _model("nl_regional_2h_pv_ecmwf_adjust"),
+    # _model("nl_regional_2h_pv_ecmwf"),
+    # _model("nl_regional_48h_pv_ecmwf_adjust"),
+    # _model("nl_regional_48h_pv_ecmwf"),
+    # _model("nl_regional_pv_ecmwf_sat_adjust"),
+    # _model("nl_regional_pv_ecmwf_sat"),
 )
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         nation_name="uk",
-        permission="read:uk",
+        permission="read:gb",
         intraday_permission="read:uk-intraday",
         region_types=(
             RegionTypeConfig(
@@ -212,7 +250,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
                 default_model="blend_adjust",
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_intra_allbells0",
+                intraday_default_model="pvnet_v2_adjust",
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -224,7 +262,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 default_model="blend",
                 metadata_fields=("gsp_id",),
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_intra_allbells0",
+                intraday_default_model="pvnet_v2_adjust",
             ),
             RegionTypeConfig(
                 type="dno",
@@ -235,7 +273,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend",
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_intra_allbells0",
+                intraday_default_model="pvnet_v2_adjust",
             ),
         ),
         generation_sources=(

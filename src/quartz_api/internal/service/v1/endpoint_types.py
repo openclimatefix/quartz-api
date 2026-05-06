@@ -11,12 +11,12 @@ from .country_config import COUNTRIES
 
 
 def _get_forecast_model_names() -> tuple[str, ...]:
-    """Extract all unique forecast model names from country configs."""
+    """Extract all unique forecast model API names (slugs) from country configs."""
     names: set[str] = set()
     for country_cfg in COUNTRIES.values():
         for rt in country_cfg.region_types:
             for m in rt.forecast_models:
-                names.add(m.name)
+                names.add(m.api_name)
     return tuple(sorted(names))
 
 
