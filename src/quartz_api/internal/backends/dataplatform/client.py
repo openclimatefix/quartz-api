@@ -26,7 +26,7 @@ location_type_map: dict[models.LocationType, common_pb2.LocationType] = {
     models.LocationType.REGION: common_pb2.LocationType.LOCATION_TYPE_STATE,
     models.LocationType.NATION: common_pb2.LocationType.LOCATION_TYPE_NATION,
     models.LocationType.SUBSTATION: common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
-    models.LocationType.DNO: common_pb2.LocationType.DNO,
+    models.LocationType.DNO: common_pb2.LocationType.LOCATION_TYPE_DNO,
 }
 
 dp_to_internal_location_type: dict[common_pb2.LocationType, models.LocationType] = {
