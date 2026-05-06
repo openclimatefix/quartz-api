@@ -91,7 +91,7 @@ class StorageClient(models.StorageInterface):
         # Limit the creation time if not set
         if created_cutoff is None:
             created_cutoff = dt.datetime.now(tz=dt.UTC) - dt.timedelta(
-                minutes=forecast_horizon_minutes
+                minutes=forecast_horizon_minutes,
             )
 
         oauth_id: str | None = (
@@ -230,7 +230,7 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
     ) -> None:
         raise NotImplementedError(
-            "Data platform backend doesn't support forecast input yet."
+            "Data platform backend doesn't support forecast input yet.",
         )
 
     @override
@@ -273,7 +273,7 @@ class StorageClient(models.StorageInterface):
                 models.ActualGenerationValue(
                     valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 power_kilowatts=int(
-                    v.effective_capacity_watts * v.value_fraction / 1000.0
+                    v.effective_capacity_watts * v.value_fraction / 1000.0,
                 ),
                 location_uuid=UUID(resp.location_uuid),
                     capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
@@ -294,7 +294,7 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
     ) -> None:
         raise NotImplementedError(
-            "Data platform backend does not yet support writing generation"
+            "Data platform backend does not yet support writing generation",
         )
 
     @override
@@ -478,7 +478,7 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
     ) -> models.Location:
         raise NotImplementedError(
-            "Data platform backend doesn't yet support location writing."
+            "Data platform backend doesn't yet support location writing.",
         )
 
     @override

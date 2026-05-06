@@ -199,7 +199,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -210,7 +210,7 @@ async def admin_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["ocf:admin", "read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -221,7 +221,7 @@ async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), [])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -232,7 +232,7 @@ async def intraday_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:uk-intraday"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -243,7 +243,7 @@ async def trial_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:trial"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -254,7 +254,7 @@ async def nl_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationNameStorageClient("nl_national"), ["read:nl"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -265,7 +265,7 @@ async def nl_trial_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationNameStorageClient("nl_national"), ["read:trial"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -276,7 +276,7 @@ async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -287,7 +287,7 @@ async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NullLocationsForUUIDClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -298,7 +298,7 @@ async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationResponseClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -309,7 +309,7 @@ async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(EmptyForecastClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -320,7 +320,7 @@ async def fixed_uuid_generation_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -676,7 +676,7 @@ async def test_get_forecasts_period_window_includes_cached_values(
         [
             {"time": t_early.isoformat(), "power_kW": 100.0, "plevels_kW": {}},
             {"time": t_late.isoformat(), "power_kW": 200.0, "plevels_kW": {}},
-        ]
+        ],
     )
 
     # Narrow window: only t_early should be included
@@ -707,7 +707,7 @@ async def test_get_forecasts_period_window_excludes_out_of_range_values(
     await _set_fixed_region_values(
         [
             {"time": t_past.isoformat(), "power_kW": 50.0, "plevels_kW": {}},
-        ]
+        ],
     )
 
     # Window starts after the cached value — should be empty
@@ -797,7 +797,7 @@ async def test_get_regions_parent_id_with_region_type(client: AsyncClient) -> No
     """parent_id + region_type=gsp returns GSP children of that parent."""
     parent_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions?parent_id={parent_id}&region_type=gsp"
+        f"/v1/GB/solar/regions?parent_id={parent_id}&region_type=gsp",
     )
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -865,7 +865,7 @@ async def test_get_region_forecast_beyond_one_year_400(client: AsyncClient) -> N
         params={
             "start_utc": (
                 dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=400)
-            ).isoformat()
+            ).isoformat(),
         },
     )
     assert resp.status_code == 400
@@ -881,7 +881,7 @@ async def test_get_region_generation_beyond_one_year_400(client: AsyncClient) ->
         params={
             "start_utc": (
                 dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=400)
-            ).isoformat()
+            ).isoformat(),
         },
     )
     assert resp.status_code == 400
@@ -1232,7 +1232,7 @@ async def test_get_generation_period_start_and_end_utc(
         [
             {"time": t_early.isoformat(), "power_kW": 111.0},
             {"time": t_late.isoformat(), "power_kW": 222.0},
-        ]
+        ],
     )
 
     resp = await fixed_uuid_generation_client.get(
@@ -1346,7 +1346,7 @@ async def test_data_route_wrong_country_returns_403() -> None:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:nl"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
     assert resp.status_code == 403
@@ -1367,7 +1367,7 @@ async def test_data_route_partner_permission_grants_access() -> None:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:partner"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
     assert resp.status_code == 200
@@ -1500,7 +1500,7 @@ async def test_nl_forecast_default_model(nl_client: AsyncClient) -> None:
 async def test_nl_forecast_invalid_model_400(nl_client: AsyncClient) -> None:
     """pvnet_day_ahead is a GB-only model, not valid for NL → 400."""
     resp = await nl_client.get(
-        "/v1/NL/solar/regions/national/forecast?model=pvnet_day_ahead"
+        "/v1/NL/solar/regions/national/forecast?model=pvnet_day_ahead",
     )
     assert resp.status_code == 400
 

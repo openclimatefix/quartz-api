@@ -57,10 +57,12 @@ async def get_forecast(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: dt.datetime | None = Query(
-        None, description="Start of forecast window (UTC).",
+        None,
+        description="Start of forecast window (UTC).",
     ),
     end_utc: dt.datetime | None = Query(
-        None, description="End of forecast window (UTC).",
+        None,
+        description="End of forecast window (UTC).",
     ),
     creation_limit_utc: dt.datetime | None = Query(
         None,
@@ -200,7 +202,8 @@ async def get_forecasts_at_time(
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
     timestamp: dt.datetime | None = Query(
-        None, description="Forecast target timestamp (UTC).",
+        None,
+        description="Forecast target timestamp (UTC).",
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp."""
@@ -300,7 +303,8 @@ async def get_forecasts_period(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs.",
+        None,
+        description="Limit to specific region UUIDs.",
     ),
 ) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
