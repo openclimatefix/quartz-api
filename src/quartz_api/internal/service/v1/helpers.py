@@ -177,26 +177,56 @@ async def _resolve_region_id(
     energy_type: models.EnergyType,
     db: models.StorageInterface,
 ) -> UUID:
-    """Resolve a region_id path param: 'national' slug → nation UUID, else parse as UUID."""
-    if region_id != "national":
-        try:
-            return UUID(region_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="region_id must be 'national' or a valid UUID.",
-            ) from None
+    """Resolve a region_id path param to a UUID.
+
+    Resolution order:
+    1. Valid UUID string → returned immediately (no DB call)
+    2. "national" slug → nation UUID
+    3. Anything else → case-insensitive name search across all region types
+    """
+    try:
+        return UUID(region_id)
+    except ValueError:
+        pass
+
+    # Need the nation for both "national" resolution and name search.
     nations = await db.get_locations(
         energy_type=energy_type,
         location_type=models.LocationType.NATION,
         authdata={},
     )
-    for n in nations:
-        if n.name.lower() == cfg.nation_name.lower():
-            return n.uuid
+    nation = next(
+        (n for n in nations if n.name.lower() == cfg.nation_name.lower()),
+        None,
+    )
+    if nation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"National region for '{cfg.nation_name}' not found.",
+        )
+
+    if region_id == "national":
+        return nation.uuid
+
+    # Name search across all region types within this country.
+    needle = region_id.lower()
+    if needle == nation.name.lower():
+        return nation.uuid
+    for rt in cfg.region_types:
+        if rt.location_type == models.LocationType.NATION:
+            continue
+        locs = await db.get_locations(
+            energy_type=energy_type,
+            location_type=rt.location_type,
+            authdata={},
+            enclosing_location_uuid=_to_uuid(nation.uuid),
+        )
+        for loc in locs:
+            if loc.name.lower() == needle:
+                return loc.uuid
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"National region for '{cfg.nation_name}' not found.",
+        detail=f"Region '{region_id}' not found.",
     )
 
 

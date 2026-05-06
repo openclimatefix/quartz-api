@@ -908,12 +908,12 @@ async def test_get_region_forecast_start_and_end_utc(client: AsyncClient) -> Non
 
 
 @pytest.mark.anyio
-async def test_get_region_forecast_invalid_region_id_format_422(
+async def test_get_region_forecast_name_not_found_404(
     client: AsyncClient,
 ) -> None:
-    """Non-UUID, non-'national' region_id string returns 422."""
+    """Non-UUID, non-'national' region_id string is treated as a name search; unmatched → 404."""
     resp = await client.get("/v1/GB/solar/regions/NATIONAL/forecast")
-    assert resp.status_code == 422
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -1243,10 +1243,10 @@ async def test_refresh_generation_day_after_observer(admin_client: AsyncClient) 
 
 
 @pytest.mark.anyio
-async def test_region_id_uppercase_national_422(client: AsyncClient) -> None:
-    """'NATIONAL' (wrong case) is not a valid UUID and not the 'national' slug → 422."""
+async def test_region_id_name_not_found_404(client: AsyncClient) -> None:
+    """Non-UUID, non-matching name in region_id → 404."""
     resp = await client.get("/v1/GB/solar/regions/NATIONAL/generation")
-    assert resp.status_code == 422
+    assert resp.status_code == 404
 
 
 @pytest.mark.anyio
