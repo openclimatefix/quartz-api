@@ -116,10 +116,6 @@ FORECASTER_LABELS: dict[str, str] = {
     "blend": "Blend",
     "blend_adjust": "Blend (Trend Adjusted)",
     # GB — PVNet intraday
-    "pvnet_intra_allbells0": "PVNet Intraday",
-    "pvnet_intra_allbells0_adjust": "PVNet Intraday (Trend Adjusted)",
-    "pvnet_intra_allbells30": "PVNet Intraday 30min",
-    "pvnet_intra_allbells30_adjust": "PVNet Intraday 30min (Trend Adjusted)",
     "pvnet_intra_sat30": "PVNet Intraday Satellite 30min",
     "pvnet_intra_sat30_adjust": "PVNet Intraday Satellite 30min (Trend Adjusted)",
     # GB — PVNet day-ahead
@@ -168,12 +164,6 @@ def _model(name: str, slug: str | None = None) -> ForecastModel:
 
 # Internal DP names for intraday models — used by intraday_models field on RegionTypeConfig.
 _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
-    # "pvnet_intra_allbells0",
-    # "pvnet_intra_allbells0_adjust",
-    # "pvnet_intra_allbells30",
-    # "pvnet_intra_allbells30_adjust",
-    "pvnet_intra_sat30",
-    "pvnet_intra_sat30_adjust",
     "pvnet_ecmwf",
     "pvnet_ecmwf_adjust",
     "pvnet_sat_only",
@@ -182,16 +172,10 @@ _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
     "pvnet_ukv_only_adjust",
     "pvnet_v2",
     "pvnet_v2_adjust",
-    # "pvnet_cloud",
-    # "pvnet_cloud_adjust",
 )
 
 # Intraday ForecastModel entries shared across GB national, GSP, and DNO.
 _GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
-    # _model("pvnet_intra_allbells0"),
-    # _model("pvnet_intra_allbells0_adjust"),
-    # _model("pvnet_intra_allbells30"),
-    # _model("pvnet_intra_allbells30_adjust"),
     _model("pvnet_intra_sat30"),
     _model("pvnet_intra_sat30_adjust"),
     _model("pvnet_ecmwf"),
@@ -202,15 +186,12 @@ _GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
     _model("pvnet_ukv_only_adjust"),
     _model("pvnet_v2", slug="pvnet_intraday"),
     _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
-    # _model("pvnet_cloud"),
-    # _model("pvnet_cloud_adjust"),
 )
 
 _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
     *_GB_INTRADAY_FORECAST_MODELS,
-    # _model("pvnet_intra_allbells0"),
     _model("pvnet_day_ahead"),
     _model("pvnet_day_ahead_adjust"),
 )
@@ -222,34 +203,14 @@ _GB_GSP_FORECAST_MODELS = (
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
-    _model("blend"),
-    _model("blend_adjust"),
-    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
-    _model("nl_regional_pv_ecmwf_mo_sat"),
-    # _model("nl_regional_2h_pv_ecmwf_adjust"),
-    # _model("nl_regional_2h_pv_ecmwf"),
-    # _model("nl_regional_48h_pv_ecmwf_adjust"),
-    # _model("nl_regional_48h_pv_ecmwf"),
-    # _model("nl_regional_pv_ecmwf_sat_adjust"),
-    # _model("nl_regional_pv_ecmwf_sat"),
-    # _model("nl_national_pv_ecmwf_sat_small_adjust"),
-    # _model("nl_national_pv_ecmwf_sat_small"),
-    # _model("nl_36_simple_site_adjust"),
-    # _model("nl_36_simple_site"),
+    _model("nl_blend"),
+    _model("nl_blend_adjust"),
     _model("ned_nl_national"),
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
-    _model("blend"),
-    _model("blend_adjust"),
-    _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
-    _model("nl_regional_pv_ecmwf_mo_sat"),
-    # _model("nl_regional_2h_pv_ecmwf_adjust"),
-    # _model("nl_regional_2h_pv_ecmwf"),
-    # _model("nl_regional_48h_pv_ecmwf_adjust"),
-    # _model("nl_regional_48h_pv_ecmwf"),
-    # _model("nl_regional_pv_ecmwf_sat_adjust"),
-    # _model("nl_regional_pv_ecmwf_sat"),
+    _model("nl_blend"),
+    _model("nl_blend_adjust"),
 )
 
 COUNTRIES: dict[str, CountryConfig] = {
