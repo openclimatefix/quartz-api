@@ -232,14 +232,14 @@ async def get_generation_period(
     regions = await db.get_locations(
         energy_type=energy_type,
         location_type=rt.location_type,
-        authdata=auth,
+        authdata={},  # TODO: add auth when loosed on DP side
         enclosing_location_uuid=_to_uuid(nation.uuid),
     )
 
     if len(regions) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No regions found for type '{rt.location_type}' in {country.upper()}.",
+            detail=f"No regions found for type '{rt.type}' in {country.upper()}.",
         )
 
     if region_ids is not None:
