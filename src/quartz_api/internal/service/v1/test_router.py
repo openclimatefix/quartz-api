@@ -1434,16 +1434,16 @@ async def test_nl_regions_invalid_type_gsp_400(nl_client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_nl_forecast_default_model(nl_client: AsyncClient) -> None:
-    """NL national forecast returns the NL default model."""
+    """NL national forecast returns blend_adjust as the default model."""
     resp = await nl_client.get("/v1/NL/solar/regions/national/forecast")
     assert resp.status_code == 200
-    assert resp.json()["model_name"] == "nl_regional_pv_ecmwf_mo_sat_adjust"
+    assert resp.json()["model_name"] == "blend_adjust"
 
 
 @pytest.mark.anyio
 async def test_nl_forecast_invalid_model_400(nl_client: AsyncClient) -> None:
-    """blend is not a valid NL model → 400."""
-    resp = await nl_client.get("/v1/NL/solar/regions/national/forecast?model=blend")
+    """pvnet_day_ahead is a GB-only model, not valid for NL → 400."""
+    resp = await nl_client.get("/v1/NL/solar/regions/national/forecast?model=pvnet_day_ahead")
     assert resp.status_code == 400
 
 

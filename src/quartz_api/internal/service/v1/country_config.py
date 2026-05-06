@@ -222,6 +222,8 @@ _GB_GSP_FORECAST_MODELS = (
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
+    _model("blend"),
+    _model("blend_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat"),
     # _model("nl_regional_2h_pv_ecmwf_adjust"),
@@ -238,6 +240,8 @@ _NL_NATIONAL_FORECAST_MODELS = (
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
+    _model("blend"),
+    _model("blend_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat_adjust"),
     _model("nl_regional_pv_ecmwf_mo_sat"),
     # _model("nl_regional_2h_pv_ecmwf_adjust"),
@@ -309,7 +313,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_NL_NATIONAL_FORECAST_MODELS,
-                default_model="nl_regional_pv_ecmwf_mo_sat_adjust",
+                default_model="blend_adjust",
             ),
             RegionTypeConfig(
                 type="provinces",
@@ -318,7 +322,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.REGION,
                 source_types=("solar",),
                 forecast_models=_NL_REGIONAL_FORECAST_MODELS,
-                default_model="nl_regional_pv_ecmwf_mo_sat_adjust",
+                default_model="blend_adjust",
             ),
         ),
         generation_sources=(
