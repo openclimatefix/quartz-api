@@ -31,8 +31,10 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     CountryCode,
+    _check_country_access,
     _country_config,
     _energy_type_for,
+    _resolve_forecast_model,
     _resolve_nation,
     _resolve_region_id,
     _timeseries_window,
@@ -55,10 +57,10 @@ async def get_forecast(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: dt.datetime | None = Query(
-        None, description="Start of forecast window (UTC)."
+        None, description="Start of forecast window (UTC).",
     ),
     end_utc: dt.datetime | None = Query(
-        None, description="End of forecast window (UTC)."
+        None, description="End of forecast window (UTC).",
     ),
     creation_limit_utc: dt.datetime | None = Query(
         None,
@@ -76,6 +78,7 @@ async def get_forecast(
     """Get the forecast for a specific region."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    is_intraday_only = not _check_country_access(auth, cfg)
     resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
@@ -94,7 +97,7 @@ async def get_forecast(
     rt = cfg.location_type_to_region_type(location_type)
     _validate_model(model, rt, location_type.name)
     _validate_window(start_utc)
-    model = model or (rt.default_model if rt else None)
+    model = _resolve_forecast_model(model, rt, is_intraday_only)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     pgvs = await db.get_predicted_generation(
@@ -145,6 +148,7 @@ async def get_forecast_last_updated_timestamp(
     """Return the creation time of the most recent forecast for a region."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    is_intraday_only = not _check_country_access(auth, cfg)
     resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
@@ -160,7 +164,7 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = cfg.location_type_to_region_type(location_type)
-    model = model or (rt.default_model if rt else None)
+    model = _resolve_forecast_model(model, rt, is_intraday_only)
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
@@ -196,12 +200,13 @@ async def get_forecasts_at_time(
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
     timestamp: dt.datetime | None = Query(
-        None, description="Forecast target timestamp (UTC)."
+        None, description="Forecast target timestamp (UTC).",
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    is_intraday_only = not _check_country_access(auth, cfg)
     nation = await _resolve_nation(db, energy_type, cfg, auth)
 
     rt = cfg.get_region_type(region_type)
@@ -211,7 +216,7 @@ async def get_forecasts_at_time(
             detail=f"Unknown region type '{region_type}' for {country.upper()}.",
         )
     _validate_model(model_name, rt, rt.type)
-    model_name = model_name or rt.default_model
+    model_name = _resolve_forecast_model(model_name, rt, is_intraday_only)
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
@@ -295,7 +300,7 @@ async def get_forecasts_period(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs."
+        None, description="Limit to specific region UUIDs.",
     ),
 ) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
@@ -305,6 +310,7 @@ async def get_forecasts_period(
     """
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
 
     rt = cfg.get_region_type(region_type)
     if rt is None:

@@ -29,6 +29,8 @@ class RegionTypeConfig:
     forecast_models: tuple[ForecastModel, ...] = ()
     default_model: str | None = None
     metadata_fields: tuple[str, ...] = ()
+    intraday_models: tuple[str, ...] = ()
+    intraday_default_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,8 @@ class CountryConfig:
     nation_name: str
     region_types: tuple[RegionTypeConfig, ...]
     generation_sources: tuple[GenerationSource, ...] = ()
+    permission: str = ""
+    intraday_permission: str | None = None
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -95,7 +99,7 @@ FORECASTER_LABELS: dict[str, str] = {
     "pvnet_da_ecmwf_adjust": "PVNet Day Ahead (ECMWF, Adjusted)",
     "pvnet_da_ukv": "PVNet Day Ahead (UKV)",
     "pvnet_da_ukv_adjust": "PVNet Day Ahead (UKV, Adjusted)",
-    # GB — PVNet single-input
+    # GB — PVNet single-input intraday
     "pvnet_ecmwf": "PVNet Intraday (ECMWF only)",
     "pvnet_ecmwf_adjust": "PVNet Intraday (ECMWF only, Adjusted)",
     "pvnet_sat_only": "PVNet Intraday (Satellite only)",
@@ -130,16 +134,40 @@ def _model(name: str) -> ForecastModel:
     return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name))
 
 
-_BLEND_ONLY = (_model("blend"),)
+# Intraday model names shared across GB region types.
+_GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
+    "pvnet_intra_allbells0",
+    "pvnet_intra_allbells0_adjust",
+    "pvnet_intra_allbells30",
+    "pvnet_intra_allbells30_adjust",
+    "pvnet_intra_sat30",
+    "pvnet_intra_sat30_adjust",
+    "pvnet_ecmwf",
+    "pvnet_ecmwf_adjust",
+    "pvnet_sat_only",
+    "pvnet_sat_only_adjust",
+    "pvnet_ukv_only",
+    "pvnet_ukv_only_adjust",
+    "pvnet_v2",
+    "pvnet_v2_adjust",
+    "pvnet_cloud",
+    "pvnet_cloud_adjust",
+)
 
 _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
+    _model("pvnet_v2"),
     _model("pvnet_intra_allbells0"),
     _model("pvnet_day_ahead"),
     _model("pvnet_ecmwf"),
     _model("pvnet_ukv_only"),
     _model("pvnet_sat_only"),
+)
+
+_GB_GSP_FORECAST_MODELS = (
+    _model("blend"),
+    *(_model(m) for m in _GB_INTRADAY_MODEL_NAMES),
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
@@ -172,6 +200,8 @@ _NL_REGIONAL_FORECAST_MODELS = (
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         nation_name="uk",
+        permission="read:uk",
+        intraday_permission="read:uk-intraday",
         region_types=(
             RegionTypeConfig(
                 type="national",
@@ -181,6 +211,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 source_types=("solar",),
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
                 default_model="blend_adjust",
+                intraday_models=_GB_INTRADAY_MODEL_NAMES,
+                intraday_default_model="pvnet_intra_allbells0",
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -188,9 +220,11 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=10,
                 location_type=LocationType.GSP,
                 source_types=("solar",),
-                forecast_models=_BLEND_ONLY,
+                forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend",
                 metadata_fields=("gsp_id",),
+                intraday_models=_GB_INTRADAY_MODEL_NAMES,
+                intraday_default_model="pvnet_intra_allbells0",
             ),
             RegionTypeConfig(
                 type="dno",
@@ -198,8 +232,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=20,
                 location_type=LocationType.DNO,
                 source_types=("solar",),
-                forecast_models=_BLEND_ONLY,
+                forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend",
+                intraday_models=_GB_INTRADAY_MODEL_NAMES,
+                intraday_default_model="pvnet_intra_allbells0",
             ),
         ),
         generation_sources=(
@@ -217,6 +253,7 @@ COUNTRIES: dict[str, CountryConfig] = {
     ),
     "NL": CountryConfig(
         nation_name="nl_national",
+        permission="read:nl",
         region_types=(
             RegionTypeConfig(
                 type="national",

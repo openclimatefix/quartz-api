@@ -31,6 +31,7 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     CountryCode,
+    _check_country_access,
     _country_config,
     _energy_type_for,
     _resolve_nation,
@@ -55,15 +56,16 @@ async def get_generation(
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
     start_utc: dt.datetime | None = Query(
-        None, description="Start of generation window (UTC)."
+        None, description="Start of generation window (UTC).",
     ),
     end_utc: dt.datetime | None = Query(
-        None, description="End of generation window (UTC)."
+        None, description="End of generation window (UTC).",
     ),
 ) -> GenerationResponse:
     """Get observed generation data for a specific region."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
     resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
@@ -125,6 +127,7 @@ async def get_generation_at_timestamp(
     """Get observed generation for all regions of a given type at a specific timestamp."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
     nation = await _resolve_nation(db, energy_type, cfg, auth)
 
     rt = cfg.get_region_type(region_type)
@@ -192,7 +195,7 @@ async def get_generation_period(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs."
+        None, description="Limit to specific region UUIDs.",
     ),
 ) -> RegionGenerationMatrix:
     """Get observed generation for all (or selected) regions across a time window.
@@ -202,6 +205,7 @@ async def get_generation_period(
     """
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
 
     rt = cfg.get_region_type(region_type)
     if rt is None:

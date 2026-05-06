@@ -1,6 +1,6 @@
 """Region browsing routes — list and detail views for regions within a country."""
 
-# ruff: noqa: ARG001, B008
+# ruff: noqa: B008
 
 import asyncio
 from uuid import UUID
@@ -14,6 +14,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from ..endpoint_types import RegionDetail, ValidRegionType, ValidSource
 from ..helpers import (
     CountryCode,
+    _check_country_access,
     _check_region_type,
     _country_config,
     _energy_type_for,
@@ -51,6 +52,7 @@ async def get_country_regions(
     """
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
     nation = await _resolve_nation(db, energy_type, cfg, auth)
 
     if parent_id is not None:
@@ -131,6 +133,7 @@ async def get_region(
     """Get details for a specific region."""
     energy_type = _energy_type_for(source)
     cfg = _country_config(country)
+    _check_country_access(auth, cfg)
     resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
 
     locs = await db.get_locations(
