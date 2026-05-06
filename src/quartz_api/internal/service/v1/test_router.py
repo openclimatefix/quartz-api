@@ -1354,7 +1354,7 @@ async def test_intraday_user_requesting_intraday_model_200(
     """Intraday-only user can explicitly request an intraday model → 200."""
     region_id = str(uuid4())
     resp = await intraday_client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intra_allbells0",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intra_sat30",
     )
     assert resp.status_code == 200
 
