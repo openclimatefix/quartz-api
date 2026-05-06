@@ -144,7 +144,7 @@ FORECASTER_LABELS: dict[str, str] = {
     "pvnet_cloud": "PVNet Cloud",
     "pvnet_cloud_adjust": "PVNet Cloud (Trend Adjusted)",
     # NL — regional
-    "nl_regional_pv_ecmwf_mo_sat_adjust": "Regional PV (ECMWF + Met Office + Satellite, Trend Adjusted)",
+    "nl_regional_pv_ecmwf_mo_sat_adjust": "Regional PV (ECMWF + Met Office + Satellite, Trend Adjusted)",  # noqa: E501
     "nl_regional_pv_ecmwf_mo_sat": "Regional PV (ECMWF + Met Office + Satellite)",
     "nl_regional_2h_pv_ecmwf_adjust": "Regional PV 2h (ECMWF, Trend Adjusted)",
     "nl_regional_2h_pv_ecmwf": "Regional PV 2h (ECMWF)",
