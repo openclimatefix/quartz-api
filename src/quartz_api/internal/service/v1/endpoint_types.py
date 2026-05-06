@@ -154,14 +154,7 @@ class RegionSummary(BaseModel):
     name: str
     type: str | None = None
     capacity_kW: float
-    latitude: float
-    longitude: float
     centroid: Centroid
-
-    @field_validator("latitude", "longitude")
-    @classmethod
-    def _round_3dp(cls, v: float) -> float:
-        return round(v, 3)
 
 
 class RegionDetail(RegionSummary):

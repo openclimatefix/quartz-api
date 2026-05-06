@@ -85,8 +85,6 @@ def _location_to_summary(
         name=loc.name,
         type=region_type_name,
         capacity_kW=loc.capacity_kilowatts,
-        latitude=loc.latitude,
-        longitude=loc.longitude,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
     )
 
@@ -108,8 +106,6 @@ def _location_to_detail(
         name=loc.name,
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
-        latitude=loc.latitude,
-        longitude=loc.longitude,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
         metadata={k: v for k, v in loc.metadata.items() if k in allowed},
     )
