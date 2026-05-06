@@ -197,7 +197,7 @@ def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with DummyDB backend and GB read access."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(StorageClient(), ["read:uk"])
+    app = _make_app(StorageClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -206,7 +206,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 async def admin_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with ocf:admin + GB read permissions."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(StorageClient(), ["ocf:admin", "read:uk"])
+    app = _make_app(StorageClient(), ["ocf:admin", "read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -260,7 +260,7 @@ async def nl_trial_client() -> AsyncGenerator[AsyncClient, None]:
 async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client backed by FixedUUIDStorageClient for cache key tests."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(FixedUUIDStorageClient(), ["read:uk"])
+    app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -269,7 +269,7 @@ async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
 async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns empty for location lookups with a UUID filter."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(NullLocationsForUUIDClient(), ["read:uk"])
+    app = _make_app(NullLocationsForUUIDClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -278,7 +278,7 @@ async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
 async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns NATION-type locations for untyped UUID lookups."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(NationResponseClient(), ["read:uk"])
+    app = _make_app(NationResponseClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -287,7 +287,7 @@ async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
 async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns no forecast data from get_predicted_generation."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(EmptyForecastClient(), ["read:uk"])
+    app = _make_app(EmptyForecastClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -296,7 +296,7 @@ async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
 async def fixed_uuid_generation_client() -> AsyncGenerator[AsyncClient, None]:
     """FixedUUIDStorageClient-backed client for generation period window tests."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(FixedUUIDStorageClient(), ["read:uk"])
+    app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -1406,7 +1406,7 @@ async def test_nl_region_types_public_no_auth(no_perm_client: AsyncClient) -> No
 
 @pytest.mark.anyio
 async def test_nl_regions_requires_nl_permission(client: AsyncClient) -> None:
-    """read:uk only → 403 on NL data routes."""
+    """read:gb only (no read:nl) → 403 on NL data routes."""
     resp = await client.get("/v1/NL/solar/regions?region_type=national")
     assert resp.status_code == 403
 
