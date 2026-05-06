@@ -120,6 +120,46 @@ class NationResponseClient(StorageClient):
         )
 
 
+class NationNameStorageClient(StorageClient):
+    """DummyDB variant that returns a configurable nation name for NATION-type lookups.
+
+    Needed for non-GB countries whose nation_name differs from DummyDB's hardcoded "uk".
+    """
+
+    def __init__(self, nation_name: str) -> None:
+        super().__init__()
+        self._nation_name = nation_name
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        nation = models.Location(
+            uuid=location_uuid or uuid4(),
+            name=self._nation_name,
+            latitude=52.0,
+            longitude=5.0,
+            capacity_kilowatts=10_000_000,
+            location_type=models.LocationType.NATION,
+        )
+        if location_type == models.LocationType.NATION:
+            return [nation]
+        # Untyped UUID lookup — return nation so routes see the correct LocationType.
+        if location_type is None and location_uuid is not None:
+            return [nation]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
 class EmptyForecastClient(StorageClient):
     """Returns an empty list for get_predicted_generation.
 
@@ -155,7 +195,25 @@ def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
 
 @pytest_asyncio.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Test client with DummyDB backend and no auth permissions."""
+    """Test client with DummyDB backend and GB read access."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:uk"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def admin_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with ocf:admin + GB read permissions."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["ocf:admin", "read:uk"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with no permissions — used to assert 403 on data routes."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), [])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -163,10 +221,37 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
-async def admin_client() -> AsyncGenerator[AsyncClient, None]:
-    """Test client with ocf:admin permissions."""
+async def intraday_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with GB intraday-only permission."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(StorageClient(), ["ocf:admin"])
+    app = _make_app(StorageClient(), ["read:uk-intraday"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def trial_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with trial permission (all countries)."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:trial"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def nl_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with NL read permission backed by NationNameStorageClient."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(NationNameStorageClient("nl_national"), ["read:nl"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def nl_trial_client() -> AsyncGenerator[AsyncClient, None]:
+    """Trial client backed by NationNameStorageClient for NL cross-permission tests."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(NationNameStorageClient("nl_national"), ["read:trial"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -175,7 +260,7 @@ async def admin_client() -> AsyncGenerator[AsyncClient, None]:
 async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client backed by FixedUUIDStorageClient for cache key tests."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(FixedUUIDStorageClient(), [])
+    app = _make_app(FixedUUIDStorageClient(), ["read:uk"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -184,7 +269,7 @@ async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
 async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns empty for location lookups with a UUID filter."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(NullLocationsForUUIDClient(), [])
+    app = _make_app(NullLocationsForUUIDClient(), ["read:uk"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -193,7 +278,7 @@ async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
 async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns NATION-type locations for untyped UUID lookups."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(NationResponseClient(), [])
+    app = _make_app(NationResponseClient(), ["read:uk"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -202,7 +287,7 @@ async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
 async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client that returns no forecast data from get_predicted_generation."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(EmptyForecastClient(), [])
+    app = _make_app(EmptyForecastClient(), ["read:uk"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -211,7 +296,7 @@ async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
 async def fixed_uuid_generation_client() -> AsyncGenerator[AsyncClient, None]:
     """FixedUUIDStorageClient-backed client for generation period window tests."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(FixedUUIDStorageClient(), [])
+    app = _make_app(FixedUUIDStorageClient(), ["read:uk"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -761,14 +846,14 @@ async def test_get_region_generation_beyond_one_year_400(client: AsyncClient) ->
 async def test_get_region_forecast_invalid_model_for_region_type_400(
     client: AsyncClient,
 ) -> None:
-    """Model valid for national but not for GSP returns 400.
+    """Day-ahead model not available for GSP returns 400.
 
-    DummyDB returns a GSP location for untyped lookups; pvnet_intra_allbells0 is not
-    in the GSP model list.
+    DummyDB returns a GSP location for untyped lookups; pvnet_day_ahead is not
+    in the GSP model list (only blend + intraday models are valid for GSP).
     """
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intra_allbells0",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_day_ahead",
     )
     assert resp.status_code == 400
 
@@ -1191,3 +1276,197 @@ async def test_get_generation_snapshot_invalid_region_type_for_country_400(
         "/v1/GB/solar/generation/snapshot?region_type=provinces",
     )
     assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Auth — country-level access control
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_data_route_no_permissions_returns_403(no_perm_client: AsyncClient) -> None:
+    """No permissions → 403 on any country-scoped data route."""
+    resp = await no_perm_client.get("/v1/GB/solar/regions?region_type=gsp")
+    assert resp.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_data_route_wrong_country_returns_403() -> None:
+    """NL permission only → 403 on GB data route."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:nl"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
+    assert resp.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_data_route_trial_permission_grants_access(trial_client: AsyncClient) -> None:
+    """read:trial bypasses country check → 200 on GB data route."""
+    resp = await trial_client.get("/v1/GB/solar/regions?region_type=gsp")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_data_route_partner_permission_grants_access() -> None:
+    """read:partner bypasses country check → 200 on GB data route."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:partner"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_discovery_routes_are_public(no_perm_client: AsyncClient) -> None:
+    """Discovery endpoints (sources, region-types, countries) require no auth."""
+    for url in [
+        "/v1/sources",
+        "/v1/countries",
+        "/v1/GB/solar/region-types",
+        "/v1/GB/solar/generation-sources",
+    ]:
+        resp = await no_perm_client.get(url)
+        assert resp.status_code == 200, f"Expected 200 on {url}, got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Auth — intraday model restriction
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_intraday_user_forecast_defaults_to_intraday_model(
+    intraday_client: AsyncClient,
+) -> None:
+    """Intraday-only user gets pvnet_intra_allbells0 as the default model."""
+    region_id = str(uuid4())
+    resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
+    assert resp.status_code == 200
+    # DummyDB echoes back the forecaster_name; intraday default should be used.
+    assert resp.json()["model_name"] == "pvnet_intra_allbells0"
+
+
+@pytest.mark.anyio
+async def test_intraday_user_requesting_intraday_model_200(
+    intraday_client: AsyncClient,
+) -> None:
+    """Intraday-only user can explicitly request an intraday model → 200."""
+    region_id = str(uuid4())
+    resp = await intraday_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intra_allbells0",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_intraday_user_requesting_non_intraday_model_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """Intraday-only user requesting blend (a day-ahead model) → 403."""
+    region_id = str(uuid4())
+    resp = await intraday_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=blend",
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_intraday_user_can_access_generation_data(
+    intraday_client: AsyncClient,
+) -> None:
+    """Intraday users have country access and can read observed generation data."""
+    region_id = str(uuid4())
+    resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/generation")
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# NL country — discovery, access control, and data routes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_nl_region_types_are_accessible(nl_client: AsyncClient) -> None:
+    """NL region-types discovery is public and returns national + provinces."""
+    resp = await nl_client.get("/v1/NL/solar/region-types")
+    assert resp.status_code == 200
+    types = {rt["type"] for rt in resp.json()}
+    assert "national" in types
+    assert "provinces" in types
+    assert "gsp" not in types
+
+
+@pytest.mark.anyio
+async def test_nl_region_types_public_no_auth(no_perm_client: AsyncClient) -> None:
+    """NL region-types is public — no permission required."""
+    resp = await no_perm_client.get("/v1/NL/solar/region-types")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_nl_regions_requires_nl_permission(client: AsyncClient) -> None:
+    """read:uk only → 403 on NL data routes."""
+    resp = await client.get("/v1/NL/solar/regions?region_type=national")
+    assert resp.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_nl_regions_accessible_with_read_nl(nl_client: AsyncClient) -> None:
+    """read:nl grants access to NL region listing."""
+    resp = await nl_client.get("/v1/NL/solar/regions?region_type=national")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_nl_regions_provinces_type(nl_client: AsyncClient) -> None:
+    """provinces is a valid region type for NL → 200."""
+    resp = await nl_client.get("/v1/NL/solar/regions?region_type=provinces")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_nl_regions_invalid_type_gsp_400(nl_client: AsyncClient) -> None:
+    """gsp is not a valid region type for NL → 400."""
+    resp = await nl_client.get("/v1/NL/solar/regions?region_type=gsp")
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_nl_forecast_default_model(nl_client: AsyncClient) -> None:
+    """NL national forecast returns the NL default model."""
+    resp = await nl_client.get("/v1/NL/solar/regions/national/forecast")
+    assert resp.status_code == 200
+    assert resp.json()["model_name"] == "nl_regional_pv_ecmwf_mo_sat_adjust"
+
+
+@pytest.mark.anyio
+async def test_nl_forecast_invalid_model_400(nl_client: AsyncClient) -> None:
+    """blend is not a valid NL model → 400."""
+    resp = await nl_client.get("/v1/NL/solar/regions/national/forecast?model=blend")
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_nl_generation_sources(nl_client: AsyncClient) -> None:
+    """NL generation sources discovery is public and includes nednl."""
+    resp = await nl_client.get("/v1/NL/solar/generation-sources")
+    assert resp.status_code == 200
+    names = [s["name"] for s in resp.json()]
+    assert "nednl" in names
+
+
+@pytest.mark.anyio
+async def test_nl_accessible_with_trial_permission(nl_trial_client: AsyncClient) -> None:
+    """read:trial grants access to NL data routes."""
+    resp = await nl_trial_client.get("/v1/NL/solar/regions?region_type=national")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_nl_forecast_snapshot(nl_client: AsyncClient) -> None:
+    """NL forecast snapshot for national region type returns 200."""
+    resp = await nl_client.get("/v1/NL/solar/forecasts/snapshot?region_type=national")
+    assert resp.status_code == 200
+    assert "time" in resp.json()
+    assert "values" in resp.json()

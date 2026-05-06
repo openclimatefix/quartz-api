@@ -11,6 +11,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import (
     COUNTRIES,
     VALID_COUNTRY_CODES,
@@ -201,6 +202,57 @@ async def _resolve_region_id(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"National region for '{cfg.nation_name}' not found.",
     )
+
+
+def _get_permissions(auth: AuthDependency) -> frozenset[str]:
+    perms = auth.get("permissions", [])
+    if isinstance(perms, str):
+        perms = [perms]
+    return frozenset(perms)
+
+
+def _check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
+    """Check country-level access. Returns True for full access, False for intraday-only.
+
+    Raises HTTP 403 if the user has no valid permission for this country.
+    """
+    perms = _get_permissions(auth)
+    if perms & ALL_COUNTRY_PERMISSIONS:
+        return True
+    if cfg.permission and cfg.permission in perms:
+        return True
+    if cfg.intraday_permission and cfg.intraday_permission in perms:
+        return False
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"You do not have access to {cfg.permission or 'this country'}. "
+            "Contact quartz@openclimatefix.org to request access."
+        ),
+    )
+
+
+def _resolve_forecast_model(
+    model: str | None,
+    rt: RegionTypeConfig | None,
+    is_intraday_only: bool,
+) -> str | None:
+    """Validate and resolve the forecast model, applying intraday restrictions where needed."""
+    if rt is None:
+        return model
+    if is_intraday_only and rt.intraday_models:
+        allowed = frozenset(rt.intraday_models)
+        if model is not None and model not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Model '{model}' is not available with your current access level. "
+                    f"Intraday-accessible models: {sorted(allowed)}"
+                ),
+            )
+        return model or rt.intraday_default_model
+    # Normal path: existing _validate_model already handles unknown model names.
+    return model or rt.default_model
 
 
 def _timeseries_window(
