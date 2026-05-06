@@ -270,10 +270,6 @@ COUNTRIES: dict[str, CountryConfig] = {
                 level=20,
                 location_type=LocationType.DNO,
                 source_types=("solar",),
-                forecast_models=_GB_GSP_FORECAST_MODELS,
-                default_model="blend",
-                intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_v2_adjust",
             ),
         ),
         generation_sources=(
