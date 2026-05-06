@@ -166,7 +166,7 @@ def _model(name: str, slug: str | None = None) -> ForecastModel:
     return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name), slug=slug)
 
 
-# Intraday model names shared across GB region types.
+# Internal DP names for intraday models — used by intraday_models field on RegionTypeConfig.
 _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
     # "pvnet_intra_allbells0",
     # "pvnet_intra_allbells0_adjust",
@@ -186,26 +186,39 @@ _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
     # "pvnet_cloud_adjust",
 )
 
+# Intraday ForecastModel entries shared across GB national, GSP, and DNO.
+_GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
+    # _model("pvnet_intra_allbells0"),
+    # _model("pvnet_intra_allbells0_adjust"),
+    # _model("pvnet_intra_allbells30"),
+    # _model("pvnet_intra_allbells30_adjust"),
+    _model("pvnet_intra_sat30"),
+    _model("pvnet_intra_sat30_adjust"),
+    _model("pvnet_ecmwf"),
+    _model("pvnet_ecmwf_adjust"),
+    _model("pvnet_sat_only"),
+    _model("pvnet_sat_only_adjust"),
+    _model("pvnet_ukv_only"),
+    _model("pvnet_ukv_only_adjust"),
+    _model("pvnet_v2", slug="pvnet_intraday"),
+    _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
+    # _model("pvnet_cloud"),
+    # _model("pvnet_cloud_adjust"),
+)
+
 _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
-    _model("pvnet_v2"),
-    _model("pvnet_v2_adjust"),
+    *_GB_INTRADAY_FORECAST_MODELS,
     # _model("pvnet_intra_allbells0"),
     _model("pvnet_day_ahead"),
     _model("pvnet_day_ahead_adjust"),
-    _model("pvnet_ecmwf"),
-    _model("pvnet_ecmwf_adjust"),
-    _model("pvnet_ukv_only"),
-    _model("pvnet_ukv_only_adjust"),
-    _model("pvnet_sat_only"),
-    _model("pvnet_sat_only_adjust"),
 )
 
 _GB_GSP_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
-    *(_model(m) for m in _GB_INTRADAY_MODEL_NAMES),
+    *_GB_INTRADAY_FORECAST_MODELS,
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
@@ -259,7 +272,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.GSP,
                 source_types=("solar",),
                 forecast_models=_GB_GSP_FORECAST_MODELS,
-                default_model="blend",
+                default_model="blend_adjust",
                 metadata_fields=("gsp_id",),
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
                 intraday_default_model="pvnet_v2_adjust",
