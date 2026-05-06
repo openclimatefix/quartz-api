@@ -277,7 +277,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 source_types=("solar",),
                 forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend_adjust",
-                metadata_fields=("gsp_id",),
+                metadata_fields=("gsp_id", "full_name"),
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
                 intraday_default_model="pvnet_v2_adjust",
             ),
@@ -323,6 +323,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 source_types=("solar",),
                 forecast_models=_NL_REGIONAL_FORECAST_MODELS,
                 default_model="blend_adjust",
+                metadata_fields=("region_id",),
             ),
         ),
         generation_sources=(
