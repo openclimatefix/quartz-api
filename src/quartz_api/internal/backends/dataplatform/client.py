@@ -117,7 +117,7 @@ class StorageClient(models.StorageInterface):
                 ),
                 metadata=v.get("metadata", {}),
             )
-            for v in resp["values"]
+            for v in resp.get("values", [])
         ]
 
     @override
@@ -235,7 +235,7 @@ class StorageClient(models.StorageInterface):
 
         if location_type == models.LocationType.SUBSTATION:
             # Spoof the forecast values so that the capacity and id corresponds to the substation
-            for v in resp["values"]:
+            for v in resp.get("values", []):
                 v["location_uuid"] = location_uuid
                 v["effective_capacity_watts"] = location.effective_capacity_watts
 
@@ -272,7 +272,7 @@ class StorageClient(models.StorageInterface):
                 ),
                 metadata=v.get("metadata", {}),
             )
-            for v in resp["values"]
+            for v in resp.get("values", [])
         ]
         return out
 
