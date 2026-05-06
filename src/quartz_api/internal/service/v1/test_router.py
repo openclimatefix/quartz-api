@@ -1339,12 +1339,12 @@ async def test_discovery_routes_are_public(no_perm_client: AsyncClient) -> None:
 async def test_intraday_user_forecast_defaults_to_intraday_model(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user gets pvnet_intra_allbells0 as the default model."""
+    """Intraday-only user gets pvnet_v2_adjust as the default model."""
     region_id = str(uuid4())
     resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
     assert resp.status_code == 200
     # DummyDB echoes back the forecaster_name; intraday default should be used.
-    assert resp.json()["model_name"] == "pvnet_intra_allbells0"
+    assert resp.json()["model_name"] == "pvnet_v2_adjust"
 
 
 @pytest.mark.anyio

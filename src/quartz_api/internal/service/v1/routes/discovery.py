@@ -59,8 +59,6 @@ async def get_countries(
                 region_id=nation.uuid,
                 name=nation.name,
                 capacity_kW=nation.capacity_kilowatts,
-                latitude=nation.latitude,
-                longitude=nation.longitude,
                 centroid=Centroid(lat=nation.latitude, lng=nation.longitude),
                 region_types=[
                     RegionType(

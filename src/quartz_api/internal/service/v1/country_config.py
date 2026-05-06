@@ -238,7 +238,7 @@ _NL_REGIONAL_FORECAST_MODELS = (
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         nation_name="uk",
-        permission="read:gb",
+        permission="read:uk",
         intraday_permission="read:uk-intraday",
         region_types=(
             RegionTypeConfig(

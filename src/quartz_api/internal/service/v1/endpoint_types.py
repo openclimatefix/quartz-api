@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Path, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .country_config import COUNTRIES
 
@@ -97,6 +97,11 @@ class Centroid(BaseModel):
     lat: float
     lng: float
 
+    @field_validator("lat", "lng")
+    @classmethod
+    def _round_3dp(cls, v: float) -> float:
+        return round(v, 3)
+
 
 class Source(BaseModel):
     """An available forecast source (energy type)."""
@@ -137,8 +142,6 @@ class CountryDetail(BaseModel):
     region_id: UUID
     name: str
     capacity_kW: float
-    latitude: float
-    longitude: float
     centroid: Centroid
     region_types: list[RegionType] = []
     generation_sources: list[GenerationSource] = []
@@ -154,6 +157,11 @@ class RegionSummary(BaseModel):
     latitude: float
     longitude: float
     centroid: Centroid
+
+    @field_validator("latitude", "longitude")
+    @classmethod
+    def _round_3dp(cls, v: float) -> float:
+        return round(v, 3)
 
 
 class RegionDetail(RegionSummary):
