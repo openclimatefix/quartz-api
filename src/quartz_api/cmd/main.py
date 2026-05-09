@@ -45,6 +45,21 @@ logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
+class ClearedInMemoryBackend(InMemoryBackend):
+    """Custom in-memory cache backend that clears expired items."""
+
+    async def periodic_clear_expired(self) -> None:
+        while True:
+            async with self._lock:
+                now = self._now
+                for_del = tuple(k for k, v in self._store.items() if v.ttl_ts < now)
+                if len(for_del) > 0:
+                    log.debug(f'Clearing {len(for_del)} expired cache items, '
+                              f'from {self._store.keys()} cached items')
+                    for k in for_del:
+                        del self._store[k]
+            # Lets sleep for 10 seconds before checking again if there are any expired items
+            await asyncio.sleep(10)
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -130,6 +145,11 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     if "uk_national" in conf.get_string("api.routers"):
         warm_task = asyncio.create_task(_warm_forecast_all_cache(server))
 
+    # make sure cache is cleaned up every 10 seconds
+    backend = FastAPICache.get_backend()
+    if backend is not None and isinstance(backend, ClearedInMemoryBackend):
+        asyncio.create_task(backend.periodic_clear_expired())
+
     yield
 
     if warm_task is not None:
@@ -162,7 +182,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         },
     )
 
-    FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
+    FastAPICache.init(ClearedInMemoryBackend(), expire=120, prefix="fastapi-cache")
 
     # Register rate limiter
     server.state.limiter = ratelimit.limiter
