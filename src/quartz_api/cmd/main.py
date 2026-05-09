@@ -49,13 +49,14 @@ class ClearedInMemoryBackend(InMemoryBackend):
     """Custom in-memory cache backend that clears expired items."""
 
     async def periodic_clear_expired(self) -> None:
+        """Periodically clear expired cache items."""
         while True:
             async with self._lock:
                 now = self._now
                 for_del = tuple(k for k, v in self._store.items() if v.ttl_ts < now)
                 if len(for_del) > 0:
-                    log.debug(f'Clearing {len(for_del)} expired cache items, '
-                              f'from {self._store.keys()} cached items')
+                    log.debug(f"Clearing {len(for_del)} expired cache items, "
+                              f"from {self._store.keys()} cached items")
                     for k in for_del:
                         del self._store[k]
             # Lets sleep for 10 seconds before checking again if there are any expired items
@@ -148,12 +149,15 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
     # make sure cache is cleaned up every 10 seconds
     backend = FastAPICache.get_backend()
     if backend is not None and isinstance(backend, ClearedInMemoryBackend):
-        asyncio.create_task(backend.periodic_clear_expired())
+        clear_cache_periodically = asyncio.create_task(backend.periodic_clear_expired())
 
     yield
 
     if warm_task is not None:
         warm_task.cancel()
+
+    if clear_cache_periodically is not None:
+        clear_cache_periodically.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
