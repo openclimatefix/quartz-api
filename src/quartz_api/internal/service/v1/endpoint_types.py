@@ -5,7 +5,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Path, Query
-from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    WithJsonSchema,
+    field_validator,
+)
 
 from quartz_api.internal import models
 
@@ -85,9 +92,9 @@ def _parse_source(v: str) -> models.EnergyType:
 ValidSource = Annotated[
     models.EnergyType,
     BeforeValidator(_parse_source),
+    WithJsonSchema({"type": "string", "enum": ["solar", "wind"]}),
     Path(
         description="The energy source type.",
-        enum=["solar", "wind"],
         examples=["solar"],
     ),
 ]
