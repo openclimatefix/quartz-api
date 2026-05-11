@@ -144,7 +144,7 @@ class StorageClient(models.StorageInterface):
             if len(resp.forecasts) == 0:
                 return []
             resp.forecasts.sort(
-                key=lambda f: f.created_timestamp_utc,
+                key=lambda f: f.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 reverse=True,
             )
             forecaster = resp.forecasts[0].forecaster
@@ -272,10 +272,10 @@ class StorageClient(models.StorageInterface):
             out: list[models.ActualGenerationValue] = [
                 models.ActualGenerationValue(
                     valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                power_kilowatts=int(
-                    v.effective_capacity_watts * v.value_fraction / 1000.0,
-                ),
-                location_uuid=UUID(resp.location_uuid),
+                    power_kilowatts=int(
+                        v.effective_capacity_watts * v.value_fraction / 1000.0,
+                    ),
+                    location_uuid=UUID(resp.location_uuid),
                     capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
                     observer_name=observer_name,
                 )
