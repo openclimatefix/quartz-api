@@ -17,7 +17,6 @@ from ..helpers import (
     _check_country_access,
     _check_region_type,
     _country_config,
-    _energy_type_for,
     _location_to_detail,
     _resolve_nation,
     _resolve_region_id,
@@ -50,17 +49,17 @@ async def get_country_regions(
     - ``?parent_id={uuid}``: children of a specific region.
     - ``?name=london``: regions whose name contains the given string.
     """
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     _check_country_access(auth, cfg)
-    nation = await _resolve_nation(db, energy_type, cfg, auth)
+    nation = await _resolve_nation(db, source, cfg, auth)
 
     if parent_id is not None:
         rt = _check_region_type(cfg, region_type, country)
         # Validate that parent_id is within the country, unless it IS the nation itself.
         if parent_id != nation.uuid:
             parent_location = await db.get_locations(
-                energy_type=energy_type,
+                energy_type=source,
                 location_type=None,
                 authdata={},
                 location_uuid=parent_id,
@@ -72,7 +71,7 @@ async def get_country_regions(
                     detail=f"Parent region with UUID '{parent_id}' not found in {country.upper()}.",
                 )
         locs = await db.get_locations(
-            energy_type=energy_type,
+            energy_type=source,
             location_type=rt.location_type if rt is not None else None,
             authdata={},
             enclosing_location_uuid=parent_id,
@@ -85,7 +84,7 @@ async def get_country_regions(
             return _apply_name_filter([_location_to_detail(nation, cfg)], name)
 
         locs = await db.get_locations(
-            energy_type=energy_type,
+            energy_type=source,
             location_type=rt.location_type,
             authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
@@ -99,7 +98,7 @@ async def get_country_regions(
             continue
         tasks.append(
             db.get_locations(
-                energy_type=energy_type,
+                energy_type=source,
                 location_type=rt.location_type,
                 authdata={},
                 enclosing_location_uuid=_to_uuid(nation.uuid),
@@ -131,13 +130,13 @@ async def get_region(
     auth: AuthDependency,
 ) -> RegionDetail:
     """Get details for a specific region."""
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
+    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
 
     locs = await db.get_locations(
-        energy_type=energy_type,
+        energy_type=source,
         location_type=None,
         authdata={},  # TODO: add auth when loosed on DP side
         location_uuid=resolved_id,

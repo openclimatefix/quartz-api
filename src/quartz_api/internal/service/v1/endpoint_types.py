@@ -5,7 +5,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Path, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator
+
+from quartz_api.internal import models
 
 from .country_config import COUNTRIES
 
@@ -74,8 +76,15 @@ def _build_observer_pattern() -> str:
     return f"^({'|'.join(sources)})$"
 
 
+def _parse_source(v: str) -> models.EnergyType:
+    if v == "solar":
+        return models.EnergyType.SOLAR
+    return models.EnergyType.WIND
+
+
 ValidSource = Annotated[
-    str,
+    models.EnergyType,
+    BeforeValidator(_parse_source),
     Path(
         description="The energy source type.",
         enum=["solar", "wind"],

@@ -18,7 +18,7 @@ from ..endpoint_types import (
     Source,
     ValidSource,
 )
-from ..helpers import CountryCode, _country_config, _energy_type_for
+from ..helpers import CountryCode, _country_config
 
 router = APIRouter(tags=["Discovery"])
 
@@ -89,7 +89,7 @@ async def get_region_types(
     auth: AuthDependency,
 ) -> list[RegionType]:
     """List available region types for a country."""
-    _ = _energy_type_for(source)
+
     cfg = _country_config(country)
     return [
         RegionType(
@@ -112,6 +112,6 @@ async def get_generation_sources(
     auth: AuthDependency,
 ) -> list[GenerationSource]:
     """List available generation sources for a country."""
-    _ = _energy_type_for(source)
+
     cfg = _country_config(country)
-    return [s for s in cfg.generation_sources if s.source == source]
+    return [s for s in cfg.generation_sources if s.source == source.name.lower()]

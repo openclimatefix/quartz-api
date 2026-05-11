@@ -24,17 +24,6 @@ from .endpoint_types import Centroid, RegionDetail, RegionSummary
 CountryCode = StrEnum("CountryCode", {k: k for k in COUNTRIES})
 
 
-def _energy_type_for(source: str) -> models.EnergyType:
-    """Map a source path parameter to an EnergyType."""
-    if source == "solar":
-        return models.EnergyType.SOLAR
-    if source == "wind":
-        return models.EnergyType.WIND
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Invalid source '{source}'. Must be 'wind' or 'solar'.",
-    )
-
 
 def _country_config(country: str) -> CountryConfig:
     """Look up country config, raising 404 if unknown."""

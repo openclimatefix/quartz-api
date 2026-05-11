@@ -9,7 +9,7 @@ from fastapi_cache import FastAPICache
 from quartz_api.internal import models
 
 from .country_config import COUNTRIES
-from .helpers import _energy_type_for, _timeseries_window, _to_uuid
+from .helpers import _timeseries_window, _to_uuid
 
 log = logging.getLogger(__name__)
 
@@ -21,12 +21,12 @@ _generation_cache_warming: dict[str, bool] = {}
 
 async def _warm_v1_forecast_cache(
     app: object,
-    source: str,
+    energy_type: models.EnergyType,
     country: str,
     region_type: str,
 ) -> None:
-    """Pre-warm per-region forecast timeseries cache for one (source, country, region_type)."""
-    flag_key = f"{source}:{country}:{region_type}"
+    """Pre-warm per-region forecast timeseries cache for one (energy_type, country, region_type)."""
+    flag_key = f"{energy_type.name.lower()}:{country}:{region_type}"
     _forecast_cache_warming[flag_key] = True
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
@@ -40,8 +40,6 @@ async def _warm_v1_forecast_cache(
         rt = cfg.get_region_type(region_type)
         if rt is None:
             return
-
-        energy_type = _energy_type_for(source)
         win_start, win_end = _timeseries_window(None, None)
 
         nations = await db.get_locations(
@@ -92,7 +90,7 @@ async def _warm_v1_forecast_cache(
             if (i + 1) % 20 == 0:
                 log.info(
                     "v1 forecast cache warm %s/%s/%s: %d/%d regions",
-                    country, source, region_type, i + 1, len(regions),
+                    country, energy_type.name.lower(), region_type, i + 1, len(regions),
                 )
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
@@ -109,11 +107,11 @@ async def _warm_v1_forecast_cache(
 
         log.info(
             "v1 forecast cache warmed: %s/%s/%s — %d regions",
-            country, source, region_type, len(regions),
+            country, energy_type.name.lower(), region_type, len(regions),
         )
     except Exception:
         log.exception(
-            "v1 forecast cache warm failed: %s/%s/%s", source, country, region_type,
+            "v1 forecast cache warm failed: %s/%s/%s", energy_type.name.lower(), country, region_type,
         )
     finally:
         _forecast_cache_warming[flag_key] = False
@@ -121,13 +119,13 @@ async def _warm_v1_forecast_cache(
 
 async def _warm_v1_generation_cache(
     app: object,
-    source: str,
+    energy_type: models.EnergyType,
     country: str,
     region_type: str,
     observer: str,
 ) -> None:
     """Pre-warm per-region generation timeseries cache for one combination."""
-    flag_key = f"{source}:{country}:{region_type}:{observer}"
+    flag_key = f"{energy_type.name.lower()}:{country}:{region_type}:{observer}"
     _generation_cache_warming[flag_key] = True
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
@@ -142,7 +140,6 @@ async def _warm_v1_generation_cache(
         if rt is None:
             return
 
-        energy_type = _energy_type_for(source)
         win_start, win_end = _timeseries_window(None, None)
 
         nations = await db.get_locations(
@@ -171,7 +168,7 @@ async def _warm_v1_generation_cache(
         prefix = FastAPICache.get_prefix()
         base = (
             f"{prefix}:v1:timeseries:generation"
-            f":{country.upper()}:{source}:{region_type}:{observer}"
+            f":{country.upper()}:{energy_type.name.lower()}:{region_type}:{observer}"
         )
 
         for i, region in enumerate(regions):
@@ -195,7 +192,7 @@ async def _warm_v1_generation_cache(
             if (i + 1) % 20 == 0:
                 log.info(
                     "v1 generation cache warm %s/%s/%s/%s: %d/%d regions",
-                    source, country, region_type, observer, i + 1, len(regions),
+                    energy_type.name.lower(), country, region_type, observer, i + 1, len(regions),
                 )
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
@@ -205,12 +202,12 @@ async def _warm_v1_generation_cache(
 
         log.info(
             "v1 generation cache warmed: %s/%s/%s/%s — %d regions",
-            source, country, region_type, observer, len(regions),
+            energy_type.name.lower(), country, region_type, observer, len(regions),
         )
     except Exception:
         log.exception(
             "v1 generation cache warm failed: %s/%s/%s/%s",
-            source, country, region_type, observer,
+            energy_type.name.lower(), country, region_type, observer,
         )
     finally:
         _generation_cache_warming[flag_key] = False
@@ -225,18 +222,17 @@ async def _warm_all_v1_caches(app: object) -> None:
     await asyncio.sleep(5)
     tasks = []
     for country_code, cfg in COUNTRIES.items():
-        source = "solar"
         for rt in cfg.region_types:
             if rt.location_type == models.LocationType.NATION:
                 continue
             if rt.forecast_models:
                 tasks.append(
-                    _warm_v1_forecast_cache(app, source, country_code, rt.type),
+                    _warm_v1_forecast_cache(app, models.EnergyType.SOLAR, country_code, rt.type),
                 )
             for gen_src in cfg.generation_sources:
                 tasks.append(
                     _warm_v1_generation_cache(
-                        app, source, country_code, rt.type, gen_src.name,
+                        app, models.EnergyType.SOLAR, country_code, rt.type, gen_src.name,
                     ),
                 )
     results = await asyncio.gather(*tasks, return_exceptions=True)

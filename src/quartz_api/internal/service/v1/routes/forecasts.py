@@ -33,7 +33,6 @@ from ..helpers import (
     CountryCode,
     _check_country_access,
     _country_config,
-    _energy_type_for,
     _resolve_forecast_model,
     _resolve_nation,
     _resolve_region_id,
@@ -78,13 +77,13 @@ async def get_forecast(
     model: ValidForecastModel | None = None,
 ) -> ForecastResponse:
     """Get the forecast for a specific region."""
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     is_intraday_only = not _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
+    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
 
     locs = await db.get_locations(
-        energy_type=energy_type,
+        energy_type=source,
         location_type=None,
         authdata={},  # TODO: add auth when loosed on DP side
         location_uuid=resolved_id,
@@ -106,7 +105,7 @@ async def get_forecast(
         location_uuid=resolved_id,
         window_start=start_utc or now,
         window_end=end_utc or now + dt.timedelta(days=2),
-        energy_type=energy_type,
+        energy_type=source,
         location_type=location_type,
         authdata={},  # TODO: add auth when loosed on DP side
         created_cutoff=creation_limit_utc,
@@ -148,13 +147,13 @@ async def get_forecast_last_updated_timestamp(
     model: ValidForecastModel | None = None,
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region."""
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     is_intraday_only = not _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, energy_type, db)
+    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
 
     locs = await db.get_locations(
-        energy_type=energy_type,
+        energy_type=source,
         location_type=None,
         authdata={},  # TODO: add auth when loosed on DP side
         location_uuid=resolved_id,
@@ -173,7 +172,7 @@ async def get_forecast_last_updated_timestamp(
         location_uuid=resolved_id,
         window_start=now - dt.timedelta(minutes=30),
         window_end=now + dt.timedelta(minutes=30),
-        energy_type=energy_type,
+        energy_type=source,
         location_type=location_type,
         authdata={},  # TODO: add auth when loosed on DP side
         forecaster_name=model,
@@ -207,10 +206,10 @@ async def get_forecasts_at_time(
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp."""
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     is_intraday_only = not _check_country_access(auth, cfg)
-    nation = await _resolve_nation(db, energy_type, cfg, auth)
+    nation = await _resolve_nation(db, source, cfg, auth)
 
     rt = cfg.get_region_type(region_type)
     if rt is None:
@@ -226,7 +225,7 @@ async def get_forecasts_at_time(
         regions = [nation]
     else:
         regions = await db.get_locations(
-            energy_type=energy_type,
+            energy_type=source,
             location_type=location_type,
             authdata=auth,
             enclosing_location_uuid=_to_uuid(nation.uuid),
@@ -247,7 +246,7 @@ async def get_forecasts_at_time(
         forecaster_name=model_name,
         forecaster_version=model_version,
         snapshot_timestamp_utc=snapshot_time,
-        energy_type=energy_type,
+        energy_type=source,
         authdata=auth,
     )
 
@@ -293,7 +292,7 @@ async def get_forecasts_period(
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
     yet been populated — retry after 60 seconds.
     """
-    energy_type = _energy_type_for(source)
+
     cfg = _country_config(country)
     _check_country_access(auth, cfg)
 
@@ -314,7 +313,7 @@ async def get_forecasts_period(
     #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:_meta   — shared model metadata
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:{country.upper()}:{source}:{region_type}"
+    base = f"{prefix}:v1:timeseries:{country.upper()}:{source.name.lower()}:{region_type}"
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:
@@ -324,9 +323,9 @@ async def get_forecasts_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await _resolve_nation(db, energy_type, cfg, auth)
+    nation = await _resolve_nation(db, source, cfg, auth)
     regions = await db.get_locations(
-        energy_type=energy_type,
+        energy_type=source,
         location_type=rt.location_type,
         authdata={},  # TODO: add auth when loosed on DP side
         enclosing_location_uuid=_to_uuid(nation.uuid),
@@ -384,7 +383,7 @@ async def refresh_forecasts_cache(
     """Trigger a background re-warm of the forecast period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    flag_key = f"{source}:{country}:{region_type}"
+    flag_key = f"{source.name.lower()}:{country}:{region_type}"
     if _forecast_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
