@@ -64,7 +64,7 @@ async def _warm_v1_forecast_cache(
 
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
-        base = f"{prefix}:v1:timeseries:{country.upper()}:{source}:{region_type}"
+        base = f"{prefix}:v1:timeseries:{country.upper()}:{energy_type.name.lower()}:{region_type}"
         first_pgv = None
 
         for i, region in enumerate(regions):
