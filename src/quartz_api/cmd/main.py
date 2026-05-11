@@ -59,8 +59,8 @@ class ClearedInMemoryBackend(InMemoryBackend):
                               f"from {self._store.keys()} cached items")
                     for k in for_del:
                         del self._store[k]
-            # Lets sleep for 10 seconds before checking again if there are any expired items
-            await asyncio.sleep(10)
+            # Lets sleep for 10 minutes before checking again if there are any expired items
+            await asyncio.sleep(600)
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
