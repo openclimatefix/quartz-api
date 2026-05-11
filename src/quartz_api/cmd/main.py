@@ -27,6 +27,7 @@ from scalar_fastapi import get_scalar_api_reference
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
@@ -394,6 +395,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             capture_logs=True,
         )
     server.add_middleware(trace.TracerMiddleware)
+    server.add_middleware(GZipMiddleware, minimum_size=1000)
 
     # update description
     server.description = description
