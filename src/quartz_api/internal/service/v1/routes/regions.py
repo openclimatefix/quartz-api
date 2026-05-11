@@ -42,10 +42,25 @@ async def get_country_regions(
 ) -> list[RegionDetail]:
     """List regions for a country, optionally filtered by type, parent, or name.
 
-    - No filters: returns all regions of all configured types.
-    - ``?region_type=gsp``: only GSP regions.
-    - ``?parent_id={uuid}``: children of a specific region.
-    - ``?name=london``: regions whose name contains the given string.
+    Returns `RegionDetail` objects containing each region's UUID, name, type,
+    installed capacity, centroid, and any available metadata fields.
+
+    Filter behaviour:
+
+    - No filters — returns every region across all configured region types.
+    - `region_type` — restricts results to one granularity level (e.g. `gsp`).
+    - `parent_id` — returns the direct children of the specified region UUID.
+    - `name` — case-insensitive substring search across region names.
+
+    Filters can be combined (e.g. `?region_type=gsp&name=london`).
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_type**: optional region type slug (e.g. `national`, `dno`, `gsp`).
+      See `/{country}/{source}/region-types` for valid values.
+    - **parent_id**: optional UUID of a parent region — returns its children only.
+    - **name**: optional name filter; returns regions whose name contains this string.
     """
     _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
@@ -125,7 +140,19 @@ async def get_region(
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> RegionDetail:
-    """Get details for a specific region."""
+    """Get details for a specific region.
+
+    Returns a `RegionDetail` object with the region's UUID, name, type, installed
+    capacity, centroid, and any available metadata fields.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_id**: region identifier. Accepts:
+        - a region UUID (e.g. `3e69f4b3-…`),
+        - the string `national` (resolves to the country's national region),
+        - or a region name (case-insensitive exact match, e.g. `South West`).
+    """
     _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region_id, country, source, db)
 

@@ -72,7 +72,34 @@ async def get_forecast(
     ),
     model: ValidForecastModel | None = None,
 ) -> ForecastResponse:
-    """Get the forecast for a specific region."""
+    """Get the solar generation forecast for a specific region.
+
+    Returns a time series of forecast values — power in kW at 30-minute resolution —
+    along with model metadata (name, version, creation time, initialisation time).
+
+    By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
+    `end_utc` to override. Historical data is available up to 1 year back.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_id**: region identifier. Accepts a UUID, the string `national`, or a
+      region name (case-insensitive exact match). Use `GET /{country}/{source}/regions`
+      to browse available regions and their UUIDs.
+    - **start_utc**: start of the forecast window (UTC). Defaults to now. Cannot be
+      more than 1 year in the past.
+    - **end_utc**: end of the forecast window (UTC). Defaults to 48 hours from now.
+    - **creation_limit_utc**: if set, only return forecasts that were created at or
+      before this time. Useful for retrieving the forecast "as it was known" at a
+      specific moment (e.g. `?creation_limit_utc=2026-05-01T09:00:00Z`).
+    - **forecast_horizon_minutes**: filter to forecasts made exactly this many minutes
+      before the target time. For example, `60` returns only the 1-hour-ahead forecast
+      for each target timestep.
+    - **model**: forecast model name (e.g. `blend`, `blend_adjust`, `pvnet_intraday`).
+      Defaults to the region type's default model. See `/{country}/{source}/region-types`
+      for the models available per region type. `blend_adjust` applies a trend-based
+      bias correction on top of `blend`.
+    """
     is_intraday_only = not _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region_id, country, source, db)
 
@@ -139,7 +166,18 @@ async def get_forecast_last_updated_timestamp(
     auth: AuthDependency,
     model: ValidForecastModel | None = None,
 ) -> dt.datetime:
-    """Return the creation time of the most recent forecast for a region."""
+    """Return the creation time of the most recent forecast for a region.
+
+    Queries the forecast within ±30 minutes of now and returns the `created_time`
+    of the most recent run. Useful for monitoring freshness or driving "last updated"
+    indicators in a UI. Cached for 10 seconds.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_id**: region identifier — UUID, `national`, or region name.
+    - **model**: forecast model name. Defaults to the region type's default model.
+    """
     is_intraday_only = not _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region_id, country, source, db)
 
@@ -196,7 +234,25 @@ async def get_forecasts_at_time(
         description="Forecast target timestamp (UTC).",
     ),
 ) -> ForecastSnapshot:
-    """Get forecasts for all regions of a given type at a specific timestamp."""
+    """Get forecasts for all regions of a given type at a specific timestamp.
+
+    Returns a `ForecastSnapshot` — a single point in time with one forecast value per
+    region. Useful for rendering a map of forecast output across an entire country at
+    a glance. Cached for 2 minutes.
+
+    The default timestamp is the current time floored to the nearest 30 minutes.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
+      See `/{country}/{source}/region-types` for valid values.
+    - **timestamp**: target datetime (UTC) for the snapshot. Defaults to now floored
+      to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
+    - **model_name**: forecast model name (e.g. `blend_adjust`). Defaults to the
+      region type's default model.
+    - **model_version**: optional model version string to pin a specific release.
+    """
     is_intraday_only = not _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
 
@@ -278,8 +334,32 @@ async def get_forecasts_period(
 ) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
 
-    Served from the pre-warmed per-region cache. Returns 503 if the cache has not
-    yet been populated — retry after 60 seconds.
+    Returns a `RegionForecastMatrix` — a compact columnar structure with a shared
+    `times` array and one `power_kW` series per region. Designed for efficiently
+    loading all-region forecast data for charts or grid-management tools in a single
+    request.
+
+    This endpoint is served entirely from a pre-warmed cache (one key per region UUID).
+    It does not make live data-platform calls per request. If the cache has not yet
+    been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
+    header — retry after a minute. The cache covers a ±2-day window around now,
+    refreshed every 24 hours (or on demand via `POST /{country}/{source}/forecasts/refresh`).
+
+    Time-window and region filtering are applied in-memory from the cached data.
+    Model and horizon filters are **not** supported on this endpoint — use
+    `GET /{country}/{source}/regions/{region_id}/forecast` for per-region model selection.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_type**: region granularity (e.g. `gsp`, `dno`). **Required.**
+      See `/{country}/{source}/region-types` for valid values.
+    - **start_utc**: start of the window (UTC). Defaults to 2 days before now
+      (floored to the nearest 6 hours).
+    - **end_utc**: end of the window (UTC). Defaults to 2 days after now
+      (floored to the nearest 6 hours).
+    - **region_ids**: optional list of region UUIDs to restrict the response to a
+      subset of regions (e.g. `?region_ids=uuid1&region_ids=uuid2`).
     """
     _check_country_access(auth, country)
 
@@ -367,7 +447,19 @@ async def refresh_forecasts_cache(
     auth: AuthDependency,
     region_type: ValidRegionType = "gsp",
 ) -> Response:
-    """Trigger a background re-warm of the forecast period cache. Requires ocf:admin."""
+    """Trigger a background re-warm of the forecast period cache.
+
+    Kicks off a background task that re-fetches all per-region forecast data for the
+    given country, source, and region type and repopulates the pre-warmed cache.
+    Returns 202 immediately; the warm completes in the background.
+
+    Requires the `ocf:admin` permission scope.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`).
+    - **source**: energy source — `solar` or `wind`.
+    - **region_type**: region type to re-warm (e.g. `gsp`). Defaults to `gsp`.
+    """
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}"

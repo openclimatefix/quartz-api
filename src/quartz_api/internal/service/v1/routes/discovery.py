@@ -27,7 +27,12 @@ router = APIRouter(tags=["Discovery"])
 async def get_sources(
     auth: AuthDependency,
 ) -> list[Source]:
-    """List available forecast energy sources."""
+    """List available forecast energy sources.
+
+    Returns the set of energy source types supported by the API — currently `solar`
+    and `wind`. Use the `source` value as the `{source}` path segment in all other
+    v1 routes (e.g. `/v1/GB/solar/regions`).
+    """
     return [
         Source(name="solar", label="Solar"),
         Source(name="wind", label="Wind"),
@@ -39,7 +44,19 @@ async def get_countries(
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> list[CountryDetail]:
-    """List available countries with full capability manifest (region types, models, sources)."""
+    """List available countries with their full capability manifest.
+
+    Returns one entry per country the API has data for. Each entry includes:
+
+    - **region_types** — the region granularities available for that country (e.g. national,
+      DNO, GSP), including the forecast models valid for each type.
+    - **generation_sources** — the observed-generation observers available (e.g.
+      `pvlive_in_day`, `pvlive_day_after`).
+    - **capacity_kW** and **centroid** — installed capacity and geographic centre.
+
+    Use the `country` value (e.g. `GB`, `NL`) as the `{country}` path segment in all other
+    v1 routes.
+    """
     nations = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
@@ -88,7 +105,23 @@ async def get_region_types(
     country: CountryParam,
     auth: AuthDependency,
 ) -> list[RegionType]:
-    """List available region types for a country."""
+    """List available region types for a country and energy source.
+
+    Region types define the geographic granularity at which forecasts and generation
+    data are available — for example `national`, `dno`, or `gsp` for Great Britain.
+
+    Each entry includes:
+
+    - **type** — the slug used as the `region_type` query parameter throughout the API.
+    - **level** — hierarchical depth (lower = coarser; 0 = national).
+    - **forecast_models** — the models available for that region type, with the model
+      `name` used as the `model` parameter on forecast endpoints. The first listed model
+      is the default.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    """
     return [
         RegionType(
             type=rt.type,
@@ -109,5 +142,14 @@ async def get_generation_sources(
     country: CountryParam,
     auth: AuthDependency,
 ) -> list[GenerationSource]:
-    """List available generation sources for a country."""
+    """List available observed-generation sources for a country and energy source.
+
+    Generation sources represent the different observers that produce actual (measured)
+    generation data — for example PV_Live in-day estimates vs finalised day-after values.
+    Use the `name` field as the `observer` parameter on generation endpoints.
+
+    #### Parameters
+    - **country**: country code (e.g. `GB`, `NL`).
+    - **source**: energy source — `solar` or `wind`.
+    """
     return [s for s in country.generation_sources if s.source == source.name.lower()]
