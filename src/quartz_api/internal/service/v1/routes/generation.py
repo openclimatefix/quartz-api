@@ -19,6 +19,7 @@ from quartz_api.internal.service.uk_national.cache import key_builder
 
 from ..cache import _generation_cache_warming, _warm_v1_generation_cache
 from ..endpoint_types import (
+    CountryParam,
     GenerationResponse,
     GenerationSnapshot,
     GenerationValue,
@@ -28,16 +29,14 @@ from ..endpoint_types import (
     ValidObserver,
     ValidRegionType,
     ValidSource,
+    ValidWindowStart,
 )
 from ..helpers import (
-    CountryCode,
     _check_country_access,
-    _country_config,
     _resolve_nation,
     _resolve_region_id,
     _timeseries_window,
     _to_uuid,
-    _validate_window,
 )
 
 router = APIRouter(tags=["Generation"])
@@ -49,23 +48,19 @@ router = APIRouter(tags=["Generation"])
 )
 async def get_generation(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
-    start_utc: dt.datetime | None = Query(
-        None, description="Start of generation window (UTC).",
-    ),
+    start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
         None, description="End of generation window (UTC).",
     ),
 ) -> GenerationResponse:
     """Get observed generation data for a specific region."""
-
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
+    _check_country_access(auth, country)
+    resolved_id = await _resolve_region_id(region_id, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -80,7 +75,6 @@ async def get_generation(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
-    _validate_window(start_utc)
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     agvs = await db.get_actual_generation(
@@ -113,7 +107,7 @@ async def get_generation(
 async def get_generation_at_timestamp(
     request: Request,
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
@@ -124,16 +118,14 @@ async def get_generation_at_timestamp(
     ),
 ) -> GenerationSnapshot:
     """Get observed generation for all regions of a given type at a specific timestamp."""
+    _check_country_access(auth, country)
+    nation = await _resolve_nation(db, source, country, auth)
 
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-    nation = await _resolve_nation(db, source, cfg, auth)
-
-    rt = cfg.get_region_type(region_type)
+    rt = country.get_region_type(region_type)
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+            detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
     location_type = rt.location_type
 
@@ -150,7 +142,7 @@ async def get_generation_at_timestamp(
     if len(regions) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No regions found for type '{location_type}' in {country.upper()}.",
+            detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -186,7 +178,7 @@ async def get_generation_at_timestamp(
 )
 async def get_generation_period(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
@@ -202,22 +194,23 @@ async def get_generation_period(
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
     yet been populated — retry after 60 seconds.
     """
+    _check_country_access(auth, country)
 
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-
-    rt = cfg.get_region_type(region_type)
+    rt = country.get_region_type(region_type)
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+            detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:generation:{country.upper()}:{source.name.lower()}:{region_type}:{observer}"
+    base = (
+        f"{prefix}:v1:timeseries:generation"
+        f":{country.code}:{source.name.lower()}:{region_type}:{observer}"
+    )
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:
@@ -227,7 +220,7 @@ async def get_generation_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await _resolve_nation(db, source, cfg, auth)
+    nation = await _resolve_nation(db, source, country, auth)
     regions = await db.get_locations(
         energy_type=source,
         location_type=rt.location_type,
@@ -238,7 +231,7 @@ async def get_generation_period(
     if len(regions) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No regions found for type '{rt.type}' in {country.upper()}.",
+            detail=f"No regions found for type '{rt.type}' in {country.code}.",
         )
 
     if region_ids is not None:
@@ -276,7 +269,7 @@ async def get_generation_period(
 )
 async def refresh_generation_cache(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     background_tasks: BackgroundTasks,
     request: Request,
     auth: AuthDependency,
@@ -286,14 +279,14 @@ async def refresh_generation_cache(
     """Trigger a background re-warm of the generation period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    flag_key = f"{source.name.lower()}:{country}:{region_type}:{observer}"
+    flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{observer}"
     if _generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
         _warm_v1_generation_cache,
         request.app,
         source,
-        country,
+        country.code,
         region_type,
         observer,
     )

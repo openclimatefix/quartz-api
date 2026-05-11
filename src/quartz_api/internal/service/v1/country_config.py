@@ -82,6 +82,7 @@ class GenerationSource:
 class CountryConfig:
     """Configuration for a country."""
 
+    code: str
     nation_name: str
     region_types: tuple[RegionTypeConfig, ...]
     generation_sources: tuple[GenerationSource, ...] = ()
@@ -219,6 +220,7 @@ _NL_REGIONAL_FORECAST_MODELS = (
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
+        code="GB",
         nation_name="uk",
         permission="read:gb",
         intraday_permission="read:uk-intraday",
@@ -268,6 +270,7 @@ COUNTRIES: dict[str, CountryConfig] = {
         ),
     ),
     "NL": CountryConfig(
+        code="NL",
         nation_name="nl_national",
         permission="read:nl",
         region_types=(

@@ -1,7 +1,6 @@
 """Shared utilities for the v1 API router."""
 
 import datetime as dt
-from enum import StrEnum
 from uuid import UUID
 
 import pandas as pd
@@ -13,28 +12,10 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import (
-    COUNTRIES,
-    VALID_COUNTRY_CODES,
     CountryConfig,
     RegionTypeConfig,
 )
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
-
-# Derived at import time from country_config so Swagger renders a dropdown of valid values.
-CountryCode = StrEnum("CountryCode", {k: k for k in COUNTRIES})
-
-
-
-def _country_config(country: str) -> CountryConfig:
-    """Look up country config, raising 404 if unknown."""
-    upper = country.upper()
-    if upper not in VALID_COUNTRY_CODES:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown country '{country}'. "
-            f"Supported: {sorted(VALID_COUNTRY_CODES)}",
-        )
-    return COUNTRIES[upper]
 
 
 async def _resolve_nation(
@@ -121,26 +102,6 @@ def _check_region_type(
             f"Available: {[r.type for r in cfg.region_types]}",
         )
     return rt
-
-
-_MAX_WINDOW_DAYS = 365
-
-
-def _validate_window(start_utc: dt.datetime | None) -> None:
-    """Raise 400 if start_utc is more than one rolling year in the past."""
-    if start_utc is None:
-        return
-    earliest = dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=_MAX_WINDOW_DAYS)
-    if start_utc.tzinfo is None:
-        start_utc = start_utc.replace(tzinfo=dt.UTC)
-    if start_utc < earliest:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "start_utc exceeds the 1-year rolling data limit. "
-                "Contact us at quartz@openclimatefix.org for access to extended history."
-            ),
-        )
 
 
 def _validate_model(

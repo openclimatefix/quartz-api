@@ -858,8 +858,8 @@ async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) ->
 
 
 @pytest.mark.anyio
-async def test_get_region_forecast_beyond_one_year_400(client: AsyncClient) -> None:
-    """start_utc older than 1 rolling year returns 400 with an extended-access message."""
+async def test_get_region_forecast_beyond_one_year_422(client: AsyncClient) -> None:
+    """start_utc older than 1 rolling year returns 422 with an extended-access message."""
     region_id = str(uuid4())
     resp = await client.get(
         f"/v1/GB/solar/regions/{region_id}/forecast",
@@ -869,13 +869,13 @@ async def test_get_region_forecast_beyond_one_year_400(client: AsyncClient) -> N
             ).isoformat(),
         },
     )
-    assert resp.status_code == 400
-    assert "1-year" in resp.json()["detail"]
+    assert resp.status_code == 422
+    assert "1-year" in resp.json()["detail"][0]["msg"]
 
 
 @pytest.mark.anyio
-async def test_get_region_generation_beyond_one_year_400(client: AsyncClient) -> None:
-    """start_utc older than 1 rolling year on generation endpoint returns 400."""
+async def test_get_region_generation_beyond_one_year_422(client: AsyncClient) -> None:
+    """start_utc older than 1 rolling year on generation endpoint returns 422."""
     region_id = str(uuid4())
     resp = await client.get(
         f"/v1/GB/solar/regions/{region_id}/generation",
@@ -885,8 +885,8 @@ async def test_get_region_generation_beyond_one_year_400(client: AsyncClient) ->
             ).isoformat(),
         },
     )
-    assert resp.status_code == 400
-    assert "1-year" in resp.json()["detail"]
+    assert resp.status_code == 422
+    assert "1-year" in resp.json()["detail"][0]["msg"]
 
 
 @pytest.mark.anyio
@@ -1300,10 +1300,10 @@ async def test_region_id_name_not_found_404(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
-async def test_country_lowercase_422(client: AsyncClient) -> None:
-    """Country code in lowercase is not a valid CountryCode enum value → 422."""
+async def test_country_lowercase_200(client: AsyncClient) -> None:
+    """Country code in lowercase is normalised to uppercase → 200."""
     resp = await client.get("/v1/gb/solar/region-types")
-    assert resp.status_code == 422
+    assert resp.status_code == 200
 
 
 @pytest.mark.anyio

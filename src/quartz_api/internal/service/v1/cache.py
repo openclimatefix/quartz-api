@@ -111,7 +111,8 @@ async def _warm_v1_forecast_cache(
         )
     except Exception:
         log.exception(
-            "v1 forecast cache warm failed: %s/%s/%s", energy_type.name.lower(), country, region_type,
+            "v1 forecast cache warm failed: %s/%s/%s",
+            energy_type.name.lower(), country, region_type,
         )
     finally:
         _forecast_cache_warming[flag_key] = False

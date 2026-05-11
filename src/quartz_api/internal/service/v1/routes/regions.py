@@ -11,12 +11,10 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from ..endpoint_types import RegionDetail, ValidRegionType, ValidSource
+from ..endpoint_types import CountryParam, RegionDetail, ValidRegionType, ValidSource
 from ..helpers import (
-    CountryCode,
     _check_country_access,
     _check_region_type,
-    _country_config,
     _location_to_detail,
     _resolve_nation,
     _resolve_region_id,
@@ -29,7 +27,7 @@ router = APIRouter(tags=["Discovery"])
 @router.get("/{country}/{source}/regions", status_code=status.HTTP_200_OK)
 async def get_country_regions(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType | None = None,
@@ -49,13 +47,11 @@ async def get_country_regions(
     - ``?parent_id={uuid}``: children of a specific region.
     - ``?name=london``: regions whose name contains the given string.
     """
-
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-    nation = await _resolve_nation(db, source, cfg, auth)
+    _check_country_access(auth, country)
+    nation = await _resolve_nation(db, source, country, auth)
 
     if parent_id is not None:
-        rt = _check_region_type(cfg, region_type, country)
+        rt = _check_region_type(country, region_type, country.code)
         # Validate that parent_id is within the country, unless it IS the nation itself.
         if parent_id != nation.uuid:
             parent_location = await db.get_locations(
@@ -68,7 +64,7 @@ async def get_country_regions(
             if len(parent_location) == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Parent region with UUID '{parent_id}' not found in {country.upper()}.",
+                    detail=f"Parent region with UUID '{parent_id}' not found in {country.code}.",
                 )
         locs = await db.get_locations(
             energy_type=source,
@@ -76,12 +72,12 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=parent_id,
         )
-        return _apply_name_filter([_location_to_detail(loc, cfg) for loc in locs], name)
+        return _apply_name_filter([_location_to_detail(loc, country) for loc in locs], name)
 
     if region_type is not None:
-        rt = _check_region_type(cfg, region_type, country)
+        rt = _check_region_type(country, region_type, country.code)
         if rt.location_type == models.LocationType.NATION:
-            return _apply_name_filter([_location_to_detail(nation, cfg)], name)
+            return _apply_name_filter([_location_to_detail(nation, country)], name)
 
         locs = await db.get_locations(
             energy_type=source,
@@ -89,11 +85,11 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
-        return _apply_name_filter([_location_to_detail(loc, cfg) for loc in locs], name)
+        return _apply_name_filter([_location_to_detail(loc, country) for loc in locs], name)
 
     # No filters — combine all region types
     tasks = []
-    for rt in cfg.region_types:
+    for rt in country.region_types:
         if rt.location_type == models.LocationType.NATION:
             continue
         tasks.append(
@@ -105,12 +101,12 @@ async def get_country_regions(
             ),
         )
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    out: list[RegionDetail] = [_location_to_detail(nation, cfg)]
+    out: list[RegionDetail] = [_location_to_detail(nation, country)]
     for result in results:
         if isinstance(result, Exception):
             raise result
         for loc in result:
-            out.append(_location_to_detail(loc, cfg))
+            out.append(_location_to_detail(loc, country))
     return _apply_name_filter(out, name)
 
 
@@ -124,16 +120,14 @@ def _apply_name_filter(regions: list[RegionDetail], name: str | None) -> list[Re
 @router.get("/{country}/{source}/regions/{region_id}", status_code=status.HTTP_200_OK)
 async def get_region(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> RegionDetail:
     """Get details for a specific region."""
-
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
+    _check_country_access(auth, country)
+    resolved_id = await _resolve_region_id(region_id, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -146,4 +140,4 @@ async def get_region(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Region '{resolved_id}' not found.",
         )
-    return _location_to_detail(locs[0], cfg)
+    return _location_to_detail(locs[0], country)

@@ -19,6 +19,7 @@ from quartz_api.internal.service.uk_national.cache import key_builder
 
 from ..cache import _forecast_cache_warming, _warm_v1_forecast_cache
 from ..endpoint_types import (
+    CountryParam,
     ForecastResponse,
     ForecastSnapshot,
     ForecastValue,
@@ -28,18 +29,16 @@ from ..endpoint_types import (
     ValidForecastModel,
     ValidRegionType,
     ValidSource,
+    ValidWindowStart,
 )
 from ..helpers import (
-    CountryCode,
     _check_country_access,
-    _country_config,
     _resolve_forecast_model,
     _resolve_nation,
     _resolve_region_id,
     _timeseries_window,
     _to_uuid,
     _validate_model,
-    _validate_window,
 )
 
 router = APIRouter(tags=["Forecasts"])
@@ -51,14 +50,11 @@ router = APIRouter(tags=["Forecasts"])
 )
 async def get_forecast(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    start_utc: dt.datetime | None = Query(
-        None,
-        description="Start of forecast window (UTC).",
-    ),
+    start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
         None,
         description="End of forecast window (UTC).",
@@ -77,10 +73,8 @@ async def get_forecast(
     model: ValidForecastModel | None = None,
 ) -> ForecastResponse:
     """Get the forecast for a specific region."""
-
-    cfg = _country_config(country)
-    is_intraday_only = not _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
+    is_intraday_only = not _check_country_access(auth, country)
+    resolved_id = await _resolve_region_id(region_id, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -95,9 +89,8 @@ async def get_forecast(
         )
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
-    rt = cfg.location_type_to_region_type(location_type)
+    rt = country.location_type_to_region_type(location_type)
     _validate_model(model, rt, location_type.name)
-    _validate_window(start_utc)
     model = _resolve_forecast_model(model, rt, is_intraday_only)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -140,17 +133,15 @@ async def get_forecast(
 async def get_forecast_last_updated_timestamp(
     request: Request,
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     region_id: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     model: ValidForecastModel | None = None,
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region."""
-
-    cfg = _country_config(country)
-    is_intraday_only = not _check_country_access(auth, cfg)
-    resolved_id = await _resolve_region_id(region_id, cfg, source, db)
+    is_intraday_only = not _check_country_access(auth, country)
+    resolved_id = await _resolve_region_id(region_id, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -164,7 +155,7 @@ async def get_forecast_last_updated_timestamp(
             detail=f"Region '{resolved_id}' not found.",
         )
     location_type = locs[0].location_type or models.LocationType.NATION
-    rt = cfg.location_type_to_region_type(location_type)
+    rt = country.location_type_to_region_type(location_type)
     model = _resolve_forecast_model(model, rt, is_intraday_only)
 
     now = dt.datetime.now(tz=dt.UTC)
@@ -194,7 +185,7 @@ async def get_forecast_last_updated_timestamp(
 async def get_forecasts_at_time(
     request: Request,
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
@@ -206,16 +197,14 @@ async def get_forecasts_at_time(
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific timestamp."""
+    is_intraday_only = not _check_country_access(auth, country)
+    nation = await _resolve_nation(db, source, country, auth)
 
-    cfg = _country_config(country)
-    is_intraday_only = not _check_country_access(auth, cfg)
-    nation = await _resolve_nation(db, source, cfg, auth)
-
-    rt = cfg.get_region_type(region_type)
+    rt = country.get_region_type(region_type)
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+            detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
     _validate_model(model_name, rt, rt.type)
     model_name = _resolve_forecast_model(model_name, rt, is_intraday_only)
@@ -234,7 +223,7 @@ async def get_forecasts_at_time(
     if len(regions) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No regions found for type '{location_type}' in {country.upper()}.",
+            detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
     snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -276,7 +265,7 @@ async def get_forecasts_at_time(
 )
 async def get_forecasts_period(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
@@ -292,15 +281,13 @@ async def get_forecasts_period(
     Served from the pre-warmed per-region cache. Returns 503 if the cache has not
     yet been populated — retry after 60 seconds.
     """
+    _check_country_access(auth, country)
 
-    cfg = _country_config(country)
-    _check_country_access(auth, cfg)
-
-    rt = cfg.get_region_type(region_type)
+    rt = country.get_region_type(region_type)
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown region type '{region_type}' for {country.upper()}.",
+            detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
@@ -313,7 +300,7 @@ async def get_forecasts_period(
     #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:_meta   — shared model metadata
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:{country.upper()}:{source.name.lower()}:{region_type}"
+    base = f"{prefix}:v1:timeseries:{country.code}:{source.name.lower()}:{region_type}"
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:
@@ -323,7 +310,7 @@ async def get_forecasts_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await _resolve_nation(db, source, cfg, auth)
+    nation = await _resolve_nation(db, source, country, auth)
     regions = await db.get_locations(
         energy_type=source,
         location_type=rt.location_type,
@@ -334,7 +321,7 @@ async def get_forecasts_period(
     if len(regions) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No regions found for type '{rt.type}' in {country.upper()}.",
+            detail=f"No regions found for type '{rt.type}' in {country.code}.",
         )
 
     if region_ids is not None:
@@ -374,7 +361,7 @@ async def get_forecasts_period(
 )
 async def refresh_forecasts_cache(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     background_tasks: BackgroundTasks,
     request: Request,
     auth: AuthDependency,
@@ -383,14 +370,14 @@ async def refresh_forecasts_cache(
     """Trigger a background re-warm of the forecast period cache. Requires ocf:admin."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    flag_key = f"{source.name.lower()}:{country}:{region_type}"
+    flag_key = f"{source.name.lower()}:{country.code}:{region_type}"
     if _forecast_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
         _warm_v1_forecast_cache,
         request.app,
         source,
-        country,
+        country.code,
         region_type,
     )
     return Response(status_code=202, content="Cache refresh triggered")

@@ -12,13 +12,13 @@ from ..country_config import COUNTRIES
 from ..endpoint_types import (
     Centroid,
     CountryDetail,
+    CountryParam,
     ForecastModel,
     GenerationSource,
     RegionType,
     Source,
     ValidSource,
 )
-from ..helpers import CountryCode, _country_config
 
 router = APIRouter(tags=["Discovery"])
 
@@ -85,12 +85,10 @@ async def get_countries(
 @router.get("/{country}/{source}/region-types", status_code=status.HTTP_200_OK)
 async def get_region_types(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     auth: AuthDependency,
 ) -> list[RegionType]:
     """List available region types for a country."""
-
-    cfg = _country_config(country)
     return [
         RegionType(
             type=rt.type,
@@ -101,17 +99,15 @@ async def get_region_types(
                 ForecastModel(name=f.name, label=f.label) for f in rt.forecast_models
             ],
         )
-        for rt in cfg.region_types
+        for rt in country.region_types
     ]
 
 
 @router.get("/{country}/{source}/generation-sources", status_code=status.HTTP_200_OK)
 async def get_generation_sources(
     source: ValidSource,
-    country: CountryCode,
+    country: CountryParam,
     auth: AuthDependency,
 ) -> list[GenerationSource]:
     """List available generation sources for a country."""
-
-    cfg = _country_config(country)
-    return [s for s in cfg.generation_sources if s.source == source.name.lower()]
+    return [s for s in country.generation_sources if s.source == source.name.lower()]

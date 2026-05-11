@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Path, Query
-from pydantic import BaseModel, BeforeValidator, Field, field_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, field_validator
 
 from quartz_api.internal import models
 
@@ -91,6 +91,61 @@ ValidSource = Annotated[
         examples=["solar"],
     ),
 ]
+
+
+class _CountryParam(str):
+    """Country code path param — a str that proxies its CountryConfig attributes."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type: object, handler: object) -> object:
+        from pydantic_core import core_schema
+
+        def validate(v: object) -> "_CountryParam":
+            if isinstance(v, cls):
+                return v
+            upper = v.upper() if isinstance(v, str) else str(v).upper()  # type: ignore[union-attr]
+            if upper not in COUNTRIES:
+                raise ValueError(
+                    f"Unknown country '{v}'. Supported: {sorted(COUNTRIES.keys())}",
+                )
+            return cls(upper)
+
+        return core_schema.no_info_plain_validator_function(validate)  # type: ignore[return-value]
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema_obj: object, handler: object) -> dict:
+        return {"type": "string", "enum": list(COUNTRIES.keys())}
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(COUNTRIES[str(self)], name)
+
+
+CountryParam = Annotated[
+    _CountryParam,
+    Path(description="Country code."),
+]
+
+
+def _check_window_start(v: dt.datetime | None) -> dt.datetime | None:
+    if v is None:
+        return None
+    earliest = dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=365)
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=dt.UTC)
+    if v < earliest:
+        raise ValueError(
+            "start_utc exceeds the 1-year rolling data limit. "
+            "Contact us at quartz@openclimatefix.org for access to extended history.",
+        )
+    return v
+
+
+ValidWindowStart = Annotated[
+    dt.datetime | None,
+    Query(description="Start of window (UTC)."),
+    AfterValidator(_check_window_start),
+]
+
 
 ValidObserver = Annotated[
     str,
