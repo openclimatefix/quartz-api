@@ -242,33 +242,14 @@ async def get_forecasts_at_time(
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 
-    if location_type == models.LocationType.NATION:
-        # Fallback: GetForecastAtTimestamp historically did not support NATION UUIDs.
-        # Pull a ±30-min timeseries and pick the value nearest the snapshot time.
-        pgvs = await db.get_predicted_generation(
-            location_uuid=nation.uuid,
-            window_start=snapshot_time - dt.timedelta(minutes=30),
-            window_end=snapshot_time + dt.timedelta(minutes=30),
-            energy_type=energy_type,
-            location_type=models.LocationType.NATION,
-            authdata={},  # TODO: add auth when loosed on DP side
-            forecaster_name=model_name,
-            forecaster_version=model_version,
-        )
-        snapshot = (
-            [min(pgvs, key=lambda v: abs(v.valid_timestamp - snapshot_time))]
-            if pgvs
-            else []
-        )
-    else:
-        snapshot = await db.get_predicted_generation_snapshot(
-            location_uuids=[_to_uuid(r.uuid) for r in regions],
-            forecaster_name=model_name,
-            forecaster_version=model_version,
-            snapshot_timestamp_utc=snapshot_time,
-            energy_type=energy_type,
-            authdata=auth,
-        )
+    snapshot = await db.get_predicted_generation_snapshot(
+        location_uuids=[_to_uuid(r.uuid) for r in regions],
+        forecaster_name=model_name,
+        forecaster_version=model_version,
+        snapshot_timestamp_utc=snapshot_time,
+        energy_type=energy_type,
+        authdata=auth,
+    )
 
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
