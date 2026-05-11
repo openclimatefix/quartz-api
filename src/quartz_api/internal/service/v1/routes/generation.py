@@ -247,22 +247,27 @@ async def get_generation_period(
         regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
-    region_series: list[RegionGeneration] = []
+    all_region_data: list[tuple] = []
     for r, raw in zip(regions, raw_list, strict=True):
         if raw is None:
             continue
         all_values = [GenerationValue.model_validate(v) for v in json.loads(raw)]
         windowed = [v for v in all_values if win_start <= v.time <= win_end]
+        all_region_data.append((r, windowed))
+
+    times = [v.time for v in all_region_data[0][1]] if all_region_data else []
+    region_series: list[RegionGeneration] = []
+    for r, windowed in all_region_data:
         region_series.append(
             RegionGeneration(
                 region_id=_to_uuid(r.uuid),
                 capacity_kW=r.capacity_kilowatts,
-                values=windowed,
+                power_kW=[v.power_kW for v in windowed],
             ),
         )
 
     metadata = json.loads(raw_meta)
-    return RegionGenerationMatrix(**metadata, regions=region_series)
+    return RegionGenerationMatrix(**metadata, times=times, regions=region_series)
 
 
 @router.post(

@@ -689,10 +689,11 @@ async def test_get_forecasts_period_window_includes_cached_values(
         },
     )
     assert resp.status_code == 200
-    regions = resp.json()["regions"]
+    body = resp.json()
+    regions = body["regions"]
     assert len(regions) == 1
-    assert len(regions[0]["values"]) == 1
-    assert regions[0]["values"][0]["power_kW"] == 100.0
+    assert len(body["times"]) == 1
+    assert regions[0]["power_kW"] == [100.0]
 
 
 @pytest.mark.anyio
@@ -720,9 +721,9 @@ async def test_get_forecasts_period_window_excludes_out_of_range_values(
         },
     )
     assert resp.status_code == 200
-    regions = resp.json()["regions"]
-    assert len(regions) == 1
-    assert regions[0]["values"] == []
+    body = resp.json()
+    assert body["times"] == []
+    assert body["regions"][0]["power_kW"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -1244,10 +1245,11 @@ async def test_get_generation_period_start_and_end_utc(
         },
     )
     assert resp.status_code == 200
-    regions = resp.json()["regions"]
+    body = resp.json()
+    regions = body["regions"]
     assert len(regions) == 1
-    assert len(regions[0]["values"]) == 1
-    assert regions[0]["values"][0]["power_kW"] == 111.0
+    assert len(body["times"]) == 1
+    assert regions[0]["power_kW"] == [111.0]
 
 
 @pytest.mark.anyio

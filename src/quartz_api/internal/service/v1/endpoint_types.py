@@ -241,7 +241,8 @@ class RegionForecast(BaseModel):
 
     region_id: UUID
     capacity_kW: float
-    values: list[ForecastValue]
+    power_kW: list[float]
+    plevels_kW: dict[str, list[float]] = Field(default_factory=dict)
 
 
 class RegionForecastMatrix(BaseModel):
@@ -251,6 +252,7 @@ class RegionForecastMatrix(BaseModel):
     model_version: str | None = None
     created_time: dt.datetime | None = None
     init_time: dt.datetime | None = None
+    times: list[dt.datetime]
     regions: list[RegionForecast]
 
 
@@ -259,11 +261,12 @@ class RegionGeneration(BaseModel):
 
     region_id: UUID
     capacity_kW: float
-    values: list[GenerationValue]
+    power_kW: list[float]
 
 
 class RegionGenerationMatrix(BaseModel):
     """Observed generation time series for all regions across a time window."""
 
     observer_name: str | None = None
+    times: list[dt.datetime]
     regions: list[RegionGeneration]
