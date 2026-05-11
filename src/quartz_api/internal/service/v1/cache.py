@@ -97,16 +97,15 @@ async def _warm_v1_forecast_cache(
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
 
-        if first_pgv:
-            created = first_pgv.created_timestamp
-            init = first_pgv.init_timestamp
-            meta = {
-                "model_name": first_pgv.forecaster_name,
-                "model_version": first_pgv.forecaster_version,
-                "created_time": created.isoformat() if created else None,
-                "init_time": init.isoformat() if init else None,
-            }
-            await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
+        created = first_pgv.created_timestamp if first_pgv else None
+        init = first_pgv.init_timestamp if first_pgv else None
+        meta = {
+            "model_name": first_pgv.forecaster_name if first_pgv else None,
+            "model_version": first_pgv.forecaster_version if first_pgv else None,
+            "created_time": created.isoformat() if created else None,
+            "init_time": init.isoformat() if init else None,
+        }
+        await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
 
         log.info(
             "v1 forecast cache warmed: %s/%s/%s — %d regions",
