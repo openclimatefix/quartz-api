@@ -71,9 +71,14 @@ def _location_to_detail(
     )
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
+    display_name = (
+        country_cfg.display_name
+        if loc.location_type == models.LocationType.NATION
+        else loc.name
+    )
     return RegionDetail(
         id=loc.uuid,
-        name=loc.name,
+        name=display_name,
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
@@ -160,7 +165,7 @@ async def _resolve_region_id(
 
     # Name search across all region types within this country.
     needle = region_id.lower()
-    if needle == nation.name.lower():
+    if needle in (nation.name.lower(), cfg.display_name.lower()):
         return nation.uuid
     for rt in cfg.region_types:
         if rt.location_type == models.LocationType.NATION:

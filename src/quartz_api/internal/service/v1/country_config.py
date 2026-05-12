@@ -90,7 +90,8 @@ class CountryConfig:
     """Configuration for a country."""
 
     code: str
-    nation_name: str
+    nation_name: str  # internal DP location name — used only for DB lookups
+    display_name: str  # user-facing nation name returned in API responses
     region_types: tuple[RegionTypeConfig, ...]
     generation_sources: tuple[GenerationSource, ...] = ()
     permission: str = ""
@@ -235,6 +236,7 @@ COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         code="GB",
         nation_name="uk",
+        display_name="GB",
         permission="read:gb",
         intraday_permission="read:uk-intraday",
         region_types=(
@@ -278,6 +280,7 @@ COUNTRIES: dict[str, CountryConfig] = {
     "NL": CountryConfig(
         code="NL",
         nation_name="nl_national",
+        display_name="NL",
         permission="read:nl",
         region_types=(
             RegionTypeConfig(
