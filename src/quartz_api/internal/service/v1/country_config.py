@@ -281,7 +281,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_NL_NATIONAL_FORECAST_MODELS,
-                default_model="blend_adjust",
+                default_model="nl_blend_adjust",
             ),
             RegionTypeConfig(
                 type="provinces",
@@ -290,7 +290,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.REGION,
                 source_types=("solar",),
                 forecast_models=_NL_REGIONAL_FORECAST_MODELS,
-                default_model="blend_adjust",
+                default_model="nl_blend_adjust",
                 metadata_fields=("region_id",),
             ),
         ),
