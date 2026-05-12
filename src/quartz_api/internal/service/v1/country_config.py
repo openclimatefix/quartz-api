@@ -169,7 +169,7 @@ FORECASTER_LABELS: dict[str, str] = {
     "nl_national_pv_ecmwf_sat_small": "National PV (ECMWF + Satellite)",
     "nl_36_simple_site_adjust": "36h Simple Site (Trend Adjusted)",
     "nl_36_simple_site": "36h Simple Site",
-    "ned_nl_national": "NED National",
+    "ned_nl_national": "NED NL",
 }
 
 
@@ -224,7 +224,6 @@ _GB_GSP_FORECAST_MODELS = (
 _NL_NATIONAL_FORECAST_MODELS = (
     _model("nl_blend", slug="blend"),
     _model("nl_blend_adjust", slug="blend_adjust"),
-    _model("ned_nl_national", slug="ned_nl"),
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
