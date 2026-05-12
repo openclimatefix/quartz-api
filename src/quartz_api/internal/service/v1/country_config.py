@@ -179,17 +179,20 @@ _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
     "pvnet_v2_adjust",
 )
 
-# Intraday ForecastModel entries shared across GB national, GSP, and DNO.
+# Intraday ForecastModel entries shared across GB national and GSP.
 _GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
     _model("pvnet_intra_sat30"),
-    _model("pvnet_intra_sat30_adjust"),
     _model("pvnet_ecmwf"),
-    _model("pvnet_ecmwf_adjust"),
     _model("pvnet_sat_only"),
-    _model("pvnet_sat_only_adjust"),
     _model("pvnet_ukv_only"),
-    _model("pvnet_ukv_only_adjust"),
     _model("pvnet_v2", slug="pvnet_intraday"),
+)
+
+_GB_INTRADAY_FORECAST_MODELS_ADJUSTED: tuple[ForecastModel, ...] = (
+    _model("pvnet_intra_sat30_adjust"),
+    _model("pvnet_ecmwf_adjust"),
+    _model("pvnet_sat_only_adjust"),
+    _model("pvnet_ukv_only_adjust"),
     _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
 )
 
@@ -197,13 +200,13 @@ _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
     *_GB_INTRADAY_FORECAST_MODELS,
+    *_GB_INTRADAY_FORECAST_MODELS_ADJUSTED,
     _model("pvnet_day_ahead"),
     _model("pvnet_day_ahead_adjust"),
 )
 
 _GB_GSP_FORECAST_MODELS = (
     _model("blend"),
-    _model("blend_adjust"),
     *_GB_INTRADAY_FORECAST_MODELS,
 )
 
@@ -243,17 +246,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.GSP,
                 source_types=("solar",),
                 forecast_models=_GB_GSP_FORECAST_MODELS,
-                default_model="blend_adjust",
+                default_model="blend",
                 metadata_fields=("gsp_id", "full_name"),
                 intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_v2_adjust",
-            ),
-            RegionTypeConfig(
-                type="dno",
-                label="Distribution Network Operator",
-                level=20,
-                location_type=LocationType.DNO,
-                source_types=("solar",),
+                intraday_default_model="pvnet_v2",
             ),
         ),
         generation_sources=(

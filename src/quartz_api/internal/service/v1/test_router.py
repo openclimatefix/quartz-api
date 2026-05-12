@@ -1285,8 +1285,8 @@ async def test_get_generation_period_region_ids_filter(client: AsyncClient) -> N
 async def test_refresh_forecasts_non_default_region_type(
     admin_client: AsyncClient,
 ) -> None:
-    """refresh endpoint accepts non-default region_type (dno) — returns 202."""
-    resp = await admin_client.post("/v1/GB/solar/forecasts/refresh?region_type=dno")
+    """refresh endpoint accepts non-default region_type (national) — returns 202."""
+    resp = await admin_client.post("/v1/GB/solar/forecasts/refresh?region_type=national")
     assert resp.status_code == 202
 
 
