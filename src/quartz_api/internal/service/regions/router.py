@@ -38,7 +38,7 @@ async def get_sources_route(
     return GetSourcesResponse(
         sources=[
             "solar",
-        ]
+        ],
     )
 
 
