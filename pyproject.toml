@@ -37,6 +37,7 @@ dependencies = [
     "gunicorn>=25.3.0",
     "jinja2>=3.1.6",
     "scalar-fastapi>=1.8.2",
+    "protobuf>=7.34.1",
 ]
 
 [dependency-groups]

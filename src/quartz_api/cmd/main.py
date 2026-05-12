@@ -56,7 +56,7 @@ class GetHealthResponse(BaseModel):
 
 
 def _custom_openapi(
-    server: FastAPI, auth_config: dict[str, str] | None = None
+    server: FastAPI, auth_config: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
@@ -128,7 +128,7 @@ def _custom_openapi(
 
 
 def _create_v1_app(
-    conf: ConfigTree, auth_openapi_config: dict[str, str] | None
+    conf: ConfigTree, auth_openapi_config: dict[str, str] | None,
 ) -> FastAPI:
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
@@ -244,7 +244,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
 def _create_server(conf: ConfigTree) -> FastAPI:
     """Configure FastAPI app instance with routes, dependencies, and middleware."""
     setup_json_logging(
-        level=logging.getLevelName(conf.get_string("api.loglevel").upper())
+        level=logging.getLevelName(conf.get_string("api.loglevel").upper()),
     )
     description = "API providing access to OCF's Quartz Forecasts."
     server = FastAPI(
@@ -308,7 +308,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 server.include_router(mod.router)
 
                 mod_description = getattr(
-                    mod, "__doc__", f"TODO: Add description for {r}"
+                    mod, "__doc__", f"TODO: Add description for {r}",
                 )
                 description = mod_description
 
@@ -404,7 +404,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
 
 conf = ConfigFactory.parse_file(
-    (pathlib.Path(__file__).parent / "server.conf").as_posix()
+    (pathlib.Path(__file__).parent / "server.conf").as_posix(),
 )
 server = _create_server(conf)
 
