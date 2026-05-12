@@ -151,6 +151,9 @@ FORECASTER_LABELS: dict[str, str] = {
     "pvnet_v2_adjust": "PVNet v2 (Trend Adjusted)",
     "pvnet_cloud": "PVNet Cloud",
     "pvnet_cloud_adjust": "PVNet Cloud (Trend Adjusted)",
+    # NL — blend (same display names as GB blend)
+    "nl_blend": "Blend",
+    "nl_blend_adjust": "Blend (Trend Adjusted)",
     # NL — regional
     "nl_regional_pv_ecmwf_mo_sat_adjust": "Regional PV (ECMWF + Met Office + Satellite, Trend Adjusted)",  # noqa: E501
     "nl_regional_pv_ecmwf_mo_sat": "Regional PV (ECMWF + Met Office + Satellite)",
@@ -218,14 +221,14 @@ _GB_GSP_FORECAST_MODELS = (
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
-    _model("nl_blend"),
-    _model("nl_blend_adjust"),
+    _model("nl_blend", slug="blend"),
+    _model("nl_blend_adjust", slug="blend_adjust"),
     _model("ned_nl_national"),
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
-    _model("nl_blend"),
-    _model("nl_blend_adjust"),
+    _model("nl_blend", slug="blend"),
+    _model("nl_blend_adjust", slug="blend_adjust"),
 )
 
 COUNTRIES: dict[str, CountryConfig] = {

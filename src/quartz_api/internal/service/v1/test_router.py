@@ -1505,10 +1505,10 @@ async def test_nl_regions_invalid_type_gsp_400(nl_client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_nl_forecast_default_model(nl_client: AsyncClient) -> None:
-    """NL national forecast returns nl_blend_adjust as the default model."""
+    """NL national forecast returns blend_adjust as the default model."""
     resp = await nl_client.get("/v1/NL/solar/regions/national/forecast")
     assert resp.status_code == 200
-    assert resp.json()["model_name"] == "nl_blend_adjust"
+    assert resp.json()["model_name"] == "blend_adjust"
 
 
 @pytest.mark.anyio
