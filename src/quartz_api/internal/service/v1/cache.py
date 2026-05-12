@@ -9,7 +9,7 @@ from fastapi_cache import FastAPICache
 from quartz_api.internal import models
 
 from .country_config import COUNTRIES
-from .helpers import _timeseries_window, _to_uuid
+from .helpers import _internal_to_api_name, _timeseries_window, _to_uuid
 
 log = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ async def _warm_v1_forecast_cache(
         created = first_pgv.created_timestamp if first_pgv else None
         init = first_pgv.init_timestamp if first_pgv else None
         meta = {
-            "model_name": first_pgv.forecaster_name if first_pgv else None,
+            "model_name": _internal_to_api_name(first_pgv.forecaster_name if first_pgv else None, rt),
             "model_version": first_pgv.forecaster_version if first_pgv else None,
             "created_time": created.isoformat() if created else None,
             "init_time": init.isoformat() if init else None,

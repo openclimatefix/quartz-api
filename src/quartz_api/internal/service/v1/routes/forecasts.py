@@ -33,6 +33,7 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     _check_country_access,
+    _internal_to_api_name,
     _resolve_forecast_model,
     _resolve_nation,
     _resolve_region_id,
@@ -136,7 +137,7 @@ async def get_forecast(
     first = pgvs[0] if pgvs else None
     return ForecastResponse(
         capacity_kW=first.capacity_kilowatts if first else 0.0,
-        model_name=first.forecaster_name if first else None,
+        model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
         created_time=first.created_timestamp if first else None,
         init_time=first.init_timestamp if first else None,
@@ -298,7 +299,7 @@ async def get_forecasts_at_time(
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
         time=snapshot_time,
-        model_name=first.forecaster_name if first else None,
+        model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
         created_time=first.created_timestamp if first else None,
         init_time=first.init_timestamp if first else None,

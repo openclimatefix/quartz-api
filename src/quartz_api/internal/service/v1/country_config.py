@@ -61,6 +61,13 @@ class RegionTypeConfig:
                 return fm
         return None
 
+    def default_model_api_name(self) -> str | None:
+        """User-facing API name for the default forecast model."""
+        if self.default_model is None:
+            return None
+        fm = self.get_model_by_internal_name(self.default_model)
+        return fm.api_name if fm else self.default_model
+
     def intraday_api_names(self) -> frozenset[str]:
         """Return the set of user-facing names for models in intraday_models."""
         internal = frozenset(self.intraday_models)
@@ -133,12 +140,12 @@ FORECASTER_LABELS: dict[str, str] = {
     "pvnet_da_ukv": "PVNet Day Ahead (UKV)",
     "pvnet_da_ukv_adjust": "PVNet Day Ahead (UKV, Trend Adjusted)",
     # GB — PVNet single-input intraday
-    "pvnet_ecmwf": "PVNet Intraday (ECMWF only)",
-    "pvnet_ecmwf_adjust": "PVNet Intraday (ECMWF only, Trend Adjusted)",
-    "pvnet_sat_only": "PVNet Intraday (Satellite only)",
-    "pvnet_sat_only_adjust": "PVNet Intraday (Satellite only, Trend Adjusted)",
-    "pvnet_ukv_only": "PVNet Intraday (Met Office only)",
-    "pvnet_ukv_only_adjust": "PVNet Intraday (Met Office only, Trend Adjusted)",
+    "pvnet_ecmwf": "PVNet Intraday (ECMWF)",
+    "pvnet_ecmwf_adjust": "PVNet Intraday (ECMWF, Trend Adjusted)",
+    "pvnet_sat_only": "PVNet Intraday (Satellite)",
+    "pvnet_sat_only_adjust": "PVNet Intraday (Satellite, Trend Adjusted)",
+    "pvnet_ukv_only": "PVNet Intraday (Met Office)",
+    "pvnet_ukv_only_adjust": "PVNet Intraday (Met Office, Trend Adjusted)",
     # GB — PVNet v2 / cloud
     "pvnet_v2": "PVNet v2",
     "pvnet_v2_adjust": "PVNet v2 (Trend Adjusted)",
@@ -183,16 +190,16 @@ _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
 _GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
     _model("pvnet_intra_sat30"),
     _model("pvnet_ecmwf"),
-    _model("pvnet_sat_only"),
-    _model("pvnet_ukv_only"),
+    _model("pvnet_sat_only", slug="pvnet_sat"),
+    _model("pvnet_ukv_only", slug="pvnet_ukv"),
     _model("pvnet_v2", slug="pvnet_intraday"),
 )
 
 _GB_INTRADAY_FORECAST_MODELS_ADJUSTED: tuple[ForecastModel, ...] = (
     _model("pvnet_intra_sat30_adjust"),
     _model("pvnet_ecmwf_adjust"),
-    _model("pvnet_sat_only_adjust"),
-    _model("pvnet_ukv_only_adjust"),
+    _model("pvnet_sat_only_adjust", slug="pvnet_sat_adjust"),
+    _model("pvnet_ukv_only_adjust", slug="pvnet_ukv_adjust"),
     _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
 )
 

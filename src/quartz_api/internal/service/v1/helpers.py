@@ -260,6 +260,14 @@ def _resolve_forecast_model(
     return None
 
 
+def _internal_to_api_name(internal_name: str | None, rt: RegionTypeConfig | None) -> str | None:
+    """Translate an internal DP forecaster name to its user-facing API slug."""
+    if internal_name is None or rt is None:
+        return internal_name
+    fm = rt.get_model_by_internal_name(internal_name)
+    return fm.api_name if fm else internal_name
+
+
 def _timeseries_window(
     start_utc: dt.datetime | None,
     end_utc: dt.datetime | None,

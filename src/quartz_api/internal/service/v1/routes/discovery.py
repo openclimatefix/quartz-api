@@ -80,9 +80,9 @@ async def get_countries(
                         type=rt.type,
                         label=rt.label,
                         level=rt.level,
-                        default_model=rt.default_model,
+                        default_model=rt.default_model_api_name(),
                         forecast_models=[
-                            ForecastModel(name=f.name, label=f.label)
+                            ForecastModel(name=f.api_name, label=f.label)
                             for f in rt.forecast_models
                         ],
                     )
@@ -127,7 +127,7 @@ async def get_region_types(
             level=rt.level,
             default_model=rt.default_model,
             forecast_models=[
-                ForecastModel(name=f.name, label=f.label) for f in rt.forecast_models
+                ForecastModel(name=f.api_name, label=f.label) for f in rt.forecast_models
             ],
         )
         for rt in country.region_types
