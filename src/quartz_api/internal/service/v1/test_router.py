@@ -199,7 +199,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -210,7 +211,8 @@ async def admin_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["ocf:admin", "read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -221,7 +223,8 @@ async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), [])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -232,7 +235,8 @@ async def intraday_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:uk-intraday"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -243,7 +247,8 @@ async def trial_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:trial"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -254,7 +259,8 @@ async def nl_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationNameStorageClient("nl_national"), ["read:nl"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -265,7 +271,8 @@ async def nl_trial_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationNameStorageClient("nl_national"), ["read:trial"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -276,7 +283,8 @@ async def fixed_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -287,7 +295,8 @@ async def null_uuid_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NullLocationsForUUIDClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -298,7 +307,8 @@ async def nation_response_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(NationResponseClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -309,7 +319,8 @@ async def empty_forecast_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(EmptyForecastClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -320,7 +331,8 @@ async def fixed_uuid_generation_client() -> AsyncGenerator[AsyncClient, None]:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -847,8 +859,8 @@ async def test_get_regions_name_filter_is_case_insensitive(client: AsyncClient) 
 
 @pytest.mark.anyio
 async def test_get_regions_region_type_wrong_country_400(client: AsyncClient) -> None:
-    """Region type valid for NL (provinces) is unknown for GB → 400."""
-    resp = await client.get("/v1/GB/solar/regions?region_type=provinces")
+    """Region type valid for NL (province) is unknown for GB → 400."""
+    resp = await client.get("/v1/GB/solar/regions?region_type=province")
     assert resp.status_code == 400
 
 
@@ -1310,9 +1322,9 @@ async def test_country_lowercase_200(client: AsyncClient) -> None:
 async def test_get_forecasts_snapshot_invalid_region_type_for_country_400(
     client: AsyncClient,
 ) -> None:
-    """provinces is unknown for GB → 400 (valid for NL but not GB)."""
+    """province is unknown for GB → 400 (valid for NL but not GB)."""
     resp = await client.get(
-        "/v1/GB/solar/forecasts/snapshot?region_type=provinces",
+        "/v1/GB/solar/forecasts/snapshot?region_type=province",
     )
     assert resp.status_code == 400
 
@@ -1321,9 +1333,9 @@ async def test_get_forecasts_snapshot_invalid_region_type_for_country_400(
 async def test_get_generation_snapshot_invalid_region_type_for_country_400(
     client: AsyncClient,
 ) -> None:
-    """provinces is unknown for GB → 400 on generation snapshot too."""
+    """province is unknown for GB → 400 on generation snapshot too."""
     resp = await client.get(
-        "/v1/GB/solar/generation/snapshot?region_type=provinces",
+        "/v1/GB/solar/generation/snapshot?region_type=province",
     )
     assert resp.status_code == 400
 
@@ -1348,7 +1360,8 @@ async def test_data_route_wrong_country_returns_403() -> None:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:nl"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
     assert resp.status_code == 403
@@ -1369,7 +1382,8 @@ async def test_data_route_partner_permission_grants_access() -> None:
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:partner"])
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
     assert resp.status_code == 200
@@ -1446,12 +1460,12 @@ async def test_intraday_user_can_access_generation_data(
 
 @pytest.mark.anyio
 async def test_nl_region_types_are_accessible(nl_client: AsyncClient) -> None:
-    """NL region-types discovery is public and returns national + provinces."""
+    """NL region-types discovery is public and returns national + province."""
     resp = await nl_client.get("/v1/NL/solar/region-types")
     assert resp.status_code == 200
     types = {rt["type"] for rt in resp.json()}
     assert "national" in types
-    assert "provinces" in types
+    assert "province" in types
     assert "gsp" not in types
 
 
@@ -1478,8 +1492,8 @@ async def test_nl_regions_accessible_with_read_nl(nl_client: AsyncClient) -> Non
 
 @pytest.mark.anyio
 async def test_nl_regions_provinces_type(nl_client: AsyncClient) -> None:
-    """provinces is a valid region type for NL → 200."""
-    resp = await nl_client.get("/v1/NL/solar/regions?region_type=provinces")
+    """province is a valid region type for NL → 200."""
+    resp = await nl_client.get("/v1/NL/solar/regions?region_type=province")
     assert resp.status_code == 200
 
 

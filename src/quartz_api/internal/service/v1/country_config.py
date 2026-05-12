@@ -284,8 +284,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 default_model="nl_blend_adjust",
             ),
             RegionTypeConfig(
-                type="provinces",
-                label="Provinces",
+                type="province",
+                label="Province",
                 level=10,
                 location_type=LocationType.REGION,
                 source_types=("solar",),
