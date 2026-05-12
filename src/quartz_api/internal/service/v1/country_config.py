@@ -223,7 +223,7 @@ _GB_GSP_FORECAST_MODELS = (
 _NL_NATIONAL_FORECAST_MODELS = (
     _model("nl_blend", slug="blend"),
     _model("nl_blend_adjust", slug="blend_adjust"),
-    _model("ned_nl_national"),
+    _model("ned_nl_national", slug="ned_nl"),
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (
