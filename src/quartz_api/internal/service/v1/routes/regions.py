@@ -11,7 +11,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from ..endpoint_types import CountryParam, RegionDetail, ValidRegionType, ValidSource
+from ..endpoint_types import CountryParam, OptionalValidRegionType, RegionDetail, ValidSource
 from ..helpers import (
     _check_country_access,
     _check_region_type,
@@ -30,7 +30,7 @@ async def get_country_regions(
     country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: ValidRegionType | None = None,
+    region_type: OptionalValidRegionType = None,
     parent_id: UUID | None = Query(
         None,
         description="List children of a specific region.",

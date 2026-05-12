@@ -53,14 +53,26 @@ def _get_region_type_names() -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
+_REGION_TYPE_DESCRIPTION = (
+    "Region type slug (e.g. 'gsp', 'national'). "
+    "Valid values are country-specific — see `/{country}/{source}/region-types`. "
+    "The enum lists all types across all countries."
+)
+
 ValidRegionType = Annotated[
     str,
     Query(
-        description=(
-            "Region type slug (e.g. 'gsp', 'national'). "
-            "Valid values are country-specific — see `/{country}/{source}/region-types`. "
-            "The enum lists all types across all countries."
-        ),
+        description=_REGION_TYPE_DESCRIPTION,
+        enum=list(_get_region_type_names()),
+    ),
+]
+
+# Optional variant: Annotated wraps str | None so FastAPI propagates the enum
+# even when the parameter is not required.
+OptionalValidRegionType = Annotated[
+    str | None,
+    Query(
+        description=_REGION_TYPE_DESCRIPTION,
         enum=list(_get_region_type_names()),
     ),
 ]
