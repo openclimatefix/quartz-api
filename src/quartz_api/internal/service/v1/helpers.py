@@ -59,6 +59,13 @@ def _location_to_summary(
     )
 
 
+def _location_display_name(loc: models.Location, country_cfg: CountryConfig) -> str:
+    """Return the user-facing name for a location, applying nation display_name override."""
+    if loc.location_type == models.LocationType.NATION:
+        return country_cfg.display_name
+    return loc.name
+
+
 def _location_to_detail(
     loc: models.Location,
     country_cfg: CountryConfig,
@@ -71,14 +78,9 @@ def _location_to_detail(
     )
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
-    display_name = (
-        country_cfg.display_name
-        if loc.location_type == models.LocationType.NATION
-        else loc.name
-    )
     return RegionDetail(
         id=loc.uuid,
-        name=display_name,
+        name=_location_display_name(loc, country_cfg),
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),

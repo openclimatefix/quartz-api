@@ -260,6 +260,8 @@ class ForecastValue(BaseModel):
 class ForecastResponse(BaseModel):
     """Forecast time series for a region, with shared metadata."""
 
+    region_id: UUID
+    region_name: str
     capacity_kW: float
     model_name: str | None = None
     model_version: str | None = None
@@ -278,6 +280,8 @@ class GenerationValue(BaseModel):
 class GenerationResponse(BaseModel):
     """Observed generation time series for a region, with shared metadata."""
 
+    region_id: UUID
+    region_name: str
     capacity_kW: float
     observer_name: str | None = None
     values: list[GenerationValue]
@@ -287,6 +291,7 @@ class RegionForecastValue(BaseModel):
     """A single forecast value for one region — used in snapshot responses."""
 
     region_id: UUID
+    region_name: str
     capacity_kW: float
     power_kW: float
     plevels_kW: dict[str, float] = Field(default_factory=dict)
@@ -307,6 +312,7 @@ class RegionGenerationValue(BaseModel):
     """A single observed generation value for one region — used in snapshot responses."""
 
     region_id: UUID
+    region_name: str
     capacity_kW: float
     power_kW: float
 
@@ -323,6 +329,7 @@ class RegionForecast(BaseModel):
     """Forecast time series for one region — used in matrix responses."""
 
     region_id: UUID
+    region_name: str
     capacity_kW: float
     power_kW: list[float]
     plevels_kW: dict[str, list[float]] = Field(default_factory=dict)
@@ -343,6 +350,7 @@ class RegionGeneration(BaseModel):
     """Generation time series for one region — used in matrix responses."""
 
     region_id: UUID
+    region_name: str
     capacity_kW: float
     power_kW: list[float]
 

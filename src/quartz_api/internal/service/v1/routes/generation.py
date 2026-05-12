@@ -33,6 +33,7 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     _check_country_access,
+    _location_display_name,
     _resolve_nation,
     _resolve_region_id,
     _timeseries_window,
@@ -112,6 +113,8 @@ async def get_generation(
 
     first = agvs[0] if agvs else None
     return GenerationResponse(
+        region_id=_to_uuid(region.uuid),
+        region_name=_location_display_name(region, country),
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         observer_name=observer,
         values=[
@@ -197,12 +200,14 @@ async def get_generation_at_timestamp(
         authdata=auth,
     )
 
+    region_names = {_to_uuid(r.uuid): _location_display_name(r, country) for r in regions}
     return GenerationSnapshot(
         time=snapshot_time,
         observer_name=observer,
         values=[
             RegionGenerationValue(
                 region_id=v.location_uuid,
+                region_name=region_names.get(v.location_uuid, ""),
                 capacity_kW=v.capacity_kilowatts,
                 power_kW=v.power_kilowatts,
             )
@@ -316,6 +321,7 @@ async def get_generation_period(
         region_series.append(
             RegionGeneration(
                 region_id=_to_uuid(r.uuid),
+                region_name=_location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
             ),

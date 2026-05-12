@@ -34,6 +34,7 @@ from ..endpoint_types import (
 from ..helpers import (
     _check_country_access,
     _internal_to_api_name,
+    _location_display_name,
     _resolve_forecast_model,
     _resolve_nation,
     _resolve_region_id,
@@ -136,6 +137,8 @@ async def get_forecast(
 
     first = pgvs[0] if pgvs else None
     return ForecastResponse(
+        region_id=_to_uuid(region.uuid),
+        region_name=_location_display_name(region, country),
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
@@ -296,6 +299,7 @@ async def get_forecasts_at_time(
         authdata={},
     )
 
+    region_names = {_to_uuid(r.uuid): _location_display_name(r, country) for r in regions}
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
         time=snapshot_time,
@@ -306,6 +310,7 @@ async def get_forecasts_at_time(
         values=[
             RegionForecastValue(
                 region_id=v.location_uuid,
+                region_name=region_names.get(v.location_uuid, ""),
                 capacity_kW=v.capacity_kilowatts,
                 power_kW=v.power_kilowatts,
                 plevels_kW=v.plevels_kilowatts,
@@ -425,6 +430,7 @@ async def get_forecasts_period(
         region_series.append(
             RegionForecast(
                 region_id=_to_uuid(r.uuid),
+                region_name=_location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
                 plevels_kW={
