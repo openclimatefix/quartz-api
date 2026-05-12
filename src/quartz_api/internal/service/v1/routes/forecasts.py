@@ -47,13 +47,13 @@ router = APIRouter(tags=["Forecasts"])
 
 
 @router.get(
-    "/{country}/{source}/regions/{region_id}/forecast",
+    "/{country}/{source}/regions/{region}/forecast",
     status_code=status.HTTP_200_OK,
 )
 async def get_forecast(
     source: ValidSource,
     country: CountryParam,
-    region_id: str,
+    region: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: ValidWindowStart = None,
@@ -85,9 +85,8 @@ async def get_forecast(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_id**: region identifier. Accepts a UUID, the string `national`, or a
-      region name (case-insensitive exact match). Use `GET /{country}/{source}/regions`
-      to browse available regions and their UUIDs.
+    - **region**: region identifier — UUID, `national`, or region name
+      (case-insensitive). Use `GET /{country}/{source}/regions` to browse available regions.
     - **start_utc**: start of the forecast window (UTC). Defaults to now. Cannot be
       more than 1 year in the past.
     - **end_utc**: end of the forecast window (UTC). Defaults to 48 hours from now.
@@ -103,7 +102,7 @@ async def get_forecast(
       bias correction on top of `blend`.
     """
     is_intraday_only = not _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region_id, country, source, db)
+    resolved_id = await _resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -156,7 +155,7 @@ async def get_forecast(
 
 
 @router.get(
-    "/{country}/{source}/regions/{region_id}/forecast/last-updated",
+    "/{country}/{source}/regions/{region}/forecast/last-updated",
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
@@ -165,7 +164,7 @@ async def get_forecast_last_updated_timestamp(
     request: Request,
     source: ValidSource,
     country: CountryParam,
-    region_id: str,
+    region: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     model: ValidForecastModel | None = None,
@@ -179,11 +178,11 @@ async def get_forecast_last_updated_timestamp(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_id**: region identifier — UUID, `national`, or region name.
+    - **region**: region identifier — UUID, `national`, or region name (case-insensitive).
     - **model**: forecast model name. Defaults to the region type's default model.
     """
     is_intraday_only = not _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region_id, country, source, db)
+    resolved_id = await _resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -357,7 +356,7 @@ async def get_forecasts_period(
 
     Time-window and region filtering are applied in-memory from the cached data.
     Model and horizon filters are **not** supported on this endpoint — use
-    `GET /{country}/{source}/regions/{region_id}/forecast` for per-region model selection.
+    `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).

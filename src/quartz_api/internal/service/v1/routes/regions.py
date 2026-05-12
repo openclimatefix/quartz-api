@@ -132,11 +132,11 @@ def _apply_name_filter(regions: list[RegionDetail], name: str | None) -> list[Re
     return [r for r in regions if needle in r.name.lower()]
 
 
-@router.get("/{country}/{source}/regions/{region_id}", status_code=status.HTTP_200_OK)
+@router.get("/{country}/{source}/regions/{region}", status_code=status.HTTP_200_OK)
 async def get_region(
     source: ValidSource,
     country: CountryParam,
-    region_id: str,
+    region: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> RegionDetail:
@@ -148,13 +148,11 @@ async def get_region(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_id**: region identifier. Accepts:
-        - a region UUID (e.g. `3e69f4b3-…`),
-        - the string `national` (resolves to the country's national region),
-        - or a region name (case-insensitive exact match, e.g. `South West`).
+    - **region**: region identifier — UUID, `national`, or region name
+      (case-insensitive, e.g. `South West`).
     """
     _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region_id, country, source, db)
+    resolved_id = await _resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,

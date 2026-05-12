@@ -44,13 +44,13 @@ router = APIRouter(tags=["Generation"])
 
 
 @router.get(
-    "/{country}/{source}/regions/{region_id}/generation",
+    "/{country}/{source}/regions/{region}/generation",
     status_code=status.HTTP_200_OK,
 )
 async def get_generation(
     source: ValidSource,
     country: CountryParam,
-    region_id: str,
+    region: str,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
@@ -75,8 +75,8 @@ async def get_generation(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_id**: region identifier — UUID, `national`, or region name.
-      Use `GET /{country}/{source}/regions` to browse available regions.
+    - **region**: region identifier — UUID, `national`, or region name
+      (case-insensitive). Use `GET /{country}/{source}/regions` to browse available regions.
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
       See `/{country}/{source}/generation-sources` for available observers.
     - **start_utc**: start of the generation window (UTC). Defaults to 24 hours ago.
@@ -84,7 +84,7 @@ async def get_generation(
     - **end_utc**: end of the generation window (UTC). Defaults to now.
     """
     _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region_id, country, source, db)
+    resolved_id = await _resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
