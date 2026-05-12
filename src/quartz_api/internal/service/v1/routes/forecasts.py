@@ -298,7 +298,9 @@ async def get_forecasts_at_time(
         authdata={},
     )
 
-    region_names = {_to_uuid(r.uuid): _location_display_name(r, country) for r in regions}
+    region_names = {
+        _to_uuid(r.uuid): _location_display_name(r, country) for r in regions
+    }
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
         time=snapshot_time,
@@ -355,6 +357,9 @@ async def get_forecasts_period(
     refreshed every 24 hours (or on demand via `POST /{country}/{source}/forecasts/refresh`).
 
     Time-window and region filtering are applied in-memory from the cached data.
+    This endpoint fetches only the default forecast model for the selected
+    country + region type.
+
     Model and horizon filters are **not** supported on this endpoint — use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
 
@@ -420,7 +425,8 @@ async def get_forecasts_period(
         id_set = set(region_ids or [])
         name_set = {n.lower() for n in (region_names or [])}
         regions = [
-            r for r in regions
+            r
+            for r in regions
             if _to_uuid(r.uuid) in id_set or r.name.lower() in name_set
         ]
 
