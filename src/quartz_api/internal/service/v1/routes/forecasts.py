@@ -139,8 +139,8 @@ async def get_forecast(
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        created_time=first.created_timestamp if first else None,
-        init_time=first.init_timestamp if first else None,
+        created_utc=first.created_timestamp if first else None,
+        init_utc=first.init_timestamp if first else None,
         values=[
             ForecastValue(
                 time=v.valid_timestamp,
@@ -169,7 +169,7 @@ async def get_forecast_last_updated_timestamp(
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region.
 
-    Queries the forecast within ±30 minutes of now and returns the `created_time`
+    Queries the forecast within ±30 minutes of now and returns the `created_utc`
     of the most recent run. Useful for monitoring freshness or driving "last updated"
     indicators in a UI. Cached for 10 seconds.
 
@@ -230,25 +230,25 @@ async def get_forecasts_at_time(
     region_type: ValidRegionType,
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
-    timestamp: dt.datetime | None = Query(
+    time_utc: dt.datetime | None = Query(
         None,
-        description="Forecast target timestamp (UTC).",
+        description="Forecast target time (UTC).",
     ),
 ) -> ForecastSnapshot:
-    """Get forecasts for all regions of a given type at a specific timestamp.
+    """Get forecasts for all regions of a given type at a specific time.
 
     Returns a `ForecastSnapshot` — a single point in time with one forecast value per
     region. Useful for rendering a map of forecast output across an entire country at
     a glance. Cached for 2 minutes.
 
-    The default timestamp is the current time floored to the nearest 30 minutes.
+    The default time is now floored to the nearest 30 minutes.
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
-    - **timestamp**: target datetime (UTC) for the snapshot. Defaults to now floored
+    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to now floored
       to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
     - **model_name**: forecast model name (e.g. `blend_adjust`). Defaults to the
       region type's default model.
@@ -273,7 +273,7 @@ async def get_forecasts_at_time(
         regions = await db.get_locations(
             energy_type=source,
             location_type=location_type,
-            authdata=auth,
+            authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
 
@@ -283,7 +283,7 @@ async def get_forecasts_at_time(
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
-    snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    snapshot_time = time_utc or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 
@@ -293,7 +293,7 @@ async def get_forecasts_at_time(
         forecaster_version=model_version,
         snapshot_timestamp_utc=snapshot_time,
         energy_type=source,
-        authdata=auth,
+        authdata={},
     )
 
     first = snapshot[0] if snapshot else None
@@ -301,8 +301,8 @@ async def get_forecasts_at_time(
         time=snapshot_time,
         model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        created_time=first.created_timestamp if first else None,
-        init_time=first.init_timestamp if first else None,
+        created_utc=first.created_timestamp if first else None,
+        init_utc=first.init_timestamp if first else None,
         values=[
             RegionForecastValue(
                 region_id=v.location_uuid,
@@ -427,7 +427,9 @@ async def get_forecasts_period(
                 region_id=_to_uuid(r.uuid),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
-                plevels_kW={k: [v.plevels_kW.get(k, 0.0) for v in windowed] for k in plevel_keys},
+                plevels_kW={
+                    k: [v.plevels_kW.get(k, 0.0) for v in windowed] for k in plevel_keys
+                },
             ),
         )
 

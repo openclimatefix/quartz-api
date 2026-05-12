@@ -135,25 +135,25 @@ async def get_generation_at_timestamp(
     auth: AuthDependency,
     region_type: ValidRegionType,
     observer: ValidObserver = "pvlive_in_day",
-    timestamp: dt.datetime | None = Query(
+    time_utc: dt.datetime | None = Query(
         None,
-        description="Observation target timestamp (UTC).",
+        description="Observation target time (UTC).",
     ),
 ) -> GenerationSnapshot:
-    """Get observed generation for all regions of a given type at a specific timestamp.
+    """Get observed generation for all regions of a given type at a specific time.
 
     Returns a `GenerationSnapshot` — a single point in time with one observed generation
     value per region. Useful for rendering a map of current solar output across an entire
     country. Cached for 2 minutes.
 
-    The default timestamp is the current time floored to the nearest 30 minutes.
+    The default time is now floored to the nearest 30 minutes.
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
-    - **timestamp**: target datetime (UTC) for the snapshot. Defaults to now floored
+    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to now floored
       to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
       See `/{country}/{source}/generation-sources` for available observers.
@@ -185,7 +185,7 @@ async def get_generation_at_timestamp(
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
-    snapshot_time = timestamp or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    snapshot_time = time_utc or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 

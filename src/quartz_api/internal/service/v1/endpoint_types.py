@@ -263,8 +263,8 @@ class ForecastResponse(BaseModel):
     capacity_kW: float
     model_name: str | None = None
     model_version: str | None = None
-    created_time: dt.datetime | None = None
-    init_time: dt.datetime | None = None
+    created_utc: dt.datetime | None = None
+    init_utc: dt.datetime | None = None
     values: list[ForecastValue]
 
 
@@ -298,8 +298,8 @@ class ForecastSnapshot(BaseModel):
     time: dt.datetime
     model_name: str | None = None
     model_version: str | None = None
-    created_time: dt.datetime | None = None
-    init_time: dt.datetime | None = None
+    created_utc: dt.datetime | None = None
+    init_utc: dt.datetime | None = None
     values: list[RegionForecastValue]
 
 
@@ -333,8 +333,8 @@ class RegionForecastMatrix(BaseModel):
 
     model_name: str | None = None
     model_version: str | None = None
-    created_time: dt.datetime | None = None
-    init_time: dt.datetime | None = None
+    created_utc: dt.datetime | None = None
+    init_utc: dt.datetime | None = None
     times: list[dt.datetime]
     regions: list[RegionForecast]
 

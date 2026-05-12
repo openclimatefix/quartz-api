@@ -343,8 +343,8 @@ async def _set_forecast_meta() -> None:
     meta = {
         "model_name": "blend",
         "model_version": "1.0.0",
-        "created_time": now.isoformat(),
-        "init_time": now.isoformat(),
+        "created_utc": now.isoformat(),
+        "init_utc": now.isoformat(),
     }
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
@@ -506,7 +506,7 @@ async def test_get_region_forecast(client: AsyncClient) -> None:
     assert "capacity_kW" in body
     assert "values" in body
     assert "model_name" in body
-    assert "init_time" in body
+    assert "init_utc" in body
 
 
 @pytest.mark.anyio
@@ -1068,7 +1068,7 @@ async def test_get_forecasts_snapshot_explicit_timestamp(client: AsyncClient) ->
     """Explicit timestamp is used instead of floored-now — returns 200."""
     ts = "2026-04-17T12:00:00Z"
     resp = await client.get(
-        f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&timestamp={ts}",
+        f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc={ts}",
     )
     assert resp.status_code == 200
     assert resp.json()["time"].startswith("2026-04-17T12:00:00")
@@ -1113,7 +1113,7 @@ async def test_get_forecasts_snapshot_naive_timestamp_gets_utc(
 ) -> None:
     """Naive (tz-unaware) timestamp is accepted and treated as UTC — returns 200."""
     resp = await client.get(
-        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&timestamp=2026-04-17T12:00:00",
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc=2026-04-17T12:00:00",
     )
     assert resp.status_code == 200
 
@@ -1138,7 +1138,7 @@ async def test_get_generation_snapshot_explicit_timestamp(client: AsyncClient) -
     """Explicit timestamp is used for the generation snapshot — returns 200."""
     ts = "2026-04-17T10:30:00Z"
     resp = await client.get(
-        f"/v1/GB/solar/generation/snapshot?region_type=gsp&timestamp={ts}",
+        f"/v1/GB/solar/generation/snapshot?region_type=gsp&time_utc={ts}",
     )
     assert resp.status_code == 200
     assert resp.json()["time"].startswith("2026-04-17T10:30:00")
@@ -1161,7 +1161,7 @@ async def test_get_generation_snapshot_naive_timestamp_gets_utc(
 ) -> None:
     """Naive timestamp for generation snapshot is treated as UTC — returns 200."""
     resp = await client.get(
-        "/v1/GB/solar/generation/snapshot?region_type=gsp&timestamp=2026-04-17T10:30:00",
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&time_utc=2026-04-17T10:30:00",
     )
     assert resp.status_code == 200
 

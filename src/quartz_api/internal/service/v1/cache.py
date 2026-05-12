@@ -100,8 +100,8 @@ async def _warm_v1_forecast_cache(
         meta = {
             "model_name": _internal_to_api_name(first_pgv.forecaster_name if first_pgv else None, rt),
             "model_version": first_pgv.forecaster_version if first_pgv else None,
-            "created_time": created.isoformat() if created else None,
-            "init_time": init.isoformat() if init else None,
+            "created_utc": created.isoformat() if created else None,
+            "init_utc": init.isoformat() if init else None,
         }
         await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
 
