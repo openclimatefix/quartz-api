@@ -82,7 +82,7 @@ async def get_forecast(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_id**: region identifier. Accepts a UUID, the string `national`, or a
       region name (case-insensitive exact match). Use `GET /{country}/{source}/regions`
       to browse available regions and their UUIDs.
@@ -174,7 +174,7 @@ async def get_forecast_last_updated_timestamp(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_id**: region identifier — UUID, `national`, or region name.
     - **model**: forecast model name. Defaults to the region type's default model.
     """
@@ -244,7 +244,7 @@ async def get_forecasts_at_time(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **timestamp**: target datetime (UTC) for the snapshot. Defaults to now floored
@@ -351,7 +351,7 @@ async def get_forecasts_period(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **start_utc**: start of the window (UTC). Defaults to 2 days before now
@@ -457,7 +457,7 @@ async def refresh_forecasts_cache(
 
     #### Parameters
     - **country**: country code (e.g. `GB`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region type to re-warm (e.g. `gsp`). Defaults to `gsp`.
     """
     if "ocf:admin" not in auth.get("permissions", []):

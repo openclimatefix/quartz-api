@@ -29,13 +29,11 @@ async def get_sources(
 ) -> list[Source]:
     """List available forecast energy sources.
 
-    Returns the set of energy source types supported by the API — currently `solar`
-    and `wind`. Use the `source` value as the `{source}` path segment in all other
-    v1 routes (e.g. `/v1/GB/solar/regions`).
+    Returns the set of energy source types supported by the API. Use the `name` value
+    as the `{source}` path segment in all other v1 routes (e.g. `/v1/GB/solar/regions`).
     """
     return [
         Source(name="solar", label="Solar"),
-        Source(name="wind", label="Wind"),
     ]
 
 
@@ -120,7 +118,7 @@ async def get_region_types(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     """
     return [
         RegionType(
@@ -150,6 +148,6 @@ async def get_generation_sources(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     """
     return [s for s in country.generation_sources if s.source == source.name.lower()]

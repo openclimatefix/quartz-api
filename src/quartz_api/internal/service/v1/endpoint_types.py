@@ -86,15 +86,15 @@ def _build_observer_pattern() -> str:
 def _parse_source(v: str) -> models.EnergyType:
     if v == "solar":
         return models.EnergyType.SOLAR
-    return models.EnergyType.WIND
+    raise ValueError(f"Unsupported energy source '{v}'. Currently only 'solar' is available.")
 
 
 ValidSource = Annotated[
     models.EnergyType,
     BeforeValidator(_parse_source),
-    WithJsonSchema({"type": "string", "enum": ["solar", "wind"]}),
+    WithJsonSchema({"type": "string", "enum": ["solar"]}),
     Path(
-        description="The energy source type.",
+        description="The energy source type. Currently only 'solar' is supported.",
         examples=["solar"],
     ),
 ]

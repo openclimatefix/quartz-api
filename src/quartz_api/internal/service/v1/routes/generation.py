@@ -73,7 +73,7 @@ async def get_generation(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_id**: region identifier — UUID, `national`, or region name.
       Use `GET /{country}/{source}/regions` to browse available regions.
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
@@ -150,7 +150,7 @@ async def get_generation_at_timestamp(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **timestamp**: target datetime (UTC) for the snapshot. Defaults to now floored
@@ -245,7 +245,7 @@ async def get_generation_period(
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `dno`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
@@ -349,7 +349,7 @@ async def refresh_generation_cache(
 
     #### Parameters
     - **country**: country code (e.g. `GB`).
-    - **source**: energy source — `solar` or `wind`.
+    - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region type to re-warm (e.g. `gsp`). Defaults to `gsp`.
     - **observer**: generation observer to re-warm. Defaults to `pvlive_in_day`.
     """
