@@ -56,7 +56,8 @@ async def get_generation(
     observer: ValidObserver = "pvlive_in_day",
     start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
-        None, description="End of generation window (UTC).",
+        None,
+        description="End of generation window (UTC).",
     ),
 ) -> GenerationResponse:
     """Get observed solar generation for a specific region.
@@ -71,6 +72,10 @@ async def get_generation(
       These are the most recent values but may be revised later.
     - **pvlive_day_after** — PV_Live day-after final values, available from the following
       morning. Use these when accuracy is more important than latency.
+
+    NL currently has one observer for solar:
+
+    - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
@@ -200,7 +205,9 @@ async def get_generation_at_timestamp(
         authdata=auth,
     )
 
-    region_names = {_to_uuid(r.uuid): _location_display_name(r, country) for r in regions}
+    region_names = {
+        _to_uuid(r.uuid): _location_display_name(r, country) for r in regions
+    }
     return GenerationSnapshot(
         time=snapshot_time,
         observer_name=observer,
@@ -231,7 +238,8 @@ async def get_generation_period(
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
     region_ids: list[UUID] | None = Query(
-        None, description="Limit to specific region UUIDs.",
+        None,
+        description="Limit to specific region UUIDs.",
     ),
     region_names: list[str] | None = Query(
         None,
@@ -313,7 +321,8 @@ async def get_generation_period(
         id_set = set(region_ids or [])
         name_set = {n.lower() for n in (region_names or [])}
         regions = [
-            r for r in regions
+            r
+            for r in regions
             if _to_uuid(r.uuid) in id_set or r.name.lower() in name_set
         ]
 
