@@ -35,7 +35,7 @@ async def get_sources_route(
     auth: AuthDependency,
 ) -> GetSourcesResponse:
     """Get available generation sources."""
-    return GetSourcesResponse(sources=["wind", "solar"])
+    return GetSourcesResponse(sources=["solar"])
 
 
 @router.get(
@@ -64,7 +64,7 @@ async def get_regions_route(
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid source {source}. Must be 'wind' or 'solar'.",
+            detail=f"Invalid source {source}. Available sources: 'solar'.",
         )
     region_names = [r.name for r in regions]
     return GetRegionsResponse(regions=region_names)

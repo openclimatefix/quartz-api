@@ -39,7 +39,7 @@ ValidSource = Annotated[
     str,
     Path(
         description="The source of the generation or forecast data.",
-        pattern="^(wind|solar)$",
+        pattern="^(solar)$",
     ),
 ]
 
