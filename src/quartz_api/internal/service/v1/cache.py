@@ -98,7 +98,9 @@ async def _warm_v1_forecast_cache(
         created = first_pgv.created_timestamp if first_pgv else None
         init = first_pgv.init_timestamp if first_pgv else None
         meta = {
-            "model_name": _internal_to_api_name(first_pgv.forecaster_name if first_pgv else None, rt),
+            "model_name": _internal_to_api_name(
+                first_pgv.forecaster_name if first_pgv else None, rt,
+            ),
             "model_version": first_pgv.forecaster_version if first_pgv else None,
             "created_utc": created.isoformat() if created else None,
             "init_utc": init.isoformat() if init else None,
