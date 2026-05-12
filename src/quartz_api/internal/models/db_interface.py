@@ -174,12 +174,14 @@ class StorageInterface(abc.ABC):
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[Location]:
         """Return a list of locations for a given energy and location type.
 
         If location_type is None, locations of all types are returned.
         If enclosing_location_uuid is provided, only locations enclosed by that
         location (i.e. children/descendants) are returned.
+        If location_names is provided, only locations with those names are returned.
         """
         pass
 

@@ -19,7 +19,7 @@ authors = [
 classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
-    "dp-sdk >= 0.25.0,<1.0.0",
+    "dp-sdk >= 0.29.0,<1.0.0",
     "fastapi>=0.105.0",
     "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
@@ -62,7 +62,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.29.0/dp_sdk-0.29.0-py3-none-any.whl" }
 
 [project.urls]
 repository = "https://github.com/openclimatefix/quartz-api"

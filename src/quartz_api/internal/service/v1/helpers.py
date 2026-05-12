@@ -165,22 +165,20 @@ async def _resolve_region_id(
     if region_id == "national":
         return nation.uuid
 
-    # Name search across all region types within this country.
+    # Name search — check nation aliases first, then delegate to DP name filter.
     needle = region_id.lower()
     if needle in (nation.name.lower(), cfg.display_name.lower()):
         return nation.uuid
-    for rt in cfg.region_types:
-        if rt.location_type == models.LocationType.NATION:
-            continue
-        locs = await db.get_locations(
-            energy_type=energy_type,
-            location_type=rt.location_type,
-            authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
-        )
-        for loc in locs:
-            if loc.name.lower() == needle:
-                return loc.uuid
+
+    locs = await db.get_locations(
+        energy_type=energy_type,
+        location_type=None,
+        authdata={},
+        enclosing_location_uuid=_to_uuid(nation.uuid),
+        location_names=[region_id],
+    )
+    if locs:
+        return locs[0].uuid
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Region '{region_id}' not found.",

@@ -337,6 +337,10 @@ async def get_forecasts_period(
         None,
         description="Limit to specific region UUIDs.",
     ),
+    region_names: list[str] | None = Query(
+        None,
+        description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",
+    ),
 ) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
 
@@ -366,6 +370,9 @@ async def get_forecasts_period(
       (floored to the nearest 6 hours).
     - **region_ids**: optional list of region UUIDs to restrict the response to a
       subset of regions (e.g. `?region_ids=uuid1&region_ids=uuid2`).
+    - **region_names**: optional list of region names to restrict the response to a
+      subset of regions (e.g. `?region_names=GSP1&region_names=GSP2`).
+      Can be combined with `region_ids`; the union of both sets is returned.
     """
     _check_country_access(auth, country)
 
@@ -410,9 +417,13 @@ async def get_forecasts_period(
             detail=f"No regions found for type '{rt.type}' in {country.code}.",
         )
 
-    if region_ids is not None:
-        id_set = set(region_ids)
-        regions = [r for r in regions if _to_uuid(r.uuid) in id_set]
+    if region_ids is not None or region_names is not None:
+        id_set = set(region_ids or [])
+        name_set = {n.lower() for n in (region_names or [])}
+        regions = [
+            r for r in regions
+            if _to_uuid(r.uuid) in id_set or r.name.lower() in name_set
+        ]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []

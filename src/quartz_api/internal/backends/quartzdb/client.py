@@ -403,6 +403,7 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[models.Location]:
         locations: list[models.Location] = []
         match energy_type, location_type, location_uuid:

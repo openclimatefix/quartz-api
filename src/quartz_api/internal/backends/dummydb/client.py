@@ -130,11 +130,12 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[models.Location]:
         loc_uuid = location_uuid or uuid4()
         match energy_type, location_type:
             case models.EnergyType.SOLAR, models.LocationType.REGION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name=n,
@@ -146,7 +147,7 @@ class StorageClient(models.StorageInterface):
                     for n in ["dummy_solar_region1", "dummy_solar_region2"]
                 ]
             case models.EnergyType.WIND, models.LocationType.REGION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name=n,
@@ -158,7 +159,7 @@ class StorageClient(models.StorageInterface):
                     for n in ["dummy_wind_region1", "dummy_wind_region2"]
                 ]
             case _, models.LocationType.SITE:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy Site",
@@ -169,7 +170,7 @@ class StorageClient(models.StorageInterface):
                     ),
                 ]
             case _, models.LocationType.GSP:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy GSP",
@@ -181,7 +182,7 @@ class StorageClient(models.StorageInterface):
                     ),
                 ]
             case _, models.LocationType.SUBSTATION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy Substation",
@@ -193,7 +194,7 @@ class StorageClient(models.StorageInterface):
                     ),
                 ]
             case _, models.LocationType.NATION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="uk",
@@ -204,7 +205,7 @@ class StorageClient(models.StorageInterface):
                     ),
                 ]
             case _, models.LocationType.DNO:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy DNO",
@@ -216,7 +217,7 @@ class StorageClient(models.StorageInterface):
                 ]
             case _, None:
                 # No type filter — return a mix of dummy locations
-                return [
+                locations = [
                     models.Location(
                         uuid=uuid4(),
                         name="Dummy GSP",
@@ -240,6 +241,10 @@ class StorageClient(models.StorageInterface):
                     f"DummyDB client does not support {location_type} locations"
                     f"for {energy_type} energy type.",
                 )
+        if location_names:
+            name_set = {n.lower() for n in location_names}
+            locations = [loc for loc in locations if loc.name.lower() in name_set]
+        return locations
 
     @override
     async def get_predicted_generation_snapshot(

@@ -404,6 +404,7 @@ class StorageClient(models.StorageInterface):
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[models.Location]:
         # For the moment, recreate the auth behaviour of the old routes in here.
         # This should be delegated to the scoping on the API endpoints themselves later.
@@ -449,6 +450,7 @@ class StorageClient(models.StorageInterface):
                 if enclosing_location_uuid is not None
                 else None
             ),
+            location_names_filter=location_names or [],
         )
         resp = await self.dpc.ListLocations(req)
 
