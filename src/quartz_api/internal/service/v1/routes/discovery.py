@@ -114,10 +114,6 @@ async def get_region_types(
     - **forecast_models** — the models available for that region type, with the model
       `name` used as the `model` parameter on forecast endpoints. The first listed model
       is the default.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
     """
     return [
         RegionType(
@@ -145,9 +141,5 @@ async def get_generation_sources(
     Generation sources represent the different observers that produce actual (measured)
     generation data — for example PV_Live in-day estimates vs finalised day-after values.
     Use the `name` field as the `observer` parameter on generation endpoints.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
     """
     return [s for s in country.generation_sources if s.source == source.name.lower()]

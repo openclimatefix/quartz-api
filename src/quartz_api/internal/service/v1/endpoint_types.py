@@ -118,7 +118,9 @@ class _CountryParam(str):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: object, handler: object,
+        cls,
+        source_type: object,
+        handler: object,
     ) -> object:
         from pydantic_core import core_schema
 
@@ -136,7 +138,9 @@ class _CountryParam(str):
 
     @classmethod
     def __get_pydantic_json_schema__(
-        cls, core_schema_obj: object, handler: object,
+        cls,
+        core_schema_obj: object,
+        handler: object,
     ) -> dict:
         return {"type": "string", "enum": list(COUNTRIES.keys())}
 
@@ -146,7 +150,19 @@ class _CountryParam(str):
 
 CountryParam = Annotated[
     _CountryParam,
-    Path(description="Country code."),
+    Path(
+        description="Country code according to ISO 3166-1 alpha-2 codes, case insensitive.",
+    ),
+]
+
+ValidRegion = Annotated[
+    str,
+    Path(
+        description=(
+            "Region identifier — `national`, or region_name (case-insensitive). "
+            "Use `GET /{country}/{source}/regions` to browse available regions."
+        ),
+    ),
 ]
 
 

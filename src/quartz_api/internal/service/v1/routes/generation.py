@@ -26,6 +26,7 @@ from ..endpoint_types import (
     RegionGenerationMatrix,
     RegionGenerationValue,
     ValidObserver,
+    ValidRegion,
     ValidRegionType,
     ValidSource,
     ValidWindowStart,
@@ -49,14 +50,14 @@ router = APIRouter(tags=["Generation"])
 async def get_generation(
     source: ValidSource,
     country: CountryParam,
-    region: str,
+    region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
     start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
         None,
-        description="End of generation window (UTC).",
+        description="End of generation window (UTC). Defaults to now.",
     ),
 ) -> GenerationResponse:
     """Get observed solar generation for a specific region.
@@ -75,17 +76,6 @@ async def get_generation(
     NL currently has one observer for solar:
 
     - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region**: region identifier — UUID, `national`, or region name
-      (case-insensitive). Use `GET /{country}/{source}/regions` to browse available regions.
-    - **observer**: generation observer name. Defaults to `pvlive_in_day`.
-      See `/{country}/{source}/generation-sources` for available observers.
-    - **start_utc**: start of the generation window (UTC). Defaults to 24 hours ago.
-      Cannot be more than 1 year in the past.
-    - **end_utc**: end of the generation window (UTC). Defaults to now.
     """
     _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)
@@ -143,7 +133,10 @@ async def get_generation_at_timestamp(
     observer: ValidObserver = "pvlive_in_day",
     time_utc: dt.datetime | None = Query(
         None,
-        description="Observation target time (UTC).",
+        description=(
+            "Observation target time (UTC). Defaults to the most recent available "
+            "timestamp within the last 6 hours."
+        ),
     ),
 ) -> GenerationSnapshot:
     """Get observed generation for all regions of a given type at a specific time.
@@ -155,16 +148,6 @@ async def get_generation_at_timestamp(
     When `time_utc` is omitted the endpoint resolves the most recent available timestamp
     automatically (looking back up to 6 hours) rather than using "now", which would
     rarely have data.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
-      See `/{country}/{source}/region-types` for valid values.
-    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to the most
-      recent available timestamp within the last 6 hours.
-    - **observer**: generation observer name. Defaults to `pvlive_in_day`.
-      See `/{country}/{source}/generation-sources` for available observers.
     """
     _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
@@ -259,8 +242,14 @@ async def get_generation_period(
     auth: AuthDependency,
     region_type: ValidRegionType,
     observer: ValidObserver = "pvlive_in_day",
-    start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
-    end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
+    start_utc: dt.datetime | None = Query(
+        None,
+        description="Start of window (UTC). Defaults to 2 days before now (floored to the nearest 6 hours).",
+    ),
+    end_utc: dt.datetime | None = Query(
+        None,
+        description="End of window (UTC). Defaults to 2 days after now (floored to the nearest 6 hours).",
+    ),
     region_names: list[str] | None = Query(
         None,
         description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",
@@ -272,27 +261,13 @@ async def get_generation_period(
     `times` array and one `power_kW` series per region. Analogous to the forecast
     period endpoint but for observed (actual) generation data.
 
-    This endpoint is served entirely from a pre-warmed cache (one key per region UUID).
+    This endpoint is served entirely from a pre-warmed cache (one key per region).
     It does not make live data-platform calls per request. If the cache has not yet
     been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
     header — retry after a minute. The cache covers a ±2-day window around now,
     refreshed every 24 hours (or on demand via `POST /{country}/{source}/generation/refresh`).
 
     Time-window and region filtering are applied in-memory from the cached data.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
-      See `/{country}/{source}/region-types` for valid values.
-    - **observer**: generation observer name. Defaults to `pvlive_in_day`.
-      See `/{country}/{source}/generation-sources` for available observers.
-    - **start_utc**: start of the window (UTC). Defaults to 2 days before now
-      (floored to the nearest 6 hours).
-    - **end_utc**: end of the window (UTC). Defaults to 2 days after now
-      (floored to the nearest 6 hours).
-    - **region_names**: optional list of region names to restrict the response to a
-      subset of regions (e.g. `?region_names=GSP1&region_names=GSP2`).
     """
     _check_country_access(auth, country)
 
@@ -383,12 +358,6 @@ async def refresh_generation_cache(
     the pre-warmed cache. Returns 202 immediately; the warm completes in the background.
 
     Requires the `ocf:admin` permission scope.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region type to re-warm (e.g. `gsp`). Defaults to `gsp`.
-    - **observer**: generation observer to re-warm. Defaults to `pvlive_in_day`.
     """
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

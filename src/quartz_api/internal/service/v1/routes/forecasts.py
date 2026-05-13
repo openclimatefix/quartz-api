@@ -26,6 +26,7 @@ from ..endpoint_types import (
     RegionForecastMatrix,
     RegionForecastValue,
     ValidForecastModel,
+    ValidRegion,
     ValidRegionType,
     ValidSource,
     ValidWindowStart,
@@ -52,13 +53,13 @@ router = APIRouter(tags=["Forecasts"])
 async def get_forecast(
     source: ValidSource,
     country: CountryParam,
-    region: str,
+    region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
         None,
-        description="End of forecast window (UTC).",
+        description="End of forecast window (UTC). Defaults to 48 hours from now.",
     ),
     creation_limit_utc: dt.datetime | None = Query(
         None,
@@ -69,7 +70,10 @@ async def get_forecast(
     ),
     forecast_horizon_minutes: int | None = Query(
         None,
-        description="Forecast horizon filter in minutes.",
+        description=(
+            "Forecast horizon filter in minutes. For example, `60` returns only "
+            "the 1-hour-ahead forecast value for each target timestep."
+        ),
     ),
     model: ValidForecastModel | None = None,
 ) -> ForecastResponse:
@@ -80,25 +84,6 @@ async def get_forecast(
 
     By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region**: region identifier — UUID, `national`, or region name
-      (case-insensitive). Use `GET /{country}/{source}/regions` to browse available regions.
-    - **start_utc**: start of the forecast window (UTC). Defaults to now. Cannot be
-      more than 1 year in the past.
-    - **end_utc**: end of the forecast window (UTC). Defaults to 48 hours from now.
-    - **creation_limit_utc**: if set, only return forecasts that were created at or
-      before this time. Useful for retrieving the forecast "as it was known" at a
-      specific moment (e.g. `?creation_limit_utc=2026-05-01T09:00:00Z`).
-    - **forecast_horizon_minutes**: filter to forecasts made exactly this many minutes
-      before the target time. For example, `60` returns only the 1-hour-ahead forecast
-      for each target timestep.
-    - **model**: forecast model name (e.g. `blend`, `blend_adjust`, `pvnet_intraday`).
-      Defaults to the region type's default model. See `/{country}/{source}/region-types`
-      for the models available per region type. `blend_adjust` applies a trend-based
-      bias correction on top of `blend`.
     """
     is_intraday_only = not _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)
@@ -162,7 +147,7 @@ async def get_forecast_last_updated_timestamp(
     request: Request,
     source: ValidSource,
     country: CountryParam,
-    region: str,
+    region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     model: ValidForecastModel | None = None,
@@ -172,12 +157,6 @@ async def get_forecast_last_updated_timestamp(
     Queries the forecast within ±30 minutes of now and returns the `created_utc`
     of the most recent run. Useful for monitoring freshness or driving "last updated"
     indicators in a UI. Cached for 10 seconds.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region**: region identifier — UUID, `national`, or region name (case-insensitive).
-    - **model**: forecast model name. Defaults to the region type's default model.
     """
     is_intraday_only = not _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)
@@ -232,7 +211,7 @@ async def get_forecasts_at_time(
     model_version: str | None = Query(None, description="Forecast model version."),
     time_utc: dt.datetime | None = Query(
         None,
-        description="Forecast target time (UTC).",
+        description="Forecast target time (UTC). Defaults to now floored to 30 minutes.",
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific time.
@@ -240,19 +219,6 @@ async def get_forecasts_at_time(
     Returns a `ForecastSnapshot` — a single point in time with one forecast value per
     region. Useful for rendering a map of forecast output across an entire country at
     a glance. Cached for 2 minutes.
-
-    The default time is now floored to the nearest 30 minutes.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
-      See `/{country}/{source}/region-types` for valid values.
-    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to now floored
-      to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
-    - **model_name**: forecast model name (e.g. `blend_adjust`). Defaults to the
-      region type's default model.
-    - **model_version**: optional model version string to pin a specific release.
     """
     is_intraday_only = not _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
@@ -329,8 +295,14 @@ async def get_forecasts_period(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
-    start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
-    end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
+    start_utc: dt.datetime | None = Query(
+        None,
+        description="Start of window (UTC). Defaults to 2 days before now (floored to the nearest 6 hours).",
+    ),
+    end_utc: dt.datetime | None = Query(
+        None,
+        description="End of window (UTC). Defaults to 2 days after now (floored to the nearest 6 hours).",
+    ),
     region_names: list[str] | None = Query(
         None,
         description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",
@@ -343,7 +315,7 @@ async def get_forecasts_period(
     loading all-region forecast data for charts or grid-management tools in a single
     request.
 
-    This endpoint is served entirely from a pre-warmed cache (one key per region UUID).
+    This endpoint is served entirely from a pre-warmed cache (one key per region).
     It does not make live data-platform calls per request. If the cache has not yet
     been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
     header — retry after a minute. The cache covers a ±2-day window around now,
@@ -355,18 +327,6 @@ async def get_forecasts_period(
 
     Model and horizon filters are **not** supported on this endpoint — use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
-      See `/{country}/{source}/region-types` for valid values.
-    - **start_utc**: start of the window (UTC). Defaults to 2 days before now
-      (floored to the nearest 6 hours).
-    - **end_utc**: end of the window (UTC). Defaults to 2 days after now
-      (floored to the nearest 6 hours).
-    - **region_names**: optional list of region names to restrict the response to a
-      subset of regions (e.g. `?region_names=GSP1&region_names=GSP2`).
     """
     _check_country_access(auth, country)
 
@@ -463,11 +423,6 @@ async def refresh_forecasts_cache(
     Returns 202 immediately; the warm completes in the background.
 
     Requires the `ocf:admin` permission scope.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region type to re-warm (e.g. `gsp`). Defaults to `gsp`.
     """
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

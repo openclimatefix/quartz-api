@@ -146,12 +146,13 @@ async def _resolve_region_id(
     energy_type: models.EnergyType,
     db: models.StorageInterface,
 ) -> UUID:
-    """Resolve a region_id path param to a UUID.
+    """Resolve a region path param to an internal UUID.
 
     Resolution order:
-    1. Valid UUID string → returned immediately (no DB call)
-    2. "national" slug → nation UUID
-    3. Anything else → case-insensitive name search across all region types
+    1. "national" slug → nation UUID
+    2. Nation display name or internal name → nation UUID
+    3. Mapped display name (e.g. "friesland") → reverse-lookup to DP internal name, then search
+    4. Anything else → case-insensitive name search across all region types
     """
     try:
         return UUID(region_id)

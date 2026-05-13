@@ -12,6 +12,7 @@ from ..endpoint_types import (
     CountryParam,
     OptionalValidRegionType,
     RegionDetail,
+    ValidRegion,
     ValidSource,
 )
 from ..helpers import (
@@ -42,29 +43,15 @@ async def get_country_regions(
         description="Filter by name (case-insensitive substring match).",
     ),
 ) -> list[RegionDetail]:
-    """List regions for a country, optionally filtered by type, parent, or name.
-
-    Returns `RegionDetail` objects containing each region's name, type,
-    installed capacity, centroid, and any available metadata fields.
+    """List regions for a country, optionally filtered by type, parent, and/or name.
 
     Filter behaviour:
-
     - No filters — returns every region across all configured region types.
     - `region_type` — restricts results to one granularity level (e.g. `gsp`).
     - `parent` — returns the direct children of the specified parent region.
     - `name` — case-insensitive substring search across region names.
-
-    Filters can be combined (e.g. `?region_type=gsp&name=london`).
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: optional region type slug (e.g. `national`, `gsp`).
-      See `/{country}/{source}/region-types` for valid values.
-    - **parent**: optional parent region identifier (name or `national`) — returns its
-      children only.
-    - **name**: optional name filter; returns regions whose name contains this string.
     """
+
     _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
 
@@ -92,7 +79,8 @@ async def get_country_regions(
             enclosing_location_uuid=parent_uuid,
         )
         return _apply_name_filter(
-            [_location_to_detail(loc, country) for loc in locs], name,
+            [_location_to_detail(loc, country) for loc in locs],
+            name,
         )
 
     if region_type is not None:
@@ -107,7 +95,8 @@ async def get_country_regions(
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
         return _apply_name_filter(
-            [_location_to_detail(loc, country) for loc in locs], name,
+            [_location_to_detail(loc, country) for loc in locs],
+            name,
         )
 
     # No filters — combine all region types
@@ -134,7 +123,8 @@ async def get_country_regions(
 
 
 def _apply_name_filter(
-    regions: list[RegionDetail], name: str | None,
+    regions: list[RegionDetail],
+    name: str | None,
 ) -> list[RegionDetail]:
     if name is None:
         return regions
@@ -146,7 +136,7 @@ def _apply_name_filter(
 async def get_region(
     source: ValidSource,
     country: CountryParam,
-    region: str,
+    region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> RegionDetail:
@@ -154,12 +144,6 @@ async def get_region(
 
     Returns a `RegionDetail` object with the region's name, type, installed
     capacity, centroid, and any available metadata fields.
-
-    #### Parameters
-    - **country**: country code (e.g. `GB`, `NL`).
-    - **source**: energy source — currently only `solar` is supported.
-    - **region**: region identifier — UUID, `national`, or region name
-      (case-insensitive, e.g. `South West`).
     """
     _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)
