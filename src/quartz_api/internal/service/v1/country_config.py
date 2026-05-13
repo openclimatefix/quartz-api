@@ -46,6 +46,16 @@ class RegionTypeConfig:
     # Both are resolved to user-facing slugs at runtime via forecast_models.
     intraday_models: tuple[str, ...] = ()
     intraday_default_model: str | None = None
+    # Maps internal DP location names to user-facing display names.
+    # Entries not listed fall back to loc.name unchanged.
+    location_name_map: tuple[tuple[str, str], ...] = ()
+
+    def get_display_name(self, internal_name: str) -> str | None:
+        """Return the user-facing display name for a DP location name, or None if unmapped."""
+        for dp_name, display in self.location_name_map:
+            if dp_name == internal_name:
+                return display
+        return None
 
     def get_model_by_api_name(self, api_name: str) -> ForecastModel | None:
         """Look up a ForecastModel by its user-facing API name (slug or internal name)."""
@@ -300,6 +310,22 @@ COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_NL_REGIONAL_FORECAST_MODELS,
                 default_model="nl_blend_adjust",
                 metadata_fields=("region_id",),
+                # Maps DP location names → user-facing display names.
+                # Verify compound names (e.g. noord_holland vs noord-holland) against DP.
+                location_name_map=(
+                    ("nl_region_1_groningen", "groningen"),
+                    ("nl_region_2_friesland", "friesland"),
+                    ("nl_region_3_drenthe", "drenthe"),
+                    ("nl_region_4_overijssel", "overijssel"),
+                    ("nl_region_5_flevoland", "flevoland"),
+                    ("nl_region_6_gelderland", "gelderland"),
+                    ("nl_region_7_utrecht", "utrecht"),
+                    ("nl_region_8_noord_holland", "noord-holland"),
+                    ("nl_region_9_zuid_holland", "zuid-holland"),
+                    ("nl_region_10_zeeland", "zeeland"),
+                    ("nl_region_11_noord_brabant", "noord-brabant"),
+                    ("nl_region_12_limburg", "limburg"),
+                ),
             ),
         ),
         generation_sources=(

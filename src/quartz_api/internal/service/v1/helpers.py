@@ -52,7 +52,7 @@ def _location_to_summary(
             region_type_name = rt.type
     return RegionSummary(
         id=loc.uuid,
-        name=loc.name,
+        name=_location_display_name(loc, country_cfg),
         type=region_type_name,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
@@ -60,9 +60,21 @@ def _location_to_summary(
 
 
 def _location_display_name(loc: models.Location, country_cfg: CountryConfig) -> str:
-    """Return the user-facing name for a location, applying nation display_name override."""
+    """Return the user-facing name for a location.
+
+    Resolution order:
+    1. NATION → country display_name
+    2. RegionTypeConfig.location_name_map → mapped display name
+    3. loc.name unchanged
+    """
     if loc.location_type == models.LocationType.NATION:
         return country_cfg.display_name
+    if loc.location_type is not None:
+        rt = country_cfg.location_type_to_region_type(loc.location_type)
+        if rt is not None:
+            mapped = rt.get_display_name(loc.name)
+            if mapped is not None:
+                return mapped
     return loc.name
 
 
@@ -270,7 +282,7 @@ def _resolve_forecast_model(
 
 
 def _internal_to_api_name(
-    internal_name: str | None, rt: RegionTypeConfig | None
+    internal_name: str | None, rt: RegionTypeConfig | None,
 ) -> str | None:
     """Translate an internal DP forecaster name to its user-facing API slug."""
     if internal_name is None or rt is None:
