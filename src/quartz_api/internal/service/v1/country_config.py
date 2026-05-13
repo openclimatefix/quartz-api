@@ -225,7 +225,11 @@ _GB_NATIONAL_FORECAST_MODELS = (
     FM.PVNET_DAY_AHEAD_ADJUST,
 )
 
-_GB_GSP_FORECAST_MODELS = (FM.BLEND,)
+_GB_GSP_FORECAST_MODELS = (
+    FM.BLEND,
+    FM.PVNET_INTRADAY,
+    FM.PVNET_DAY_AHEAD,
+)
 
 _NL_NATIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
 
@@ -257,10 +261,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.GSP,
                 source_types=("solar",),
                 forecast_models=_GB_GSP_FORECAST_MODELS,
-                default_model="blend_adjust",
+                default_model="blend",
                 metadata_fields=("gsp_id", "full_name"),
-                intraday_models=(FM.BLEND_ADJUST,),
-                intraday_default_model=FM.BLEND_ADJUST,
+                intraday_models=(FM.PVNET_INTRADAY,),
+                intraday_default_model=FM.PVNET_INTRADAY,
             ),
         ),
         generation_sources=(

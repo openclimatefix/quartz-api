@@ -906,14 +906,14 @@ async def test_get_region_generation_beyond_one_year_422(client: AsyncClient) ->
 async def test_get_region_forecast_invalid_model_for_region_type_400(
     client: AsyncClient,
 ) -> None:
-    """Day-ahead model not available for GSP returns 400.
+    """Model not in the GSP model list returns 400.
 
-    DummyDB returns a GSP location for untyped lookups; pvnet_day_ahead is not
-    in the GSP model list (only blend + intraday models are valid for GSP).
+    DummyDB returns a GSP location for untyped lookups; pvnet_ecmwf is a
+    national-only model not available for GSP.
     """
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_day_ahead",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_ecmwf",
     )
     assert resp.status_code == 400
 
@@ -1431,7 +1431,12 @@ async def test_intraday_user_requesting_intraday_model_200(
     """Intraday-only user can explicitly request any permitted intraday model → 200."""
     gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
     assert gsp_rt is not None and gsp_rt.intraday_models
-    intraday_model = gsp_rt.intraday_models[-1].api_name
+    # intraday_models must be a subset of forecast_models — if this fails, update the config
+    assert all(m in gsp_rt.forecast_models for m in gsp_rt.intraday_models), (
+        "intraday_models contains models absent from forecast_models; "
+        "_validate_model will reject them with 400"
+    )
+    intraday_model = gsp_rt.intraday_models[0].api_name
     region_id = str(uuid4())
     resp = await intraday_client.get(
         f"/v1/GB/solar/regions/{region_id}/forecast?model={intraday_model}",
