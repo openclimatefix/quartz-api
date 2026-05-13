@@ -154,15 +154,17 @@ async def get_generation_at_timestamp(
     value per region. Useful for rendering a map of current solar output across an entire
     country. Cached for 2 minutes.
 
-    The default time is now floored to the nearest 30 minutes.
+    When `time_utc` is omitted the endpoint resolves the most recent available timestamp
+    automatically (looking back up to 6 hours) rather than using "now", which would
+    rarely have data.
 
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
     - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
-    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to now floored
-      to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
+    - **time_utc**: target datetime (UTC) for the snapshot. Defaults to the most
+      recent available timestamp within the last 6 hours.
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
       See `/{country}/{source}/generation-sources` for available observers.
     """
@@ -193,9 +195,34 @@ async def get_generation_at_timestamp(
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
-    snapshot_time = time_utc or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
-    if snapshot_time.tzinfo is None:
-        snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
+    if time_utc is not None:
+        snapshot_time = time_utc if time_utc.tzinfo else time_utc.replace(tzinfo=dt.UTC)
+    else:
+        # Probe a single region to find the latest available timestamp (up to 6h back).
+        # Pick the region with the highest gsp_id (most likely to have recent data) or
+        # fall back to the last region in the list.
+        probe = max(
+            regions,
+            key=lambda r: int(r.metadata.get("gsp_id", 0)),
+        )
+        now = pd.Timestamp.utcnow().replace(tzinfo=dt.UTC).to_pydatetime()
+        probe_vals = await db.get_actual_generation(
+            location_uuid=probe.uuid,
+            window_start=now - dt.timedelta(hours=6),
+            window_end=now,
+            energy_type=source,
+            location_type=location_type,
+            observer_name=observer,
+            authdata={},
+        )
+        snapshot_time = (
+            probe_vals[-1].valid_timestamp
+            if probe_vals
+            else pd.Timestamp.utcnow()
+            .floor("30min")
+            .to_pydatetime()
+            .replace(tzinfo=dt.UTC)
+        )
 
     snapshot = await db.get_actual_generation_snapshot(
         location_uuids=[_to_uuid(r.uuid) for r in regions],
