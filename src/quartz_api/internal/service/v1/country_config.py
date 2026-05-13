@@ -190,46 +190,35 @@ def _model(name: str, slug: str | None = None) -> ForecastModel:
 
 # Internal DP names for intraday models — used by intraday_models field on RegionTypeConfig.
 _GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
-    "pvnet_ecmwf",
-    "pvnet_ecmwf_adjust",
-    "pvnet_sat_only",
-    "pvnet_sat_only_adjust",
-    "pvnet_ukv_only",
-    "pvnet_ukv_only_adjust",
     "pvnet_v2",
     "pvnet_v2_adjust",
 )
 
 # Intraday ForecastModel entries shared across GB national and GSP.
 _GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
-    _model("pvnet_intra_sat30"),
-    _model("pvnet_ecmwf"),
-    _model("pvnet_sat_only", slug="pvnet_sat"),
-    _model("pvnet_ukv_only", slug="pvnet_ukv"),
     _model("pvnet_v2", slug="pvnet_intraday"),
 )
 
 _GB_INTRADAY_FORECAST_MODELS_ADJUSTED: tuple[ForecastModel, ...] = (
-    _model("pvnet_intra_sat30_adjust"),
-    _model("pvnet_ecmwf_adjust"),
-    _model("pvnet_sat_only_adjust", slug="pvnet_sat_adjust"),
-    _model("pvnet_ukv_only_adjust", slug="pvnet_ukv_adjust"),
     _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
 )
 
 _GB_NATIONAL_FORECAST_MODELS = (
     _model("blend"),
     _model("blend_adjust"),
+    _model("pvnet_ecmwf"),
+    _model("pvnet_ecmwf_adjust"),
+    _model("pvnet_sat_only", slug="pvnet_sat"),
+    _model("pvnet_sat_only_adjust", slug="pvnet_sat_adjust"),
+    _model("pvnet_ukv_only", slug="pvnet_ukv"),
+    _model("pvnet_ukv_only_adjust", slug="pvnet_ukv_adjust"),
     *_GB_INTRADAY_FORECAST_MODELS,
     *_GB_INTRADAY_FORECAST_MODELS_ADJUSTED,
     _model("pvnet_day_ahead"),
     _model("pvnet_day_ahead_adjust"),
 )
 
-_GB_GSP_FORECAST_MODELS = (
-    _model("blend"),
-    *_GB_INTRADAY_FORECAST_MODELS,
-)
+_GB_GSP_FORECAST_MODELS = (_model("blend"),)
 
 _NL_NATIONAL_FORECAST_MODELS = (
     _model("nl_blend", slug="blend"),
