@@ -58,7 +58,7 @@ async def get_countries(
     nations = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
         location_type=models.LocationType.NATION,
-        authdata=auth,
+        authdata={},
     )
     result = []
     for country_code, cfg in COUNTRIES.items():
@@ -127,7 +127,8 @@ async def get_region_types(
             level=rt.level,
             default_model=rt.default_model,
             forecast_models=[
-                ForecastModel(name=f.api_name, label=f.label) for f in rt.forecast_models
+                ForecastModel(name=f.api_name, label=f.label)
+                for f in rt.forecast_models
             ],
         )
         for rt in country.region_types

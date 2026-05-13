@@ -28,7 +28,7 @@ async def _resolve_nation(
     nations = await db.get_locations(
         energy_type=energy_type,
         location_type=models.LocationType.NATION,
-        authdata=auth,
+        authdata={},
     )
     matches = [n for n in nations if n.name.lower() == country_cfg.nation_name.lower()]
     if len(matches) == 0:
@@ -255,9 +255,13 @@ def _resolve_forecast_model(
         )
     else:
         _default_fm = (
-            rt.get_model_by_internal_name(rt.default_model) if rt.default_model else None
+            rt.get_model_by_internal_name(rt.default_model)
+            if rt.default_model
+            else None
         )
-        resolved_api = model or (_default_fm.api_name if _default_fm else rt.default_model)
+        resolved_api = model or (
+            _default_fm.api_name if _default_fm else rt.default_model
+        )
     # Translate api_name → internal DP name before the backend call.
     if resolved_api is not None:
         fm = rt.get_model_by_api_name(resolved_api)
@@ -265,7 +269,9 @@ def _resolve_forecast_model(
     return None
 
 
-def _internal_to_api_name(internal_name: str | None, rt: RegionTypeConfig | None) -> str | None:
+def _internal_to_api_name(
+    internal_name: str | None, rt: RegionTypeConfig | None
+) -> str | None:
     """Translate an internal DP forecaster name to its user-facing API slug."""
     if internal_name is None or rt is None:
         return internal_name

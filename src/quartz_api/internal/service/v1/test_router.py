@@ -55,7 +55,7 @@ class FixedUUIDStorageClient(StorageClient):
         return await super().get_locations(
             energy_type=energy_type,
             location_type=location_type,
-            authdata=authdata,
+            authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
         )
@@ -80,7 +80,7 @@ class NullLocationsForUUIDClient(StorageClient):
         return await super().get_locations(
             energy_type=energy_type,
             location_type=location_type,
-            authdata=authdata,
+            authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
         )
@@ -114,7 +114,7 @@ class NationResponseClient(StorageClient):
         return await super().get_locations(
             energy_type=energy_type,
             location_type=location_type,
-            authdata=authdata,
+            authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
         )
@@ -154,7 +154,7 @@ class NationNameStorageClient(StorageClient):
         return await super().get_locations(
             energy_type=energy_type,
             location_type=location_type,
-            authdata=authdata,
+            authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
         )
@@ -1286,7 +1286,9 @@ async def test_refresh_forecasts_non_default_region_type(
     admin_client: AsyncClient,
 ) -> None:
     """refresh endpoint accepts non-default region_type (national) — returns 202."""
-    resp = await admin_client.post("/v1/GB/solar/forecasts/refresh?region_type=national")
+    resp = await admin_client.post(
+        "/v1/GB/solar/forecasts/refresh?region_type=national"
+    )
     assert resp.status_code == 202
 
 

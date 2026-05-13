@@ -185,7 +185,7 @@ async def get_generation_at_timestamp(
         regions = await db.get_locations(
             energy_type=source,
             location_type=location_type,
-            authdata=auth,
+            authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
 
@@ -229,7 +229,7 @@ async def get_generation_at_timestamp(
         snapshot_timestamp_utc=snapshot_time,
         energy_type=source,
         observer_name=observer,
-        authdata=auth,
+        authdata={},
     )
 
     region_names = {
