@@ -159,7 +159,7 @@ async def get_generation_at_timestamp(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `dno`, `national`). **Required.**
+    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **time_utc**: target datetime (UTC) for the snapshot. Defaults to now floored
       to 30 minutes (e.g. `2026-05-11T14:30:00Z`).
@@ -263,7 +263,7 @@ async def get_generation_period(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: region granularity (e.g. `gsp`, `dno`). **Required.**
+    - **region_type**: region granularity (e.g. `gsp`, `national`). **Required.**
       See `/{country}/{source}/region-types` for valid values.
     - **observer**: generation observer name. Defaults to `pvlive_in_day`.
       See `/{country}/{source}/generation-sources` for available observers.

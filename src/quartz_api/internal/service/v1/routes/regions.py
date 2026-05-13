@@ -57,7 +57,7 @@ async def get_country_regions(
     #### Parameters
     - **country**: country code (e.g. `GB`, `NL`).
     - **source**: energy source — currently only `solar` is supported.
-    - **region_type**: optional region type slug (e.g. `national`, `dno`, `gsp`).
+    - **region_type**: optional region type slug (e.g. `national`, `gsp`).
       See `/{country}/{source}/region-types` for valid values.
     - **parent_id**: optional UUID of a parent region — returns its children only.
     - **name**: optional name filter; returns regions whose name contains this string.

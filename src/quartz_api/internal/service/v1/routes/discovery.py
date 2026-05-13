@@ -47,7 +47,7 @@ async def get_countries(
     Returns one entry per country the API has data for. Each entry includes:
 
     - **region_types** — the region granularities available for that country (e.g. national,
-      DNO, GSP), including the forecast models valid for each type.
+      GSP), including the forecast models valid for each type.
     - **generation_sources** — the observed-generation observers available (e.g.
       `pvlive_in_day`, `pvlive_day_after`).
     - **capacity_kW** and **centroid** — installed capacity and geographic centre.
@@ -106,7 +106,7 @@ async def get_region_types(
     """List available region types for a country and energy source.
 
     Region types define the geographic granularity at which forecasts and generation
-    data are available — for example `national`, `dno`, or `gsp` for Great Britain.
+    data are available — for example `national` or `gsp` for Great Britain.
 
     Each entry includes:
 
