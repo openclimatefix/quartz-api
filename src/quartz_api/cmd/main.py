@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 import grpc
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
+from attr.validators import disabled
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -23,7 +24,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
-from scalar_fastapi import get_scalar_api_reference
+from scalar_fastapi import Theme, get_scalar_api_reference, AgentScalarConfig
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -56,7 +57,8 @@ class GetHealthResponse(BaseModel):
 
 
 def _custom_openapi(
-    server: FastAPI, auth_config: dict[str, str] | None = None,
+    server: FastAPI,
+    auth_config: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
@@ -128,7 +130,8 @@ def _custom_openapi(
 
 
 def _create_v1_app(
-    conf: ConfigTree, auth_openapi_config: dict[str, str] | None,
+    conf: ConfigTree,
+    auth_openapi_config: dict[str, str] | None,
 ) -> FastAPI:
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
@@ -164,6 +167,35 @@ def _create_v1_app(
             title=v1_app.title,
             authentication=scalar_auth,
             persist_auth=True,
+            theme=Theme.ALTERNATE,
+            dark_mode=True,
+            scalar_favicon_url="/static/favicon.ico",
+            default_open_all_tags=True,
+            agent=AgentScalarConfig(disabled=True),
+            custom_css="""
+                      /* override theme colours */
+                      :root .dark-mode {
+                        --scalar-color-accent: #ffd053;
+                      }
+                      :root .light-mode {
+                        --scalar-color-accent: #ffd053;
+                      }
+                      /* target the authorize button specifically */
+                      .dark-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
+                        background-color: var(--scalar-color-accent) !important;
+                        color: #333 !important;
+                        border-color: transparent !important;
+                      }
+                      .light-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
+                        background-color: var(--scalar-color-accent) !important;
+                        color: #333 !important;
+                        border-color: transparent !important;
+                      }
+                      /* hide "Open in API Client" Scalar link in Sidebar */
+                      aside a.open-api-client-button {
+                        display: none !important;
+                      }
+                    """,
         )
 
     return v1_app
@@ -308,7 +340,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
                 server.include_router(mod.router)
 
                 mod_description = getattr(
-                    mod, "__doc__", f"TODO: Add description for {r}",
+                    mod,
+                    "__doc__",
+                    f"TODO: Add description for {r}",
                 )
                 description = mod_description
 
