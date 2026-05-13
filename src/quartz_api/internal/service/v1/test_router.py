@@ -471,7 +471,7 @@ async def test_get_regions_by_type(client: AsyncClient) -> None:
 @pytest.mark.anyio
 async def test_get_regions_by_parent_id(client: AsyncClient) -> None:
     parent_id = str(uuid4())
-    resp = await client.get(f"/v1/GB/solar/regions?parent_id={parent_id}")
+    resp = await client.get(f"/v1/GB/solar/regions?parent={parent_id}")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
@@ -488,7 +488,7 @@ async def test_get_region_by_id(client: AsyncClient) -> None:
     resp = await client.get(f"/v1/GB/solar/regions/{region_id}")
     assert resp.status_code == 200
     body = resp.json()
-    assert "id" in body
+    assert "name" in body
     assert "capacity_kW" in body
 
 
@@ -800,7 +800,7 @@ async def test_get_regions_national_type_returns_nation(client: AsyncClient) -> 
 async def test_get_regions_parent_id_returns_children(client: AsyncClient) -> None:
     """parent_id with any UUID returns child locations (DummyDB always responds)."""
     parent_id = str(uuid4())
-    resp = await client.get(f"/v1/GB/solar/regions?parent_id={parent_id}")
+    resp = await client.get(f"/v1/GB/solar/regions?parent={parent_id}")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
@@ -810,7 +810,7 @@ async def test_get_regions_parent_id_with_region_type(client: AsyncClient) -> No
     """parent_id + region_type=gsp returns GSP children of that parent."""
     parent_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions?parent_id={parent_id}&region_type=gsp",
+        f"/v1/GB/solar/regions?parent={parent_id}&region_type=gsp",
     )
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -822,7 +822,7 @@ async def test_get_regions_parent_not_in_country_404(
 ) -> None:
     """parent_id not found within the country boundary returns 404."""
     parent_id = str(uuid4())
-    resp = await null_uuid_client.get(f"/v1/GB/solar/regions?parent_id={parent_id}")
+    resp = await null_uuid_client.get(f"/v1/GB/solar/regions?parent={parent_id}")
     assert resp.status_code == 404
 
 
@@ -1287,7 +1287,7 @@ async def test_refresh_forecasts_non_default_region_type(
 ) -> None:
     """refresh endpoint accepts non-default region_type (national) — returns 202."""
     resp = await admin_client.post(
-        "/v1/GB/solar/forecasts/refresh?region_type=national"
+        "/v1/GB/solar/forecasts/refresh?region_type=national",
     )
     assert resp.status_code == 202
 

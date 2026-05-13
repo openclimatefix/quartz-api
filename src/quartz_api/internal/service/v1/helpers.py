@@ -1,5 +1,7 @@
 """Shared utilities for the v1 API router."""
 
+# ruff: noqa: ARG001
+
 import datetime as dt
 from uuid import UUID
 
@@ -51,7 +53,6 @@ def _location_to_summary(
         if rt is not None:
             region_type_name = rt.type
     return RegionSummary(
-        id=loc.uuid,
         name=_location_display_name(loc, country_cfg),
         type=region_type_name,
         capacity_kW=loc.capacity_kilowatts,
@@ -91,7 +92,6 @@ def _location_to_detail(
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
     return RegionDetail(
-        id=loc.uuid,
         name=_location_display_name(loc, country_cfg),
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
@@ -282,7 +282,8 @@ def _resolve_forecast_model(
 
 
 def _internal_to_api_name(
-    internal_name: str | None, rt: RegionTypeConfig | None,
+    internal_name: str | None,
+    rt: RegionTypeConfig | None,
 ) -> str | None:
     """Translate an internal DP forecaster name to its user-facing API slug."""
     if internal_name is None or rt is None:

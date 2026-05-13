@@ -2,7 +2,6 @@
 
 import datetime as dt
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import Path, Query
 from pydantic import (
@@ -98,7 +97,9 @@ def _build_observer_pattern() -> str:
 def _parse_source(v: str) -> models.EnergyType:
     if v == "solar":
         return models.EnergyType.SOLAR
-    raise ValueError(f"Unsupported energy source '{v}'. Currently only 'solar' is available.")
+    raise ValueError(
+        f"Unsupported energy source '{v}'. Currently only 'solar' is available.",
+    )
 
 
 ValidSource = Annotated[
@@ -116,7 +117,9 @@ class _CountryParam(str):
     """Country code path param — a str that proxies its CountryConfig attributes."""
 
     @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: object, handler: object) -> object:
+    def __get_pydantic_core_schema__(
+        cls, source_type: object, handler: object,
+    ) -> object:
         from pydantic_core import core_schema
 
         def validate(v: object) -> "_CountryParam":
@@ -132,7 +135,9 @@ class _CountryParam(str):
         return core_schema.no_info_plain_validator_function(validate)  # type: ignore[return-value]
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema_obj: object, handler: object) -> dict:
+    def __get_pydantic_json_schema__(
+        cls, core_schema_obj: object, handler: object,
+    ) -> dict:
         return {"type": "string", "enum": list(COUNTRIES.keys())}
 
     def __getattr__(self, name: str) -> object:
@@ -225,7 +230,6 @@ class CountryDetail(BaseModel):
     """Full capability manifest for a country — region types, models, and generation sources."""
 
     country: str
-    region_id: UUID
     name: str
     capacity_kW: float
     centroid: Centroid
@@ -236,7 +240,6 @@ class CountryDetail(BaseModel):
 class RegionSummary(BaseModel):
     """Summary of a region (nation, DNO, GSP, etc.)."""
 
-    id: UUID
     name: str
     type: str | None = None
     capacity_kW: float
@@ -260,7 +263,6 @@ class ForecastValue(BaseModel):
 class ForecastResponse(BaseModel):
     """Forecast time series for a region, with shared metadata."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     model_name: str | None = None
@@ -280,7 +282,6 @@ class GenerationValue(BaseModel):
 class GenerationResponse(BaseModel):
     """Observed generation time series for a region, with shared metadata."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     observer_name: str | None = None
@@ -290,7 +291,6 @@ class GenerationResponse(BaseModel):
 class RegionForecastValue(BaseModel):
     """A single forecast value for one region — used in snapshot responses."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     power_kW: float
@@ -311,7 +311,6 @@ class ForecastSnapshot(BaseModel):
 class RegionGenerationValue(BaseModel):
     """A single observed generation value for one region — used in snapshot responses."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     power_kW: float
@@ -328,7 +327,6 @@ class GenerationSnapshot(BaseModel):
 class RegionForecast(BaseModel):
     """Forecast time series for one region — used in matrix responses."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     power_kW: list[float]
@@ -349,7 +347,6 @@ class RegionForecastMatrix(BaseModel):
 class RegionGeneration(BaseModel):
     """Generation time series for one region — used in matrix responses."""
 
-    region_id: UUID
     region_name: str
     capacity_kW: float
     power_kW: list[float]

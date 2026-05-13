@@ -5,7 +5,6 @@
 import asyncio
 import datetime as dt
 import json
-from uuid import UUID
 
 import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
@@ -118,7 +117,6 @@ async def get_generation(
 
     first = agvs[0] if agvs else None
     return GenerationResponse(
-        region_id=_to_uuid(region.uuid),
         region_name=_location_display_name(region, country),
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         observer_name=observer,
@@ -240,7 +238,6 @@ async def get_generation_at_timestamp(
         observer_name=observer,
         values=[
             RegionGenerationValue(
-                region_id=v.location_uuid,
                 region_name=region_names.get(v.location_uuid, ""),
                 capacity_kW=v.capacity_kilowatts,
                 power_kW=v.power_kilowatts,
@@ -264,10 +261,6 @@ async def get_generation_period(
     observer: ValidObserver = "pvlive_in_day",
     start_utc: dt.datetime | None = Query(None, description="Start of window (UTC)."),
     end_utc: dt.datetime | None = Query(None, description="End of window (UTC)."),
-    region_ids: list[UUID] | None = Query(
-        None,
-        description="Limit to specific region UUIDs.",
-    ),
     region_names: list[str] | None = Query(
         None,
         description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",
@@ -298,11 +291,8 @@ async def get_generation_period(
       (floored to the nearest 6 hours).
     - **end_utc**: end of the window (UTC). Defaults to 2 days after now
       (floored to the nearest 6 hours).
-    - **region_ids**: optional list of region UUIDs to restrict the response to a
-      subset of regions (e.g. `?region_ids=uuid1&region_ids=uuid2`).
     - **region_names**: optional list of region names to restrict the response to a
       subset of regions (e.g. `?region_names=GSP1&region_names=GSP2`).
-      Can be combined with `region_ids`; the union of both sets is returned.
     """
     _check_country_access(auth, country)
 
@@ -344,14 +334,9 @@ async def get_generation_period(
             detail=f"No regions found for type '{rt.type}' in {country.code}.",
         )
 
-    if region_ids is not None or region_names is not None:
-        id_set = set(region_ids or [])
-        name_set = {n.lower() for n in (region_names or [])}
-        regions = [
-            r
-            for r in regions
-            if _to_uuid(r.uuid) in id_set or r.name.lower() in name_set
-        ]
+    if region_names is not None:
+        name_set = {n.lower() for n in region_names}
+        regions = [r for r in regions if r.name.lower() in name_set]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []
@@ -367,7 +352,6 @@ async def get_generation_period(
     for r, windowed in all_region_data:
         region_series.append(
             RegionGeneration(
-                region_id=_to_uuid(r.uuid),
                 region_name=_location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],

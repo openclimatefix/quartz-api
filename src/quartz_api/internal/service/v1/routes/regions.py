@@ -1,9 +1,6 @@
 """Region browsing routes — list and detail views for regions within a country."""
 
-# ruff: noqa: B008
-
 import asyncio
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from starlette import status
@@ -11,7 +8,12 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from ..endpoint_types import CountryParam, OptionalValidRegionType, RegionDetail, ValidSource
+from ..endpoint_types import (
+    CountryParam,
+    OptionalValidRegionType,
+    RegionDetail,
+    ValidSource,
+)
 from ..helpers import (
     _check_country_access,
     _check_region_type,
@@ -31,9 +33,9 @@ async def get_country_regions(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: OptionalValidRegionType = None,
-    parent_id: UUID | None = Query(
+    parent: str | None = Query(
         None,
-        description="List children of a specific region.",
+        description="List children of a specific parent region (name or `national`).",
     ),
     name: str | None = Query(
         None,
@@ -42,14 +44,14 @@ async def get_country_regions(
 ) -> list[RegionDetail]:
     """List regions for a country, optionally filtered by type, parent, or name.
 
-    Returns `RegionDetail` objects containing each region's UUID, name, type,
+    Returns `RegionDetail` objects containing each region's name, type,
     installed capacity, centroid, and any available metadata fields.
 
     Filter behaviour:
 
     - No filters — returns every region across all configured region types.
     - `region_type` — restricts results to one granularity level (e.g. `gsp`).
-    - `parent_id` — returns the direct children of the specified region UUID.
+    - `parent` — returns the direct children of the specified parent region.
     - `name` — case-insensitive substring search across region names.
 
     Filters can be combined (e.g. `?region_type=gsp&name=london`).
@@ -59,35 +61,39 @@ async def get_country_regions(
     - **source**: energy source — currently only `solar` is supported.
     - **region_type**: optional region type slug (e.g. `national`, `gsp`).
       See `/{country}/{source}/region-types` for valid values.
-    - **parent_id**: optional UUID of a parent region — returns its children only.
+    - **parent**: optional parent region identifier (name or `national`) — returns its
+      children only.
     - **name**: optional name filter; returns regions whose name contains this string.
     """
     _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
 
-    if parent_id is not None:
+    if parent is not None:
+        parent_uuid = await _resolve_region_id(parent, country, source, db)
         rt = _check_region_type(country, region_type, country.code)
-        # Validate that parent_id is within the country, unless it IS the nation itself.
-        if parent_id != nation.uuid:
+        # Validate that parent is within the country, unless it IS the nation itself.
+        if parent_uuid != nation.uuid:
             parent_location = await db.get_locations(
                 energy_type=source,
                 location_type=None,
                 authdata={},
-                location_uuid=parent_id,
+                location_uuid=parent_uuid,
                 enclosing_location_uuid=_to_uuid(nation.uuid),
             )
             if len(parent_location) == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Parent region with UUID '{parent_id}' not found in {country.code}.",
+                    detail=f"Parent region '{parent}' not found in {country.code}.",
                 )
         locs = await db.get_locations(
             energy_type=source,
             location_type=rt.location_type if rt is not None else None,
             authdata={},
-            enclosing_location_uuid=parent_id,
+            enclosing_location_uuid=parent_uuid,
         )
-        return _apply_name_filter([_location_to_detail(loc, country) for loc in locs], name)
+        return _apply_name_filter(
+            [_location_to_detail(loc, country) for loc in locs], name,
+        )
 
     if region_type is not None:
         rt = _check_region_type(country, region_type, country.code)
@@ -100,7 +106,9 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=_to_uuid(nation.uuid),
         )
-        return _apply_name_filter([_location_to_detail(loc, country) for loc in locs], name)
+        return _apply_name_filter(
+            [_location_to_detail(loc, country) for loc in locs], name,
+        )
 
     # No filters — combine all region types
     tasks = []
@@ -125,7 +133,9 @@ async def get_country_regions(
     return _apply_name_filter(out, name)
 
 
-def _apply_name_filter(regions: list[RegionDetail], name: str | None) -> list[RegionDetail]:
+def _apply_name_filter(
+    regions: list[RegionDetail], name: str | None,
+) -> list[RegionDetail]:
     if name is None:
         return regions
     needle = name.lower()
@@ -142,7 +152,7 @@ async def get_region(
 ) -> RegionDetail:
     """Get details for a specific region.
 
-    Returns a `RegionDetail` object with the region's UUID, name, type, installed
+    Returns a `RegionDetail` object with the region's name, type, installed
     capacity, centroid, and any available metadata fields.
 
     #### Parameters
