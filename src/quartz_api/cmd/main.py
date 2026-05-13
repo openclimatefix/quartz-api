@@ -61,7 +61,7 @@ class ClearedInMemoryBackend(InMemoryBackend):
                 if len(for_del) > 0:
                     log.debug(
                         f"Clearing {len(for_del)} expired cache items, "
-                        f"from {self._store.keys()} cached items"
+                        f"from {self._store.keys()} cached items",
                     )
                     for k in for_del:
                         del self._store[k]
