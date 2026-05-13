@@ -144,7 +144,8 @@ class FM:
     # GB — PVNet single-source models
     PVNET_ECMWF = _m("pvnet_ecmwf", "PVNet Intraday (ECMWF)")
     PVNET_ECMWF_ADJUST = _m(
-        "pvnet_ecmwf_adjust", "PVNet Intraday (ECMWF, Trend Adjusted)",
+        "pvnet_ecmwf_adjust",
+        "PVNet Intraday (ECMWF, Trend Adjusted)",
     )
     PVNET_SAT = _m("pvnet_sat_only", "PVNet Intraday (Satellite)", slug="pvnet_sat")
     PVNET_SAT_ADJUST = _m(
@@ -168,12 +169,15 @@ class FM:
     # GB — PVNet day-ahead
     PVNET_DAY_AHEAD = _m("pvnet_day_ahead", "PVNet Day Ahead")
     PVNET_DAY_AHEAD_ADJUST = _m(
-        "pvnet_day_ahead_adjust", "PVNet Day Ahead (Trend Adjusted)",
+        "pvnet_day_ahead_adjust",
+        "PVNet Day Ahead (Trend Adjusted)",
     )
     # NL — blend (slugs match GB blend slugs so API is consistent across countries)
     NL_BLEND = _m("nl_blend", "Blend", slug="blend")
     NL_BLEND_ADJUST = _m(
-        "nl_blend_adjust", "Blend (Trend Adjusted)", slug="blend_adjust",
+        "nl_blend_adjust",
+        "Blend (Trend Adjusted)",
+        slug="blend_adjust",
     )
 
 
