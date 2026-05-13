@@ -41,11 +41,9 @@ class RegionTypeConfig:
     # default_model stores the internal DP forecaster_name, not the user-facing slug.
     default_model: str | None = None
     metadata_fields: tuple[str, ...] = ()
-    # intraday_models lists internal DP names of models accessible to intraday-only users.
-    # intraday_default_model is also an internal DP name.
-    # Both are resolved to user-facing slugs at runtime via forecast_models.
-    intraday_models: tuple[str, ...] = ()
-    intraday_default_model: str | None = None
+    # intraday_models lists models accessible to intraday-only users (subset of forecast_models).
+    intraday_models: tuple[ForecastModel, ...] = ()
+    intraday_default_model: ForecastModel | None = None
     # Maps internal DP location names to user-facing display names.
     # Entries not listed fall back to loc.name unchanged.
     location_name_map: tuple[tuple[str, str], ...] = ()
@@ -79,11 +77,8 @@ class RegionTypeConfig:
         return fm.api_name if fm else self.default_model
 
     def intraday_api_names(self) -> frozenset[str]:
-        """Return the set of user-facing names for models in intraday_models."""
-        internal = frozenset(self.intraday_models)
-        return frozenset(
-            fm.api_name for fm in self.forecast_models if fm.name in internal
-        )
+        """Return the set of user-facing names for intraday-accessible models."""
+        return frozenset(fm.api_name for fm in self.intraday_models)
 
 
 @dataclass(frozen=True)
@@ -183,52 +178,58 @@ FORECASTER_LABELS: dict[str, str] = {
 }
 
 
-def _model(name: str, slug: str | None = None) -> ForecastModel:
-    """Build a ForecastModel using the central label map (falls back to the raw name)."""
+def _m(name: str, slug: str | None = None) -> ForecastModel:
     return ForecastModel(name=name, label=FORECASTER_LABELS.get(name, name), slug=slug)
 
 
-# Internal DP names for intraday models — used by intraday_models field on RegionTypeConfig.
-_GB_INTRADAY_MODEL_NAMES: tuple[str, ...] = (
-    "pvnet_v2",
-    "pvnet_v2_adjust",
-)
+class FM:
+    """All forecast models defined exactly once — reference these in RegionTypeConfig tuples.
 
-# Intraday ForecastModel entries shared across GB national and GSP.
-_GB_INTRADAY_FORECAST_MODELS: tuple[ForecastModel, ...] = (
-    _model("pvnet_v2", slug="pvnet_intraday"),
-)
+    Attribute names are the user-facing API slugs (or the DP internal name when no slug
+    is needed). This is the single source of truth for slug → internal-name mappings.
+    """
 
-_GB_INTRADAY_FORECAST_MODELS_ADJUSTED: tuple[ForecastModel, ...] = (
-    _model("pvnet_v2_adjust", slug="pvnet_intraday_adjust"),
-)
+    # GB — blend
+    BLEND = _m("blend")
+    BLEND_ADJUST = _m("blend_adjust")
+    # GB — PVNet single-source models
+    PVNET_ECMWF = _m("pvnet_ecmwf")
+    PVNET_ECMWF_ADJUST = _m("pvnet_ecmwf_adjust")
+    PVNET_SAT = _m("pvnet_sat_only", slug="pvnet_sat")
+    PVNET_SAT_ADJUST = _m("pvnet_sat_only_adjust", slug="pvnet_sat_adjust")
+    PVNET_UKV = _m("pvnet_ukv_only", slug="pvnet_ukv")
+    PVNET_UKV_ADJUST = _m("pvnet_ukv_only_adjust", slug="pvnet_ukv_adjust")
+    # GB — PVNet v2 (intraday)
+    PVNET_INTRADAY = _m("pvnet_v2", slug="pvnet_intraday")
+    PVNET_INTRADAY_ADJUST = _m("pvnet_v2_adjust", slug="pvnet_intraday_adjust")
+    # GB — PVNet day-ahead
+    PVNET_DAY_AHEAD = _m("pvnet_day_ahead")
+    PVNET_DAY_AHEAD_ADJUST = _m("pvnet_day_ahead_adjust")
+    # NL — blend (slugs match GB blend slugs so API is consistent)
+    NL_BLEND = _m("nl_blend", slug="blend")
+    NL_BLEND_ADJUST = _m("nl_blend_adjust", slug="blend_adjust")
+
 
 _GB_NATIONAL_FORECAST_MODELS = (
-    _model("blend"),
-    _model("blend_adjust"),
-    _model("pvnet_ecmwf"),
-    _model("pvnet_ecmwf_adjust"),
-    _model("pvnet_sat_only", slug="pvnet_sat"),
-    _model("pvnet_sat_only_adjust", slug="pvnet_sat_adjust"),
-    _model("pvnet_ukv_only", slug="pvnet_ukv"),
-    _model("pvnet_ukv_only_adjust", slug="pvnet_ukv_adjust"),
-    *_GB_INTRADAY_FORECAST_MODELS,
-    *_GB_INTRADAY_FORECAST_MODELS_ADJUSTED,
-    _model("pvnet_day_ahead"),
-    _model("pvnet_day_ahead_adjust"),
+    FM.BLEND,
+    FM.BLEND_ADJUST,
+    FM.PVNET_ECMWF,
+    FM.PVNET_ECMWF_ADJUST,
+    FM.PVNET_SAT,
+    FM.PVNET_SAT_ADJUST,
+    FM.PVNET_UKV,
+    FM.PVNET_UKV_ADJUST,
+    FM.PVNET_INTRADAY,
+    FM.PVNET_INTRADAY_ADJUST,
+    FM.PVNET_DAY_AHEAD,
+    FM.PVNET_DAY_AHEAD_ADJUST,
 )
 
-_GB_GSP_FORECAST_MODELS = (_model("blend"),)
+_GB_GSP_FORECAST_MODELS = (FM.BLEND,)
 
-_NL_NATIONAL_FORECAST_MODELS = (
-    _model("nl_blend", slug="blend"),
-    _model("nl_blend_adjust", slug="blend_adjust"),
-)
+_NL_NATIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
 
-_NL_REGIONAL_FORECAST_MODELS = (
-    _model("nl_blend", slug="blend"),
-    _model("nl_blend_adjust", slug="blend_adjust"),
-)
+_NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
@@ -246,8 +247,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 source_types=("solar",),
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
                 default_model="blend_adjust",
-                intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_v2_adjust",
+                intraday_models=(FM.PVNET_INTRADAY, FM.PVNET_INTRADAY_ADJUST),
+                intraday_default_model=FM.PVNET_INTRADAY_ADJUST,
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -256,10 +257,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.GSP,
                 source_types=("solar",),
                 forecast_models=_GB_GSP_FORECAST_MODELS,
-                default_model="blend",
+                default_model="blend_adjust",
                 metadata_fields=("gsp_id", "full_name"),
-                intraday_models=_GB_INTRADAY_MODEL_NAMES,
-                intraday_default_model="pvnet_v2",
+                intraday_models=(FM.BLEND_ADJUST,),
+                intraday_default_model=FM.BLEND_ADJUST,
             ),
         ),
         generation_sources=(

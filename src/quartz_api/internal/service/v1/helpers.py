@@ -271,13 +271,8 @@ def _resolve_forecast_model(
                     f"Intraday-accessible models: {sorted(allowed)}"
                 ),
             )
-        _default_fm = (
-            rt.get_model_by_internal_name(rt.intraday_default_model)
-            if rt.intraday_default_model
-            else None
-        )
         resolved_api = model or (
-            _default_fm.api_name if _default_fm else rt.intraday_default_model
+            rt.intraday_default_model.api_name if rt.intraday_default_model else None
         )
     else:
         _default_fm = (

@@ -19,6 +19,7 @@ from quartz_api.internal import models
 from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from .country_config import COUNTRIES
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -1413,21 +1414,27 @@ async def test_discovery_routes_are_public(no_perm_client: AsyncClient) -> None:
 async def test_intraday_user_forecast_defaults_to_intraday_model(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user gets pvnet_intraday as the default model for GSP."""
+    """Intraday-only user gets the configured intraday default model for GSP."""
+    gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
+    assert gsp_rt is not None and gsp_rt.intraday_default_model is not None
+    expected_model = gsp_rt.intraday_default_model.api_name
     region_id = str(uuid4())
     resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
     assert resp.status_code == 200
-    assert resp.json()["model_name"] == "pvnet_intraday"
+    assert resp.json()["model_name"] == expected_model
 
 
 @pytest.mark.anyio
 async def test_intraday_user_requesting_intraday_model_200(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user can explicitly request an intraday model → 200."""
+    """Intraday-only user can explicitly request any permitted intraday model → 200."""
+    gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
+    assert gsp_rt is not None and gsp_rt.intraday_models
+    intraday_model = gsp_rt.intraday_models[-1].api_name
     region_id = str(uuid4())
     resp = await intraday_client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model=pvnet_intraday",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model={intraday_model}",
     )
     assert resp.status_code == 200
 
@@ -1436,10 +1443,16 @@ async def test_intraday_user_requesting_intraday_model_200(
 async def test_intraday_user_requesting_non_intraday_model_403(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user requesting blend (a day-ahead model) → 403."""
+    """Intraday-only user requesting a model outside their permitted set → 403."""
+    gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
+    assert gsp_rt is not None
+    allowed = gsp_rt.intraday_api_names()
+    restricted_model = next(
+        m.api_name for m in gsp_rt.forecast_models if m.api_name not in allowed
+    )
     region_id = str(uuid4())
     resp = await intraday_client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model=blend",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model={restricted_model}",
     )
     assert resp.status_code == 403
 
