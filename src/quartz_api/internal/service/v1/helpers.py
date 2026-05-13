@@ -177,20 +177,34 @@ async def _resolve_region_id(
     if region_id == "national":
         return nation.uuid
 
-    # Name search — check nation aliases first, then delegate to DP name filter.
+    # Name search — check nation aliases first.
     needle = region_id.lower()
     if needle in (nation.name.lower(), cfg.display_name.lower()):
         return nation.uuid
 
+    # Reverse-lookup mapped display names → DP internal name.
+    # e.g. "friesland" → "nl_region_2_friesland" for NL provinces.
+    dp_name: str | None = None
+    for rt in cfg.region_types:
+        for internal, display in rt.location_name_map:
+            if display.lower() == needle:
+                dp_name = internal
+                break
+        if dp_name is not None:
+            break
+
+    search_name = dp_name or region_id
     locs = await db.get_locations(
         energy_type=energy_type,
         location_type=None,
         authdata={},
         enclosing_location_uuid=_to_uuid(nation.uuid),
-        location_names=[region_id],
+        location_names=[search_name],
     )
-    if locs:
-        return locs[0].uuid
+    # Client-side confirmation: DP may not filter by name server-side yet.
+    match = next((loc for loc in locs if loc.name.lower() == search_name.lower()), None)
+    if match is not None:
+        return match.uuid
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Region '{region_id}' not found.",
