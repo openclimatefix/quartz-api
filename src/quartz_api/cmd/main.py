@@ -48,6 +48,7 @@ logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
+
 class ClearedInMemoryBackend(InMemoryBackend):
     """Custom in-memory cache backend that clears expired items."""
 
@@ -58,12 +59,15 @@ class ClearedInMemoryBackend(InMemoryBackend):
                 now = self._now
                 for_del = tuple(k for k, v in self._store.items() if v.ttl_ts < now)
                 if len(for_del) > 0:
-                    log.debug(f"Clearing {len(for_del)} expired cache items, "
-                              f"from {self._store.keys()} cached items")
+                    log.debug(
+                        f"Clearing {len(for_del)} expired cache items, "
+                        f"from {self._store.keys()} cached items"
+                    )
                     for k in for_del:
                         del self._store[k]
             # Lets sleep for 10 minutes before checking again if there are any expired items
             await asyncio.sleep(600)
+
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -201,7 +205,8 @@ def _create_v1_app(
                         color: #333 !important;
                         border-color: transparent !important;
                       }
-                      .light-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
+                      .light-mode .scalar-button:not(.scalar-button-ghost),
+                      .show-api-client-button {
                         background-color: var(--scalar-color-accent) !important;
                         color: #333 !important;
                         border-color: transparent !important;
