@@ -243,9 +243,9 @@ _NL_REGIONAL_FORECAST_MODELS = (
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
-        code="GB",
-        nation_name="uk",
-        display_name="GB",
+        code="GB",  # used for path params / country-level differentiation
+        nation_name="uk",  # maps to DP region name
+        display_name="Great Britain",
         permission="read:gb",
         intraday_permission="read:uk-intraday",
         region_types=(
@@ -289,7 +289,7 @@ COUNTRIES: dict[str, CountryConfig] = {
     "NL": CountryConfig(
         code="NL",
         nation_name="nl_national",
-        display_name="NL",
+        display_name="Nederland",
         permission="read:nl",
         region_types=(
             RegionTypeConfig(
@@ -311,7 +311,9 @@ COUNTRIES: dict[str, CountryConfig] = {
                 default_model="nl_blend_adjust",
                 metadata_fields=("region_id",),
                 # Maps DP location names → user-facing display names.
-                # Verify compound names (e.g. noord_holland vs noord-holland) against DP.
+                # N.B. EXISTING NAMES SHOULD NOT BE CHANGED AFTER DEPLOYMENT
+                # to prevent breaking of any hard-codings in client scripts.
+                # Adding additional names (although very unlikely) would be fine.
                 location_name_map=(
                     ("nl_region_1_groningen", "groningen"),
                     ("nl_region_2_friesland", "friesland"),
