@@ -48,6 +48,22 @@ logging.getLogger("hpack").setLevel(logging.WARNING)
 
 static_dir = pathlib.Path(__file__).parent.parent / "static"
 
+class ClearedInMemoryBackend(InMemoryBackend):
+    """Custom in-memory cache backend that clears expired items."""
+
+    async def periodic_clear_expired(self) -> None:
+        """Periodically clear expired cache items."""
+        while True:
+            async with self._lock:
+                now = self._now
+                for_del = tuple(k for k, v in self._store.items() if v.ttl_ts < now)
+                if len(for_del) > 0:
+                    log.debug(f"Clearing {len(for_del)} expired cache items, "
+                              f"from {self._store.keys()} cached items")
+                    for k in for_del:
+                        del self._store[k]
+            # Lets sleep for 10 minutes before checking again if there are any expired items
+            await asyncio.sleep(600)
 
 class GetHealthResponse(BaseModel):
     """Model for the health endpoint response."""
@@ -260,12 +276,20 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         v1_app.dependency_overrides[models.get_storage_client] = lambda: storage
         warm_v1_task = asyncio.create_task(_warm_all_v1_caches(v1_app))
 
+    # make sure cache is cleaned up every 10 seconds
+    backend = FastAPICache.get_backend()
+    if backend is not None and isinstance(backend, ClearedInMemoryBackend):
+        clear_cache_periodically = asyncio.create_task(backend.periodic_clear_expired())
+
     yield
 
     if warm_task is not None:
         warm_task.cancel()
     if warm_v1_task is not None:
         warm_v1_task.cancel()
+
+    if clear_cache_periodically is not None:
+        clear_cache_periodically.cancel()
 
     gsp_id_map.clear()
     if grpc_channel:
@@ -295,7 +319,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         swagger_ui_parameters={"persistAuthorization": True},
     )
 
-    FastAPICache.init(InMemoryBackend(), expire=120, prefix="fastapi-cache")
+    FastAPICache.init(ClearedInMemoryBackend(), expire=120, prefix="fastapi-cache")
 
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
