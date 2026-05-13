@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfo
 import grpc
 import sentry_sdk
 from apitally.fastapi import ApitallyMiddleware
-from attr.validators import disabled
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -24,7 +23,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
-from scalar_fastapi import Theme, get_scalar_api_reference, AgentScalarConfig
+from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
