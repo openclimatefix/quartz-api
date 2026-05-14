@@ -1,17 +1,76 @@
-"""Cache warming logic for the v1 API timeseries endpoints."""
+"""Cache warming logic and key builder for the v1 API."""
 
 import asyncio
 import json
 import logging
+from collections.abc import Callable
+from typing import Any
 
+from fastapi import Request, Response
 from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
 
+from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
 from .helpers import _internal_to_api_name, _timeseries_window, _to_uuid
 
 log = logging.getLogger(__name__)
+
+
+def _country_access_tier(auth: dict, country: object) -> str:
+    """Reduce a user's permissions to the access tier for a specific country.
+
+    Returns one of three values:
+    - ``"full"``         — full access (read:gb, read:trial, read:partner, etc.)
+    - ``"intraday"``     — intraday-only access (e.g. read:uk-intraday)
+    - ``"unauthorized"`` — no access; route will 403 and response won't be cached
+
+    All permission combinations that yield the same data tier share a single cache
+    entry, so read:gb, read:trial, and read:partner users all hit the same key.
+    """
+    perms = frozenset(auth.get("permissions", []))
+    if perms & ALL_COUNTRY_PERMISSIONS:
+        return "full"
+    permission = getattr(country, "permission", None)
+    if permission and permission in perms:
+        return "full"
+    intraday_permission = getattr(country, "intraday_permission", None)
+    if intraday_permission and intraday_permission in perms:
+        return "intraday"
+    return "unauthorized"
+
+
+async def key_builder(
+    func: Callable[..., Any],
+    namespace: str = "",
+    *,
+    request: Request,
+    response: Response,  # noqa: ARG001
+    args: Any,  # noqa: ARG001, ANN401
+    kwargs: Any,  # noqa: ANN401
+) -> str:
+    """Cache key builder for v1 routes.
+
+    Uses the country access tier ("full" / "intraday" / "unauthorized") rather than
+    raw permission strings so that all users who receive identical data share one
+    cache entry. Unauthorized users always get a distinct key and therefore always
+    reach the route handler (which raises 403, never cached).
+    """
+    auth = kwargs.get("auth", {})
+    country = kwargs.get("country")
+    tier = _country_access_tier(auth, country) if country is not None else None
+
+    params = [
+        (k, v)
+        for k, v in request.query_params.items()
+        if k in func.__code__.co_varnames
+    ]
+    parts = [namespace, request.method.lower(), request.url.path, repr(sorted(params))]
+    if tier is not None:
+        parts.append(tier)
+    return ":".join(parts)
+
 
 # Per-combination warming flags: key is "{source}:{country}:{region_type}" or
 # "{source}:{country}:{region_type}:{observer}" for generation.
@@ -52,7 +111,9 @@ async def _warm_v1_forecast_cache(
             None,
         )
         if nation is None:
-            log.warning("v1 forecast cache warm: nation '%s' not found", cfg.nation_name)
+            log.warning(
+                "v1 forecast cache warm: nation '%s' not found", cfg.nation_name
+            )
             return
 
         regions = await db.get_locations(
@@ -90,7 +151,11 @@ async def _warm_v1_forecast_cache(
             if (i + 1) % 20 == 0:
                 log.info(
                     "v1 forecast cache warm %s/%s/%s: %d/%d regions",
-                    country, energy_type.name.lower(), region_type, i + 1, len(regions),
+                    country,
+                    energy_type.name.lower(),
+                    region_type,
+                    i + 1,
+                    len(regions),
                 )
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
@@ -99,7 +164,8 @@ async def _warm_v1_forecast_cache(
         init = first_pgv.init_timestamp if first_pgv else None
         meta = {
             "model_name": _internal_to_api_name(
-                first_pgv.forecaster_name if first_pgv else None, rt,
+                first_pgv.forecaster_name if first_pgv else None,
+                rt,
             ),
             "model_version": first_pgv.forecaster_version if first_pgv else None,
             "created_utc": created.isoformat() if created else None,
@@ -109,12 +175,17 @@ async def _warm_v1_forecast_cache(
 
         log.info(
             "v1 forecast cache warmed: %s/%s/%s — %d regions",
-            country, energy_type.name.lower(), region_type, len(regions),
+            country,
+            energy_type.name.lower(),
+            region_type,
+            len(regions),
         )
     except Exception:
         log.exception(
             "v1 forecast cache warm failed: %s/%s/%s",
-            energy_type.name.lower(), country, region_type,
+            energy_type.name.lower(),
+            country,
+            region_type,
         )
     finally:
         _forecast_cache_warming[flag_key] = False
@@ -133,7 +204,9 @@ async def _warm_v1_generation_cache(
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
-            log.warning("v1 generation cache warm skipped: storage client not configured")
+            log.warning(
+                "v1 generation cache warm skipped: storage client not configured"
+            )
             return
 
         cfg = COUNTRIES.get(country.upper())
@@ -156,7 +229,8 @@ async def _warm_v1_generation_cache(
         )
         if nation is None:
             log.warning(
-                "v1 generation cache warm: nation '%s' not found", cfg.nation_name,
+                "v1 generation cache warm: nation '%s' not found",
+                cfg.nation_name,
             )
             return
 
@@ -195,7 +269,12 @@ async def _warm_v1_generation_cache(
             if (i + 1) % 20 == 0:
                 log.info(
                     "v1 generation cache warm %s/%s/%s/%s: %d/%d regions",
-                    energy_type.name.lower(), country, region_type, observer, i + 1, len(regions),
+                    energy_type.name.lower(),
+                    country,
+                    region_type,
+                    observer,
+                    i + 1,
+                    len(regions),
                 )
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
@@ -205,12 +284,19 @@ async def _warm_v1_generation_cache(
 
         log.info(
             "v1 generation cache warmed: %s/%s/%s/%s — %d regions",
-            energy_type.name.lower(), country, region_type, observer, len(regions),
+            energy_type.name.lower(),
+            country,
+            region_type,
+            observer,
+            len(regions),
         )
     except Exception:
         log.exception(
             "v1 generation cache warm failed: %s/%s/%s/%s",
-            energy_type.name.lower(), country, region_type, observer,
+            energy_type.name.lower(),
+            country,
+            region_type,
+            observer,
         )
     finally:
         _generation_cache_warming[flag_key] = False
@@ -230,12 +316,18 @@ async def _warm_all_v1_caches(app: object) -> None:
                 continue
             if rt.forecast_models:
                 tasks.append(
-                    _warm_v1_forecast_cache(app, models.EnergyType.SOLAR, country_code, rt.type),
+                    _warm_v1_forecast_cache(
+                        app, models.EnergyType.SOLAR, country_code, rt.type
+                    ),
                 )
             for gen_src in cfg.generation_sources:
                 tasks.append(
                     _warm_v1_generation_cache(
-                        app, models.EnergyType.SOLAR, country_code, rt.type, gen_src.name,
+                        app,
+                        models.EnergyType.SOLAR,
+                        country_code,
+                        rt.type,
+                        gen_src.name,
                     ),
                 )
     results = await asyncio.gather(*tasks, return_exceptions=True)

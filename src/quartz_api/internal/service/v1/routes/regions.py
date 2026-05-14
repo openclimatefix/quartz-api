@@ -24,7 +24,7 @@ from ..helpers import (
     _resolve_region_id,
     _to_uuid,
 )
-from quartz_api.internal.service.uk_national.cache import key_builder
+from ..cache import key_builder
 
 router = APIRouter(tags=["Discovery"])
 

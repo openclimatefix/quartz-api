@@ -14,9 +14,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.service.uk_national.cache import key_builder
-
-from ..cache import _generation_cache_warming, _warm_v1_generation_cache
+from ..cache import _generation_cache_warming, _warm_v1_generation_cache, key_builder
 from ..endpoint_types import (
     CountryParam,
     GenerationResponse,

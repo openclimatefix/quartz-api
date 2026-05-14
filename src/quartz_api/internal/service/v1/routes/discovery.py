@@ -8,7 +8,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.service.uk_national.cache import key_builder
+from ..cache import key_builder
 
 from ..country_config import COUNTRIES
 from ..endpoint_types import (

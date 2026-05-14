@@ -8,14 +8,7 @@ from fastapi import Request, Response
 
 log = logging.getLogger(__name__)
 
-cache_dependent_scopes = [
-    "read:gb",
-    "read:nl",
-    "read:trial",
-    "read:partner",
-    "read:intraday",
-    "read:uk-intraday",
-]
+cache_dependent_scopes = ["read:intraday"]
 legacy_query_params = ["historic"]
 
 
@@ -26,7 +19,7 @@ async def key_builder(
     request: Request,
     response: Response,  # noqa: ARG001
     args: Any,  # noqa: ARG001, ANN401
-    kwargs: Any, # noqa ANN401
+    kwargs: Any,  # noqa ANN401
 ) -> str:
     """This makes a general cache key for the request.
 
@@ -41,25 +34,32 @@ async def key_builder(
     permissions = [p for p in permissions if p in cache_dependent_scopes]
 
     params = [
-        (k, v) for k, v in request.query_params.items() if k not in [*legacy_query_params, "UI"]
+        (k, v)
+        for k, v in request.query_params.items()
+        if k not in [*legacy_query_params, "UI"]
     ]
 
     # only store parameters that are in the function's signature
     params = [
-        (k, v) for k, v in request.query_params.items() if k in list(func.__code__.co_varnames)
+        (k, v)
+        for k, v in request.query_params.items()
+        if k in list(func.__code__.co_varnames)
     ]
 
-    key = ":".join(
-        [
-            namespace,
-            request.method.lower(),
-            request.url.path,
-            repr(sorted(params)),
-            repr(sorted(permissions)),
-        ],
-    ).replace("False", "false").replace("True", "true")
+    key = (
+        ":".join(
+            [
+                namespace,
+                request.method.lower(),
+                request.url.path,
+                repr(sorted(params)),
+                repr(sorted(permissions)),
+            ],
+        )
+        .replace("False", "false")
+        .replace("True", "true")
+    )
 
     log.info(f"Cache key generated: {key}")
 
     return key
-
