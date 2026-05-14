@@ -556,6 +556,22 @@ async def test_get_region_generation(client: AsyncClient) -> None:
     assert "values" in body
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/GB/solar/regions/national/forecast?start_utc=2026-01-02T00:00:00Z&end_utc=2026-01-01T00:00:00Z",
+        "/v1/GB/solar/regions/national/generation?start_utc=2026-01-02T00:00:00Z&end_utc=2026-01-01T00:00:00Z",
+        "/v1/GB/solar/forecasts/period?region_type=gsp&start_utc=2026-01-02T00:00:00Z&end_utc=2026-01-01T00:00:00Z",
+        "/v1/GB/solar/generation/period?region_type=gsp&start_utc=2026-01-02T00:00:00Z&end_utc=2026-01-01T00:00:00Z",
+    ],
+)
+async def test_start_after_end_returns_400(client: AsyncClient, path: str) -> None:
+    resp = await client.get(path)
+    assert resp.status_code == 400
+    assert "start_utc" in resp.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # Snapshot endpoints
 # ---------------------------------------------------------------------------

@@ -315,3 +315,12 @@ def _timeseries_window(
     if win_end.tzinfo is None:
         win_end = win_end.replace(tzinfo=dt.UTC)
     return win_start, win_end
+
+
+def _validate_window(start: dt.datetime, end: dt.datetime) -> None:
+    """Raise 400 if start is not strictly before end."""
+    if start >= end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"start_utc must be before end_utc (got {start.isoformat()} >= {end.isoformat()}).",
+        )

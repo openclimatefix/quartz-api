@@ -41,6 +41,7 @@ from ..helpers import (
     _timeseries_window,
     _to_uuid,
     _validate_model,
+    _validate_window,
 )
 
 router = APIRouter(tags=["Forecasts"])
@@ -110,10 +111,13 @@ async def get_forecast(
     model = _resolve_forecast_model(model, rt, is_intraday_only)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    win_start = start_utc or now
+    win_end = end_utc or now + dt.timedelta(days=2)
+    _validate_window(win_start, win_end)
     pgvs = await db.get_predicted_generation(
         location_uuid=resolved_id,
-        window_start=start_utc or now,
-        window_end=end_utc or now + dt.timedelta(days=2),
+        window_start=win_start,
+        window_end=win_end,
         energy_type=source,
         location_type=location_type,
         authdata={},  # TODO: add auth when loosed on DP side
@@ -360,6 +364,7 @@ async def get_forecasts_period(
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
+    _validate_window(win_start, win_end)
 
     # This endpoint is cache-only: all per-region timeseries are pre-warmed at startup
     # (and refreshable via POST /forecasts/refresh).  No live DP calls are made per

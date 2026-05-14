@@ -38,6 +38,7 @@ from ..helpers import (
     _resolve_region_id,
     _timeseries_window,
     _to_uuid,
+    _validate_window,
 )
 
 router = APIRouter(tags=["Generation"])
@@ -100,10 +101,13 @@ async def get_generation(
     location_type = region.location_type or models.LocationType.NATION
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
+    win_start = start_utc or now - dt.timedelta(days=1)
+    win_end = end_utc or now
+    _validate_window(win_start, win_end)
     agvs = await db.get_actual_generation(
         location_uuid=resolved_id,
-        window_start=start_utc or now - dt.timedelta(days=1),
-        window_end=end_utc or now,
+        window_start=win_start,
+        window_end=win_end,
         energy_type=source,
         location_type=location_type,
         observer_name=observer,
@@ -311,6 +315,7 @@ async def get_generation_period(
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
+    _validate_window(win_start, win_end)
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
