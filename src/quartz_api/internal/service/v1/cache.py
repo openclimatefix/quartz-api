@@ -112,7 +112,8 @@ async def _warm_v1_forecast_cache(
         )
         if nation is None:
             log.warning(
-                "v1 forecast cache warm: nation '%s' not found", cfg.nation_name
+                "v1 forecast cache warm: nation '%s' not found",
+                cfg.nation_name,
             )
             return
 
@@ -205,7 +206,7 @@ async def _warm_v1_generation_cache(
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
             log.warning(
-                "v1 generation cache warm skipped: storage client not configured"
+                "v1 generation cache warm skipped: storage client not configured",
             )
             return
 
@@ -317,7 +318,10 @@ async def _warm_all_v1_caches(app: object) -> None:
             if rt.forecast_models:
                 tasks.append(
                     _warm_v1_forecast_cache(
-                        app, models.EnergyType.SOLAR, country_code, rt.type
+                        app,
+                        models.EnergyType.SOLAR,
+                        country_code,
+                        rt.type,
                     ),
                 )
             for gen_src in cfg.generation_sources:

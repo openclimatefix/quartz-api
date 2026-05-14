@@ -9,6 +9,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..cache import key_builder
 from ..endpoint_types import (
     CountryParam,
     OptionalValidRegionType,
@@ -24,7 +25,6 @@ from ..helpers import (
     _resolve_region_id,
     _to_uuid,
 )
-from ..cache import key_builder
 
 router = APIRouter(tags=["Discovery"])
 
@@ -49,7 +49,7 @@ async def get_country_regions(
 ) -> list[RegionDetail]:
     """List regions for a country, optionally filtered by type, parent, and/or name.
 
-    Filter behaviour:
+    Filter behavior:
     - No filters — returns every region across all configured region types.
     - `region_type` — restricts results to one granularity level (e.g. `gsp`).
     - `parent` — returns the direct children of the specified parent region.
@@ -57,7 +57,6 @@ async def get_country_regions(
 
     Cached for 1 minute.
     """
-
     _check_country_access(auth, country)
     nation = await _resolve_nation(db, source, country, auth)
 
