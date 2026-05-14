@@ -299,11 +299,13 @@ async def get_forecasts_period(
     region_type: ValidRegionType,
     start_utc: dt.datetime | None = Query(
         None,
-        description="Start of window (UTC). Defaults to 2 days before now (floored to the nearest 6 hours).",
+        description="Start of window (UTC). Defaults to 2 days before now "
+        "(floored to the nearest 6 hours).",
     ),
     end_utc: dt.datetime | None = Query(
         None,
-        description="End of window (UTC). Defaults to 2 days after now (floored to the nearest 6 hours).",
+        description="End of window (UTC). Defaults to 2 days after now "
+        "(floored to the nearest 6 hours).",
     ),
     region_names: list[str] | None = Query(
         None,

@@ -32,7 +32,7 @@ router = APIRouter(tags=["Discovery"])
 @router.get("/{country}/{source}/regions", status_code=status.HTTP_200_OK)
 @cache(key_builder=key_builder, expire=60)
 async def get_country_regions(
-    request: Request,
+    request: Request,  # noqa: ARG001
     source: ValidSource,
     country: CountryParam,
     db: models.StorageClientDependency,
@@ -140,7 +140,7 @@ def _apply_name_filter(
 @router.get("/{country}/{source}/regions/{region}", status_code=status.HTTP_200_OK)
 @cache(key_builder=key_builder, expire=60)
 async def get_region(
-    request: Request,
+    request: Request,  # noqa: ARG001
     source: ValidSource,
     country: CountryParam,
     region: ValidRegion,
