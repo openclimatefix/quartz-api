@@ -318,7 +318,7 @@ async def get_generation_period(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Observer '{observer}' is not available for "
-                f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}",
+                f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}"
             ),
         )
 

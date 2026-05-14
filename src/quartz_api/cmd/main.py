@@ -166,7 +166,7 @@ def _create_v1_app(
         }
 
     v1_app = FastAPI(
-        title="Quartz API v1",
+        title="Quartz API",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
         docs_url=None,
@@ -458,9 +458,6 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         )
     server.add_middleware(trace.TracerMiddleware)
     server.add_middleware(GZipMiddleware, minimum_size=1000)
-
-    # update description
-    server.description = description
 
     return server
 
