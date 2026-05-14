@@ -42,6 +42,7 @@ from ..helpers import (
     _to_uuid,
     _validate_model,
     _validate_window,
+    _window_chunks,
 )
 
 router = APIRouter(tags=["Forecasts"])
@@ -114,17 +115,21 @@ async def get_forecast(
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
     _validate_window(win_start, win_end)
-    pgvs = await db.get_predicted_generation(
-        location_uuid=resolved_id,
-        window_start=win_start,
-        window_end=win_end,
-        energy_type=source,
-        location_type=location_type,
-        authdata={},  # TODO: add auth when loosed on DP side
-        created_cutoff=creation_limit_utc,
-        forecast_horizon_minutes=forecast_horizon_minutes or 0,
-        forecaster_name=model,
-    )
+    pgvs: list = []
+    for chunk_start, chunk_end in _window_chunks(win_start, win_end):
+        pgvs.extend(
+            await db.get_predicted_generation(
+                location_uuid=resolved_id,
+                window_start=chunk_start,
+                window_end=chunk_end,
+                energy_type=source,
+                location_type=location_type,
+                authdata={},  # TODO: add auth when loosed on DP side
+                created_cutoff=creation_limit_utc,
+                forecast_horizon_minutes=forecast_horizon_minutes or 0,
+                forecaster_name=model,
+            )
+        )
 
     first = pgvs[0] if pgvs else None
     return ForecastResponse(

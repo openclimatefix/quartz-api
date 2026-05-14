@@ -39,6 +39,7 @@ from ..helpers import (
     _timeseries_window,
     _to_uuid,
     _validate_window,
+    _window_chunks,
 )
 
 router = APIRouter(tags=["Generation"])
@@ -104,15 +105,19 @@ async def get_generation(
     win_start = start_utc or now - dt.timedelta(days=1)
     win_end = end_utc or now
     _validate_window(win_start, win_end)
-    agvs = await db.get_actual_generation(
-        location_uuid=resolved_id,
-        window_start=win_start,
-        window_end=win_end,
-        energy_type=source,
-        location_type=location_type,
-        observer_name=observer,
-        authdata={},  # TODO: add auth when loosed on DP side
-    )
+    agvs: list = []
+    for chunk_start, chunk_end in _window_chunks(win_start, win_end):
+        agvs.extend(
+            await db.get_actual_generation(
+                location_uuid=resolved_id,
+                window_start=chunk_start,
+                window_end=chunk_end,
+                energy_type=source,
+                location_type=location_type,
+                observer_name=observer,
+                authdata={},  # TODO: add auth when loosed on DP side
+            )
+        )
 
     first = agvs[0] if agvs else None
     return GenerationResponse(

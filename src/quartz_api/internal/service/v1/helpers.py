@@ -317,10 +317,36 @@ def _timeseries_window(
     return win_start, win_end
 
 
+_MAX_WINDOW = dt.timedelta(days=92)  # ~3 months — enforced on our side before DP
+_DP_CHUNK = dt.timedelta(days=7)  # DP per-call limit
+
+
 def _validate_window(start: dt.datetime, end: dt.datetime) -> None:
-    """Raise 400 if start is not strictly before end."""
+    """Raise 400 if start >= end or the window exceeds the 3-month limit."""
     if start >= end:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"start_utc must be before end_utc (got {start.isoformat()} >= {end.isoformat()}).",
         )
+    if end - start > _MAX_WINDOW:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Requested window of {(end - start).days} days exceeds the 3-month limit "
+                f"({_MAX_WINDOW.days} days). Split into smaller requests if you need more history."
+            ),
+        )
+
+
+def _window_chunks(
+    start: dt.datetime,
+    end: dt.datetime,
+) -> list[tuple[dt.datetime, dt.datetime]]:
+    """Split a window into _DP_CHUNK-sized sub-windows for sequential DP calls."""
+    chunks = []
+    chunk_start = start
+    while chunk_start < end:
+        chunk_end = min(chunk_start + _DP_CHUNK, end)
+        chunks.append((chunk_start, chunk_end))
+        chunk_start = chunk_end
+    return chunks
