@@ -340,7 +340,17 @@ async def get_forecasts_period(
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown region type '{region_type}' for {country.code}.",
+            detail=f"Unknown region type '{region_type}' for {country.code}. "
+            f"Available: {[r.type for r in country.region_types]}",
+        )
+    if rt.location_type == models.LocationType.NATION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"region_type='{region_type}' is not supported on the period endpoint "
+                f"(only sub-national region types are pre-warmed). "
+                f"Use GET /{country.code}/solar/regions/national/forecast for national-level data."
+            ),
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)
