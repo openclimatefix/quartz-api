@@ -47,7 +47,9 @@ router = APIRouter(tags=["Generation"])
     "/{country}/{source}/regions/{region}/generation",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder, expire=60)
 async def get_generation(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     region: ValidRegion,
@@ -76,6 +78,8 @@ async def get_generation(
     NL currently has one observer for solar:
 
     - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
+
+    Cached for 1 minute.
     """
     _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)

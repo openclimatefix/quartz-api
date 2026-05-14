@@ -50,7 +50,9 @@ router = APIRouter(tags=["Forecasts"])
     "/{country}/{source}/regions/{region}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=key_builder, expire=60)
 async def get_forecast(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     region: ValidRegion,
@@ -84,6 +86,7 @@ async def get_forecast(
 
     By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
+    Cached for 1 minute.
     """
     is_intraday_only = not _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)

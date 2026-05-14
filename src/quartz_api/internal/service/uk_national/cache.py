@@ -8,7 +8,14 @@ from fastapi import Request, Response
 
 log = logging.getLogger(__name__)
 
-cache_dependent_scopes = ["read:intraday"]
+cache_dependent_scopes = [
+    "read:gb",
+    "read:nl",
+    "read:trial",
+    "read:partner",
+    "read:intraday",
+    "read:uk-intraday",
+]
 legacy_query_params = ["historic"]
 
 

@@ -2,11 +2,13 @@
 
 # ruff: noqa: ARG001
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.service.uk_national.cache import key_builder
 
 from ..country_config import COUNTRIES
 from ..endpoint_types import (
@@ -24,13 +26,16 @@ router = APIRouter(tags=["Discovery"])
 
 
 @router.get("/sources", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_sources(
+    request: Request,
     auth: AuthDependency,
 ) -> list[Source]:
     """List available forecast energy sources.
 
     Returns the set of energy source types supported by the API. Use the `name` value
     as the `{source}` path segment in all other v1 routes (e.g. `/v1/GB/solar/regions`).
+    Cached for 1 minute.
     """
     return [
         Source(name="solar", label="Solar"),
@@ -38,7 +43,9 @@ async def get_sources(
 
 
 @router.get("/countries", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_countries(
+    request: Request,
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> list[CountryDetail]:
@@ -53,7 +60,7 @@ async def get_countries(
     - **capacity_kW** and **centroid** — installed capacity and geographic centre.
 
     Use the `country` value (e.g. `GB`, `NL`) as the `{country}` path segment in all other
-    v1 routes.
+    v1 routes. Cached for 1 minute.
     """
     nations = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
@@ -97,7 +104,9 @@ async def get_countries(
 
 
 @router.get("/{country}/{source}/region-types", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_region_types(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     auth: AuthDependency,
@@ -114,6 +123,8 @@ async def get_region_types(
     - **forecast_models** — the models available for that region type, with the model
       `name` used as the `model` parameter on forecast endpoints. The first listed model
       is the default.
+
+    Cached for 1 minute.
     """
     return [
         RegionType(
@@ -131,7 +142,9 @@ async def get_region_types(
 
 
 @router.get("/{country}/{source}/generation-sources", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_generation_sources(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     auth: AuthDependency,
@@ -141,5 +154,6 @@ async def get_generation_sources(
     Generation sources represent the different observers that produce actual (measured)
     generation data — for example PV_Live in-day estimates vs finalised day-after values.
     Use the `name` field as the `observer` parameter on generation endpoints.
+    Cached for 1 minute.
     """
     return [s for s in country.generation_sources if s.source == source.name.lower()]

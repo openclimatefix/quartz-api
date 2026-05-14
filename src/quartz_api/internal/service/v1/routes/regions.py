@@ -2,7 +2,8 @@
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
@@ -23,12 +24,15 @@ from ..helpers import (
     _resolve_region_id,
     _to_uuid,
 )
+from quartz_api.internal.service.uk_national.cache import key_builder
 
 router = APIRouter(tags=["Discovery"])
 
 
 @router.get("/{country}/{source}/regions", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_country_regions(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     db: models.StorageClientDependency,
@@ -50,6 +54,8 @@ async def get_country_regions(
     - `region_type` — restricts results to one granularity level (e.g. `gsp`).
     - `parent` — returns the direct children of the specified parent region.
     - `name` — case-insensitive substring search across region names.
+
+    Cached for 1 minute.
     """
 
     _check_country_access(auth, country)
@@ -133,7 +139,9 @@ def _apply_name_filter(
 
 
 @router.get("/{country}/{source}/regions/{region}", status_code=status.HTTP_200_OK)
+@cache(key_builder=key_builder, expire=60)
 async def get_region(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     region: ValidRegion,
@@ -143,7 +151,7 @@ async def get_region(
     """Get details for a specific region.
 
     Returns a `RegionDetail` object with the region's name, type, installed
-    capacity, centroid, and any available metadata fields.
+    capacity, centroid, and any available metadata fields. Cached for 1 minute.
     """
     _check_country_access(auth, country)
     resolved_id = await _resolve_region_id(region, country, source, db)
