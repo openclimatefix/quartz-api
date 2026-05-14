@@ -484,6 +484,20 @@ async def test_get_regions_invalid_region_type_returns_400(client: AsyncClient) 
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/GB/solar/regions/x",
+        "/v1/GB/solar/regions/x/forecast",
+        "/v1/GB/solar/regions/x/generation",
+    ],
+)
+async def test_single_char_region_returns_422(client: AsyncClient, path: str) -> None:
+    resp = await client.get(path)
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
 async def test_get_region_by_id(client: AsyncClient) -> None:
     region_id = str(uuid4())
     resp = await client.get(f"/v1/GB/solar/regions/{region_id}")

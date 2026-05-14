@@ -162,6 +162,8 @@ ValidRegion = Annotated[
             "Region identifier — `national`, or region_name (case-insensitive). "
             "Use `GET /{country}/{source}/regions` to browse available regions."
         ),
+        min_length=2,
+        max_length=256,
     ),
 ]
 
