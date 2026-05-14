@@ -45,6 +45,7 @@ router = APIRouter(tags=["Generation"])
 @router.get(
     "/{country}/{source}/regions/{region}/generation",
     status_code=status.HTTP_200_OK,
+    response_model=GenerationResponse,
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_generation(
@@ -124,6 +125,7 @@ async def get_generation(
     "/{country}/{source}/generation/snapshot",
     status_code=status.HTTP_200_OK,
     summary="Get Generation at Timestamp",
+    response_model=GenerationSnapshot,
 )
 @cache(key_builder=key_builder, expire=120)
 async def get_generation_at_timestamp(

@@ -29,7 +29,11 @@ from ..helpers import (
 router = APIRouter(tags=["Discovery"])
 
 
-@router.get("/{country}/{source}/regions", status_code=status.HTTP_200_OK)
+@router.get(
+    "/{country}/{source}/regions",
+    status_code=status.HTTP_200_OK,
+    response_model=list[RegionDetail],
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_country_regions(
     request: Request,  # noqa: ARG001
@@ -137,7 +141,11 @@ def _apply_name_filter(
     return [r for r in regions if needle in r.name.lower()]
 
 
-@router.get("/{country}/{source}/regions/{region}", status_code=status.HTTP_200_OK)
+@router.get(
+    "/{country}/{source}/regions/{region}",
+    status_code=status.HTTP_200_OK,
+    response_model=RegionDetail,
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_region(
     request: Request,  # noqa: ARG001

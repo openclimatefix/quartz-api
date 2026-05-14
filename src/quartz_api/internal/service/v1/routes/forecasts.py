@@ -48,6 +48,7 @@ router = APIRouter(tags=["Forecasts"])
 @router.get(
     "/{country}/{source}/regions/{region}/forecast",
     status_code=status.HTTP_200_OK,
+    response_model=ForecastResponse,
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_forecast(
@@ -200,6 +201,7 @@ async def get_forecast_last_updated_timestamp(
     "/{country}/{source}/forecasts/snapshot",
     status_code=status.HTTP_200_OK,
     summary="Get Forecasts at Timestamp",
+    response_model=ForecastSnapshot,
 )
 @cache(key_builder=key_builder, expire=120)
 async def get_forecasts_at_time(
