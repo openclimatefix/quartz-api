@@ -638,7 +638,9 @@ async def test_get_generation_period_national_returns_400(client: AsyncClient) -
 async def test_get_generation_period_invalid_observer_returns_400(
     client: AsyncClient,
 ) -> None:
-    resp = await client.get("/v1/GB/solar/generation/period?region_type=gsp&observer=unknown_obs")
+    resp = await client.get(
+        "/v1/GB/solar/generation/period?region_type=gsp&observer=unknown_obs"
+    )
     assert resp.status_code == 422
 
 
@@ -646,7 +648,9 @@ async def test_get_generation_period_invalid_observer_returns_400(
 async def test_get_generation_period_wrong_country_observer_returns_400(
     nl_client: AsyncClient,
 ) -> None:
-    resp = await nl_client.get("/v1/NL/solar/generation/period?region_type=province&observer=pvlive_in_day")
+    resp = await nl_client.get(
+        "/v1/NL/solar/generation/period?region_type=province&observer=pvlive_in_day"
+    )
     assert resp.status_code == 400
     assert "nednl" in resp.json()["detail"]
 

@@ -42,7 +42,9 @@ async def get_sources(
     ]
 
 
-@router.get("/countries", status_code=status.HTTP_200_OK, response_model=list[CountryDetail])
+@router.get(
+    "/countries", status_code=status.HTTP_200_OK, response_model=list[CountryDetail]
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_countries(
     request: Request,
@@ -103,7 +105,11 @@ async def get_countries(
     return result
 
 
-@router.get("/{country}/{source}/region-types", status_code=status.HTTP_200_OK, response_model=list[RegionType])
+@router.get(
+    "/{country}/{source}/region-types",
+    status_code=status.HTTP_200_OK,
+    response_model=list[RegionType],
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_region_types(
     request: Request,
@@ -141,7 +147,11 @@ async def get_region_types(
     ]
 
 
-@router.get("/{country}/{source}/generation-sources", status_code=status.HTTP_200_OK, response_model=list[GenerationSource])
+@router.get(
+    "/{country}/{source}/generation-sources",
+    status_code=status.HTTP_200_OK,
+    response_model=list[GenerationSource],
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_generation_sources(
     request: Request,

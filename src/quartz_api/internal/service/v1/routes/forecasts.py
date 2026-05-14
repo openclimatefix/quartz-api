@@ -25,6 +25,7 @@ from ..endpoint_types import (
     RegionForecastMatrix,
     RegionForecastValue,
     ValidForecastModel,
+    ValidPeriodRegionType,
     ValidRegion,
     ValidRegionType,
     ValidSource,
@@ -298,7 +299,7 @@ async def get_forecasts_period(
     country: CountryParam,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    region_type: ValidRegionType,
+    region_type: ValidPeriodRegionType,
     start_utc: dt.datetime | None = Query(
         None,
         description="Start of window (UTC). Defaults to 2 days before now "
@@ -337,18 +338,23 @@ async def get_forecasts_period(
     _check_country_access(auth, country)
 
     rt = country.get_region_type(region_type)
+    _sub_national = [
+        r.type
+        for r in country.region_types
+        if r.location_type != models.LocationType.NATION
+    ]
     if rt is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown region type '{region_type}' for {country.code}. "
-            f"Available: {[r.type for r in country.region_types]}",
+            f"Available: {_sub_national}",
         )
     if rt.location_type == models.LocationType.NATION:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"region_type='{region_type}' is not supported on the period endpoint "
-                f"(only sub-national region types are pre-warmed). "
+                f"(only sub-national region types are pre-warmed): {_sub_national}. "
                 f"Use GET /{country.code}/solar/regions/national/forecast for national-level data."
             ),
         )

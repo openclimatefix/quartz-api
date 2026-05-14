@@ -43,17 +43,26 @@ ValidForecastModel = Annotated[
 ]
 
 
-def _get_region_type_names() -> tuple[str, ...]:
+def _get_region_type_names(*, exclude_nation: bool = False) -> tuple[str, ...]:
     """Extract all unique region type slugs from country configs."""
     names: set[str] = set()
     for country_cfg in COUNTRIES.values():
         for rt in country_cfg.region_types:
+            if exclude_nation and rt.location_type == models.LocationType.NATION:
+                continue
             names.add(rt.type)
     return tuple(sorted(names))
 
 
 _REGION_TYPE_DESCRIPTION = (
     "Region type slug (e.g. 'gsp', 'national'). "
+    "Valid values are country-specific — see `/{country}/{source}/region-types`. "
+    "The enum lists all types across all countries."
+)
+
+_PERIOD_REGION_TYPE_DESCRIPTION = (
+    "Region type slug (e.g. 'gsp'). Only sub-national types are supported — "
+    "national-level data is not pre-warmed. "
     "Valid values are country-specific — see `/{country}/{source}/region-types`. "
     "The enum lists all types across all countries."
 )
@@ -73,6 +82,15 @@ OptionalValidRegionType = Annotated[
     Query(
         description=_REGION_TYPE_DESCRIPTION,
         enum=list(_get_region_type_names()),
+    ),
+]
+
+# Period endpoints only support sub-national region types (national is never pre-warmed).
+ValidPeriodRegionType = Annotated[
+    str,
+    Query(
+        description=_PERIOD_REGION_TYPE_DESCRIPTION,
+        enum=list(_get_region_type_names(exclude_nation=True)),
     ),
 ]
 
