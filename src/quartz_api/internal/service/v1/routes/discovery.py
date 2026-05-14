@@ -43,7 +43,9 @@ async def get_sources(
 
 
 @router.get(
-    "/countries", status_code=status.HTTP_200_OK, response_model=list[CountryDetail]
+    "/countries",
+    status_code=status.HTTP_200_OK,
+    response_model=list[CountryDetail],
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_countries(

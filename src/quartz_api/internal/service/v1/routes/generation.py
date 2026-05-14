@@ -116,7 +116,7 @@ async def get_generation(
                 location_type=location_type,
                 observer_name=observer,
                 authdata={},  # TODO: add auth when loosed on DP side
-            )
+            ),
         )
 
     first = agvs[0] if agvs else None
@@ -306,7 +306,8 @@ async def get_generation_period(
             detail=(
                 f"region_type='{region_type}' is not supported on the period endpoint "
                 f"(only sub-national region types are pre-warmed): {_sub_national}. "
-                f"Use GET /{country.code}/solar/regions/national/generation for national-level data."
+                f"Use GET /{country.code}/solar/regions/national/generation "
+                f"for national-level data."
             ),
         )
     valid_observers = {
@@ -315,8 +316,10 @@ async def get_generation_period(
     if observer not in valid_observers:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Observer '{observer}' is not available for {country.code} {source.name.lower()}. "
-            f"Available: {sorted(valid_observers)}",
+            detail=(
+                f"Observer '{observer}' is not available for "
+                f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}",
+            ),
         )
 
     win_start, win_end = _timeseries_window(start_utc, end_utc)

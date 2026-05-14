@@ -326,7 +326,10 @@ def _validate_window(start: dt.datetime, end: dt.datetime) -> None:
     if start >= end:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"start_utc must be before end_utc (got {start.isoformat()} >= {end.isoformat()}).",
+            detail=(
+                f"start_utc must be before end_utc "
+                f"(got {start.isoformat()} >= {end.isoformat()}).",
+            ),
         )
     if end - start > _MAX_WINDOW:
         raise HTTPException(

@@ -128,7 +128,7 @@ async def get_forecast(
                 created_cutoff=creation_limit_utc,
                 forecast_horizon_minutes=forecast_horizon_minutes or 0,
                 forecaster_name=model,
-            )
+            ),
         )
 
     first = pgvs[0] if pgvs else None
