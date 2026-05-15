@@ -13,9 +13,9 @@ from pydantic import (
     field_validator,
 )
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 
-from quartz_api.constants import SUPPORT_EMAIL
 from .country_config import COUNTRIES
 
 

@@ -9,11 +9,11 @@ import pandas as pd
 from fastapi import HTTPException
 from starlette import status
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
-from quartz_api.constants import SUPPORT_EMAIL
 from .country_config import (
     CountryConfig,
     RegionTypeConfig,
