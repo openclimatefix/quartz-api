@@ -92,10 +92,6 @@ def _custom_openapi(
             "url": "https://www.quartz.solar",
             "email": "info@openclimatefix.org",
         },
-        license_info={
-            "name": "MIT License",
-            "url": "https://github.com/openclimatefix/quartz-api/blob/main/LICENSE",
-        },
         routes=server.routes,
     )
 
@@ -166,7 +162,7 @@ def _create_v1_app(
         }
 
     v1_app = FastAPI(
-        title="Quartz API",
+        title="Quartz API Documentation",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
         docs_url=None,
@@ -190,6 +186,7 @@ def _create_v1_app(
             dark_mode=True,
             scalar_favicon_url="/static/favicon.ico",
             default_open_all_tags=True,
+            hide_dark_mode_toggle=True,
             agent=AgentScalarConfig(disabled=True),
             custom_css="""
                       /* override theme colours */
@@ -214,6 +211,9 @@ def _create_v1_app(
                       /* hide "Open in API Client" Scalar link in Sidebar */
                       aside a.open-api-client-button {
                         display: none !important;
+                      }
+                      a.open-api-client-button + div {
+                        padding-top: 0.75rem;
                       }
                     """,
         )
