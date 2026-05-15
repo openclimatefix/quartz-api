@@ -305,6 +305,7 @@ class ForecastResponse(BaseModel):
     model_version: str | None = None
     created_utc: dt.datetime | None = None
     init_utc: dt.datetime | None = None
+    horizon_minutes: int | None = None
     values: list[ForecastValue]
 
 

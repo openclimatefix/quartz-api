@@ -144,6 +144,7 @@ async def get_forecast(
         model_version=first.forecaster_version if first else None,
         created_utc=first.created_timestamp if first else None,
         init_utc=first.init_timestamp if first else None,
+        horizon_minutes=forecast_horizon_minutes,
         values=[
             ForecastValue(
                 time=v.valid_timestamp,
@@ -379,7 +380,10 @@ async def get_forecasts_period(
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
     base = forecast_period_base_key(
-        prefix, country.code, source.name.lower(), region_type
+        prefix,
+        country.code,
+        source.name.lower(),
+        region_type,
     )
 
     raw_meta = await backend.get(f"{base}:_meta")
