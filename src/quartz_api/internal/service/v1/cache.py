@@ -164,6 +164,7 @@ async def warm_v1_forecast_cache(
                 energy_type=energy_type,
                 location_type=rt.location_type,
                 authdata={},
+                forecaster_name=rt.default_model,
             )
             if pgvs and first_pgv is None:
                 first_pgv = pgvs[0]
