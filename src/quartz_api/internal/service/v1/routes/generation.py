@@ -362,7 +362,11 @@ async def get_generation_period(
 
     if region_names is not None:
         name_set = {n.lower() for n in region_names}
-        regions = [r for r in regions if r.name.lower() in name_set]
+        regions = [
+            r for r in regions
+            if r.name.lower() in name_set
+            or location_display_name(r, country).lower() in name_set
+        ]
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []
