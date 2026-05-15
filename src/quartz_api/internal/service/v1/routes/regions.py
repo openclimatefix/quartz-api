@@ -18,12 +18,12 @@ from ..endpoint_types import (
     ValidSource,
 )
 from ..helpers import (
-    _check_country_access,
-    _check_region_type,
-    _location_to_detail,
-    _resolve_nation,
-    _resolve_region_id,
-    _to_uuid,
+    check_country_access,
+    check_region_type,
+    location_to_detail,
+    resolve_nation,
+    resolve_region_id,
+    to_uuid,
 )
 
 router = APIRouter(tags=["Discovery"])
@@ -61,12 +61,12 @@ async def get_country_regions(
 
     Cached for 1 minute.
     """
-    _check_country_access(auth, country)
-    nation = await _resolve_nation(db, source, country, auth)
+    check_country_access(auth, country)
+    nation = await resolve_nation(db, source, country, auth)
 
     if parent is not None:
-        parent_uuid = await _resolve_region_id(parent, country, source, db)
-        rt = _check_region_type(country, region_type, country.code)
+        parent_uuid = await resolve_region_id(parent, country, source, db)
+        rt = check_region_type(country, region_type, country.code)
         # Validate that parent is within the country, unless it IS the nation itself.
         if parent_uuid != nation.uuid:
             parent_location = await db.get_locations(
@@ -74,7 +74,7 @@ async def get_country_regions(
                 location_type=None,
                 authdata={},
                 location_uuid=parent_uuid,
-                enclosing_location_uuid=_to_uuid(nation.uuid),
+                enclosing_location_uuid=to_uuid(nation.uuid),
             )
             if len(parent_location) == 0:
                 raise HTTPException(
@@ -88,23 +88,23 @@ async def get_country_regions(
             enclosing_location_uuid=parent_uuid,
         )
         return _apply_name_filter(
-            [_location_to_detail(loc, country) for loc in locs],
+            [location_to_detail(loc, country) for loc in locs],
             name,
         )
 
     if region_type is not None:
-        rt = _check_region_type(country, region_type, country.code)
+        rt = check_region_type(country, region_type, country.code)
         if rt.location_type == models.LocationType.NATION:
-            return _apply_name_filter([_location_to_detail(nation, country)], name)
+            return _apply_name_filter([location_to_detail(nation, country)], name)
 
         locs = await db.get_locations(
             energy_type=source,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
+            enclosing_location_uuid=to_uuid(nation.uuid),
         )
         return _apply_name_filter(
-            [_location_to_detail(loc, country) for loc in locs],
+            [location_to_detail(loc, country) for loc in locs],
             name,
         )
 
@@ -118,16 +118,16 @@ async def get_country_regions(
                 energy_type=source,
                 location_type=rt.location_type,
                 authdata={},
-                enclosing_location_uuid=_to_uuid(nation.uuid),
+                enclosing_location_uuid=to_uuid(nation.uuid),
             ),
         )
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    out: list[RegionDetail] = [_location_to_detail(nation, country)]
+    out: list[RegionDetail] = [location_to_detail(nation, country)]
     for result in results:
         if isinstance(result, Exception):
             raise result
         for loc in result:
-            out.append(_location_to_detail(loc, country))
+            out.append(location_to_detail(loc, country))
     return _apply_name_filter(out, name)
 
 
@@ -160,8 +160,8 @@ async def get_region(
     Returns a `RegionDetail` object with the region's name, type, installed
     capacity, centroid, and any available metadata fields. Cached for 1 minute.
     """
-    _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region, country, source, db)
+    check_country_access(auth, country)
+    resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -174,4 +174,4 @@ async def get_region(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Region '{resolved_id}' not found.",
         )
-    return _location_to_detail(locs[0], country)
+    return location_to_detail(locs[0], country)

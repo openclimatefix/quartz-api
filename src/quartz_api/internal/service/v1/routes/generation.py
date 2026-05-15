@@ -16,10 +16,10 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..cache import (
-    _generation_cache_warming,
-    _warm_v1_generation_cache,
+    generation_cache_warming,
     generation_period_base_key,
     key_builder,
+    warm_v1_generation_cache,
 )
 from ..endpoint_types import (
     CountryParam,
@@ -37,14 +37,14 @@ from ..endpoint_types import (
     ValidWindowStart,
 )
 from ..helpers import (
-    _check_country_access,
-    _location_display_name,
-    _resolve_nation,
-    _resolve_region_id,
-    _timeseries_window,
-    _to_uuid,
-    _validate_window,
-    _window_chunks,
+    check_country_access,
+    location_display_name,
+    resolve_nation,
+    resolve_region_id,
+    timeseries_window,
+    to_uuid,
+    validate_window,
+    window_chunks,
 )
 
 router = APIRouter(tags=["Generation"])
@@ -89,8 +89,8 @@ async def get_generation(
 
     Cached for 1 minute.
     """
-    _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region, country, source, db)
+    check_country_access(auth, country)
+    resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -109,9 +109,9 @@ async def get_generation(
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
     win_start = start_utc or now - dt.timedelta(days=1)
     win_end = end_utc or now
-    _validate_window(win_start, win_end)
+    validate_window(win_start, win_end)
     agvs: list = []
-    for chunk_start, chunk_end in _window_chunks(win_start, win_end):
+    for chunk_start, chunk_end in window_chunks(win_start, win_end):
         agvs.extend(
             await db.get_actual_generation(
                 location_uuid=resolved_id,
@@ -126,7 +126,7 @@ async def get_generation(
 
     first = agvs[0] if agvs else None
     return GenerationResponse(
-        region_name=_location_display_name(region, country),
+        region_name=location_display_name(region, country),
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         observer_name=observer,
         values=[
@@ -169,8 +169,8 @@ async def get_generation_at_timestamp(
     automatically (looking back up to 6 hours) rather than using "now", which would
     rarely have data.
     """
-    _check_country_access(auth, country)
-    nation = await _resolve_nation(db, source, country, auth)
+    check_country_access(auth, country)
+    nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
     if rt is None:
@@ -187,7 +187,7 @@ async def get_generation_at_timestamp(
             energy_type=source,
             location_type=location_type,
             authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
+            enclosing_location_uuid=to_uuid(nation.uuid),
         )
 
     if len(regions) == 0:
@@ -226,16 +226,14 @@ async def get_generation_at_timestamp(
         )
 
     snapshot = await db.get_actual_generation_snapshot(
-        location_uuids=[_to_uuid(r.uuid) for r in regions],
+        location_uuids=[to_uuid(r.uuid) for r in regions],
         snapshot_timestamp_utc=snapshot_time,
         energy_type=source,
         observer_name=observer,
         authdata={},
     )
 
-    region_names = {
-        _to_uuid(r.uuid): _location_display_name(r, country) for r in regions
-    }
+    region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     return GenerationSnapshot(
         time=snapshot_time,
         observer_name=observer,
@@ -291,7 +289,7 @@ async def get_generation_period(
 
     Time-window and region filtering are applied in-memory from the cached data.
     """
-    _check_country_access(auth, country)
+    check_country_access(auth, country)
 
     rt = country.get_region_type(region_type)
     _sub_national = [
@@ -327,8 +325,8 @@ async def get_generation_period(
             ),
         )
 
-    win_start, win_end = _timeseries_window(start_utc, end_utc)
-    _validate_window(win_start, win_end)
+    win_start, win_end = timeseries_window(start_utc, end_utc)
+    validate_window(win_start, win_end)
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
@@ -348,12 +346,12 @@ async def get_generation_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await _resolve_nation(db, source, country, auth)
+    nation = await resolve_nation(db, source, country, auth)
     regions = await db.get_locations(
         energy_type=source,
         location_type=rt.location_type,
         authdata={},  # TODO: add auth when loosed on DP side
-        enclosing_location_uuid=_to_uuid(nation.uuid),
+        enclosing_location_uuid=to_uuid(nation.uuid),
     )
 
     if len(regions) == 0:
@@ -380,7 +378,7 @@ async def get_generation_period(
     for r, windowed in all_region_data:
         region_series.append(
             RegionGeneration(
-                region_name=_location_display_name(r, country),
+                region_name=location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
             ),
@@ -415,10 +413,10 @@ async def refresh_generation_cache(
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{observer}"
-    if _generation_cache_warming.get(flag_key):
+    if generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
-        _warm_v1_generation_cache,
+        warm_v1_generation_cache,
         request.app,
         source,
         country.code,

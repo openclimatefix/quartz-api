@@ -20,7 +20,7 @@ from .country_config import (
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
 
 
-async def _resolve_nation(
+async def resolve_nation(
     db: models.StorageInterface,
     energy_type: models.EnergyType,
     country_cfg: CountryConfig,
@@ -53,14 +53,14 @@ def _location_to_summary(
         if rt is not None:
             region_type_name = rt.type
     return RegionSummary(
-        name=_location_display_name(loc, country_cfg),
+        name=location_display_name(loc, country_cfg),
         type=region_type_name,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
     )
 
 
-def _location_display_name(loc: models.Location, country_cfg: CountryConfig) -> str:
+def location_display_name(loc: models.Location, country_cfg: CountryConfig) -> str:
     """Return the user-facing name for a location.
 
     Resolution order:
@@ -79,7 +79,7 @@ def _location_display_name(loc: models.Location, country_cfg: CountryConfig) -> 
     return loc.name
 
 
-def _location_to_detail(
+def location_to_detail(
     loc: models.Location,
     country_cfg: CountryConfig,
 ) -> RegionDetail:
@@ -92,7 +92,7 @@ def _location_to_detail(
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
     return RegionDetail(
-        name=_location_display_name(loc, country_cfg),
+        name=location_display_name(loc, country_cfg),
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
@@ -100,12 +100,12 @@ def _location_to_detail(
     )
 
 
-def _to_uuid(val: str | UUID) -> UUID:
+def to_uuid(val: str | UUID) -> UUID:
     """Convert a string or UUID to UUID."""
     return UUID(val) if isinstance(val, str) else val
 
 
-def _check_region_type(
+def check_region_type(
     cfg: CountryConfig,
     region_type: str | None,
     country: str,
@@ -123,7 +123,7 @@ def _check_region_type(
     return rt
 
 
-def _validate_model(
+def validate_model(
     model: str | None,
     rt: RegionTypeConfig | None,
     region_type_label: str,
@@ -140,7 +140,7 @@ def _validate_model(
         )
 
 
-async def _resolve_region_id(
+async def resolve_region_id(
     region_id: str,
     cfg: CountryConfig,
     energy_type: models.EnergyType,
@@ -199,7 +199,7 @@ async def _resolve_region_id(
         energy_type=energy_type,
         location_type=None,
         authdata={},
-        enclosing_location_uuid=_to_uuid(nation.uuid),
+        enclosing_location_uuid=to_uuid(nation.uuid),
         location_names=[search_name],
     )
     # Client-side confirmation: DP may not filter by name server-side yet.
@@ -219,7 +219,7 @@ def _get_permissions(auth: AuthDependency) -> frozenset[str]:
     return frozenset(perms)
 
 
-def _check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
+def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     """Check country-level access. Returns True for full access, False for intraday-only.
 
     Three-tier check (short-circuits on first match):
@@ -247,7 +247,7 @@ def _check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     )
 
 
-def _resolve_forecast_model(
+def resolve_forecast_model(
     model: str | None,
     rt: RegionTypeConfig | None,
     is_intraday_only: bool,
@@ -291,7 +291,7 @@ def _resolve_forecast_model(
     return None
 
 
-def _internal_to_api_name(
+def internal_to_api_name(
     internal_name: str | None,
     rt: RegionTypeConfig | None,
 ) -> str | None:
@@ -302,7 +302,7 @@ def _internal_to_api_name(
     return fm.api_name if fm else internal_name
 
 
-def _timeseries_window(
+def timeseries_window(
     start_utc: dt.datetime | None,
     end_utc: dt.datetime | None,
 ) -> tuple[dt.datetime, dt.datetime]:
@@ -321,7 +321,7 @@ _MAX_WINDOW = dt.timedelta(days=92)  # ~3 months — enforced on our side before
 _DP_CHUNK = dt.timedelta(days=7)  # DP per-call limit
 
 
-def _validate_window(start: dt.datetime, end: dt.datetime) -> None:
+def validate_window(start: dt.datetime, end: dt.datetime) -> None:
     """Raise 400 if start >= end or the window exceeds the 3-month limit."""
     if start >= end:
         raise HTTPException(
@@ -341,7 +341,7 @@ def _validate_window(start: dt.datetime, end: dt.datetime) -> None:
         )
 
 
-def _window_chunks(
+def window_chunks(
     start: dt.datetime,
     end: dt.datetime,
 ) -> list[tuple[dt.datetime, dt.datetime]]:

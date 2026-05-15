@@ -14,7 +14,7 @@ from quartz_api.internal import models
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
-from .helpers import _internal_to_api_name, _timeseries_window, _to_uuid
+from .helpers import internal_to_api_name, timeseries_window, to_uuid
 
 log = logging.getLogger(__name__)
 
@@ -96,11 +96,11 @@ def generation_period_base_key(
 
 # Per-combination warming flags: key is "{source}:{country}:{region_type}" or
 # "{source}:{country}:{region_type}:{observer}" for generation.
-_forecast_cache_warming: dict[str, bool] = {}
-_generation_cache_warming: dict[str, bool] = {}
+forecast_cache_warming: dict[str, bool] = {}
+generation_cache_warming: dict[str, bool] = {}
 
 
-async def _warm_v1_forecast_cache(
+async def warm_v1_forecast_cache(
     app: object,
     energy_type: models.EnergyType,
     country: str,
@@ -108,7 +108,7 @@ async def _warm_v1_forecast_cache(
 ) -> None:
     """Pre-warm per-region forecast timeseries cache for one (energy_type, country, region_type)."""
     flag_key = f"{energy_type.name.lower()}:{country}:{region_type}"
-    _forecast_cache_warming[flag_key] = True
+    forecast_cache_warming[flag_key] = True
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
@@ -121,7 +121,7 @@ async def _warm_v1_forecast_cache(
         rt = cfg.get_region_type(region_type)
         if rt is None:
             return
-        win_start, win_end = _timeseries_window(None, None)
+        win_start, win_end = timeseries_window(None, None)
 
         nations = await db.get_locations(
             energy_type=energy_type,
@@ -143,7 +143,7 @@ async def _warm_v1_forecast_cache(
             energy_type=energy_type,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
+            enclosing_location_uuid=to_uuid(nation.uuid),
         )
 
         backend = FastAPICache.get_backend()
@@ -191,7 +191,7 @@ async def _warm_v1_forecast_cache(
         created = first_pgv.created_timestamp if first_pgv else None
         init = first_pgv.init_timestamp if first_pgv else None
         meta = {
-            "model_name": _internal_to_api_name(
+            "model_name": internal_to_api_name(
                 first_pgv.forecaster_name if first_pgv else None,
                 rt,
             ),
@@ -217,10 +217,10 @@ async def _warm_v1_forecast_cache(
             region_type,
         )
     finally:
-        _forecast_cache_warming[flag_key] = False
+        forecast_cache_warming[flag_key] = False
 
 
-async def _warm_v1_generation_cache(
+async def warm_v1_generation_cache(
     app: object,
     energy_type: models.EnergyType,
     country: str,
@@ -229,7 +229,7 @@ async def _warm_v1_generation_cache(
 ) -> None:
     """Pre-warm per-region generation timeseries cache for one combination."""
     flag_key = f"{energy_type.name.lower()}:{country}:{region_type}:{observer}"
-    _generation_cache_warming[flag_key] = True
+    generation_cache_warming[flag_key] = True
     try:
         db = app.dependency_overrides.get(models.get_storage_client, lambda: None)()
         if db is None:
@@ -245,7 +245,7 @@ async def _warm_v1_generation_cache(
         if rt is None:
             return
 
-        win_start, win_end = _timeseries_window(None, None)
+        win_start, win_end = timeseries_window(None, None)
 
         nations = await db.get_locations(
             energy_type=energy_type,
@@ -267,7 +267,7 @@ async def _warm_v1_generation_cache(
             energy_type=energy_type,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
+            enclosing_location_uuid=to_uuid(nation.uuid),
         )
 
         backend = FastAPICache.get_backend()
@@ -334,10 +334,10 @@ async def _warm_v1_generation_cache(
             observer,
         )
     finally:
-        _generation_cache_warming[flag_key] = False
+        generation_cache_warming[flag_key] = False
 
 
-async def _warm_all_v1_caches(app: object) -> None:
+async def warm_all_v1_caches(app: object) -> None:
     """Warm all v1 timeseries caches derived from the COUNTRIES config.
 
     Targets are inferred automatically: adding generation sources or a new country
@@ -351,7 +351,7 @@ async def _warm_all_v1_caches(app: object) -> None:
                 continue
             if rt.forecast_models:
                 tasks.append(
-                    _warm_v1_forecast_cache(
+                    warm_v1_forecast_cache(
                         app,
                         models.EnergyType.SOLAR,
                         country_code,
@@ -360,7 +360,7 @@ async def _warm_all_v1_caches(app: object) -> None:
                 )
             for gen_src in cfg.generation_sources:
                 tasks.append(
-                    _warm_v1_generation_cache(
+                    warm_v1_generation_cache(
                         app,
                         models.EnergyType.SOLAR,
                         country_code,

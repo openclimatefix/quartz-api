@@ -16,10 +16,10 @@ from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..cache import (
-    _forecast_cache_warming,
-    _warm_v1_forecast_cache,
+    forecast_cache_warming,
     forecast_period_base_key,
     key_builder,
+    warm_v1_forecast_cache,
 )
 from ..endpoint_types import (
     CountryParam,
@@ -37,17 +37,17 @@ from ..endpoint_types import (
     ValidWindowStart,
 )
 from ..helpers import (
-    _check_country_access,
-    _internal_to_api_name,
-    _location_display_name,
-    _resolve_forecast_model,
-    _resolve_nation,
-    _resolve_region_id,
-    _timeseries_window,
-    _to_uuid,
-    _validate_model,
-    _validate_window,
-    _window_chunks,
+    check_country_access,
+    internal_to_api_name,
+    location_display_name,
+    resolve_forecast_model,
+    resolve_nation,
+    resolve_region_id,
+    timeseries_window,
+    to_uuid,
+    validate_model,
+    validate_window,
+    window_chunks,
 )
 
 router = APIRouter(tags=["Forecasts"])
@@ -96,8 +96,8 @@ async def get_forecast(
     `end_utc` to override. Historical data is available up to 1 year back.
     Cached for 1 minute.
     """
-    is_intraday_only = not _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region, country, source, db)
+    is_intraday_only = not check_country_access(auth, country)
+    resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -113,15 +113,15 @@ async def get_forecast(
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    _validate_model(model, rt, location_type.name)
-    model = _resolve_forecast_model(model, rt, is_intraday_only)
+    validate_model(model, rt, location_type.name)
+    model = resolve_forecast_model(model, rt, is_intraday_only)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
-    _validate_window(win_start, win_end)
+    validate_window(win_start, win_end)
     pgvs: list = []
-    for chunk_start, chunk_end in _window_chunks(win_start, win_end):
+    for chunk_start, chunk_end in window_chunks(win_start, win_end):
         pgvs.extend(
             await db.get_predicted_generation(
                 location_uuid=resolved_id,
@@ -138,9 +138,9 @@ async def get_forecast(
 
     first = pgvs[0] if pgvs else None
     return ForecastResponse(
-        region_name=_location_display_name(region, country),
+        region_name=location_display_name(region, country),
         capacity_kW=first.capacity_kilowatts if first else 0.0,
-        model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
+        model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
         created_utc=first.created_timestamp if first else None,
         init_utc=first.init_timestamp if first else None,
@@ -177,8 +177,8 @@ async def get_forecast_last_updated_timestamp(
     of the most recent run. Useful for monitoring freshness or driving "last updated"
     indicators in a UI. Cached for 10 seconds.
     """
-    is_intraday_only = not _check_country_access(auth, country)
-    resolved_id = await _resolve_region_id(region, country, source, db)
+    is_intraday_only = not check_country_access(auth, country)
+    resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
         energy_type=source,
@@ -193,7 +193,7 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    model = _resolve_forecast_model(model, rt, is_intraday_only)
+    model = resolve_forecast_model(model, rt, is_intraday_only)
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
@@ -240,8 +240,8 @@ async def get_forecasts_at_time(
     region. Useful for rendering a map of forecast output across an entire country at
     a glance. Cached for 2 minutes.
     """
-    is_intraday_only = not _check_country_access(auth, country)
-    nation = await _resolve_nation(db, source, country, auth)
+    is_intraday_only = not check_country_access(auth, country)
+    nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
     if rt is None:
@@ -249,8 +249,8 @@ async def get_forecasts_at_time(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
-    _validate_model(model_name, rt, rt.type)
-    model_name = _resolve_forecast_model(model_name, rt, is_intraday_only)
+    validate_model(model_name, rt, rt.type)
+    model_name = resolve_forecast_model(model_name, rt, is_intraday_only)
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
@@ -260,7 +260,7 @@ async def get_forecasts_at_time(
             energy_type=source,
             location_type=location_type,
             authdata={},
-            enclosing_location_uuid=_to_uuid(nation.uuid),
+            enclosing_location_uuid=to_uuid(nation.uuid),
         )
 
     if len(regions) == 0:
@@ -274,7 +274,7 @@ async def get_forecasts_at_time(
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 
     snapshot = await db.get_predicted_generation_snapshot(
-        location_uuids=[_to_uuid(r.uuid) for r in regions],
+        location_uuids=[to_uuid(r.uuid) for r in regions],
         forecaster_name=model_name,
         forecaster_version=model_version,
         snapshot_timestamp_utc=snapshot_time,
@@ -282,13 +282,11 @@ async def get_forecasts_at_time(
         authdata={},
     )
 
-    region_names = {
-        _to_uuid(r.uuid): _location_display_name(r, country) for r in regions
-    }
+    region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
         time=snapshot_time,
-        model_name=_internal_to_api_name(first.forecaster_name if first else None, rt),
+        model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
         created_utc=first.created_timestamp if first else None,
         init_utc=first.init_timestamp if first else None,
@@ -350,7 +348,7 @@ async def get_forecasts_period(
     Model and horizon filters are **not** supported on this endpoint — use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
     """
-    _check_country_access(auth, country)
+    check_country_access(auth, country)
 
     rt = country.get_region_type(region_type)
     _sub_national = [
@@ -374,8 +372,8 @@ async def get_forecasts_period(
             ),
         )
 
-    win_start, win_end = _timeseries_window(start_utc, end_utc)
-    _validate_window(win_start, win_end)
+    win_start, win_end = timeseries_window(start_utc, end_utc)
+    validate_window(win_start, win_end)
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
@@ -394,12 +392,12 @@ async def get_forecasts_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await _resolve_nation(db, source, country, auth)
+    nation = await resolve_nation(db, source, country, auth)
     regions = await db.get_locations(
         energy_type=source,
         location_type=rt.location_type,
         authdata={},  # TODO: add auth when loosed on DP side
-        enclosing_location_uuid=_to_uuid(nation.uuid),
+        enclosing_location_uuid=to_uuid(nation.uuid),
     )
 
     if len(regions) == 0:
@@ -427,7 +425,7 @@ async def get_forecasts_period(
         plevel_keys = {k for v in windowed for k in v.plevels_kW}
         region_series.append(
             RegionForecast(
-                region_name=_location_display_name(r, country),
+                region_name=location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
                 plevels_kW={
@@ -464,10 +462,10 @@ async def refresh_forecasts_cache(
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}"
-    if _forecast_cache_warming.get(flag_key):
+    if forecast_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
-        _warm_v1_forecast_cache,
+        warm_v1_forecast_cache,
         request.app,
         source,
         country.code,
