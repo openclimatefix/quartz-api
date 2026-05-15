@@ -74,7 +74,10 @@ async def key_builder(
 
 
 def forecast_period_base_key(
-    prefix: str, country: str, source: str, region_type: str
+    prefix: str,
+    country: str,
+    source: str,
+    region_type: str,
 ) -> str:
     """Return the base cache key for the forecast period cache."""
     return f"{prefix}:v1:period:{country.upper()}:{source}:{region_type}"
@@ -146,7 +149,10 @@ async def _warm_v1_forecast_cache(
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base = forecast_period_base_key(
-            prefix, country, energy_type.name.lower(), region_type
+            prefix,
+            country,
+            energy_type.name.lower(),
+            region_type,
         )
         first_pgv = None
 
@@ -267,7 +273,11 @@ async def _warm_v1_generation_cache(
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
         base = generation_period_base_key(
-            prefix, country, energy_type.name.lower(), region_type, observer
+            prefix,
+            country,
+            energy_type.name.lower(),
+            region_type,
+            observer,
         )
 
         for i, region in enumerate(regions):
