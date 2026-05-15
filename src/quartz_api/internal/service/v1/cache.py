@@ -1,6 +1,7 @@
 """Cache warming logic and key builder for the v1 API."""
 
 import asyncio
+import datetime as dt
 import json
 import logging
 from collections.abc import Callable
@@ -72,6 +73,24 @@ async def key_builder(
     return ":".join(parts)
 
 
+def forecast_period_base_key(
+    prefix: str, country: str, source: str, region_type: str
+) -> str:
+    """Return the base cache key for the forecast period cache."""
+    return f"{prefix}:v1:period:{country.upper()}:{source}:{region_type}"
+
+
+def generation_period_base_key(
+    prefix: str,
+    country: str,
+    source: str,
+    region_type: str,
+    observer: str,
+) -> str:
+    """Return the base cache key for the generation period cache."""
+    return f"{prefix}:v1:period:generation:{country.upper()}:{source}:{region_type}:{observer}"
+
+
 # Per-combination warming flags: key is "{source}:{country}:{region_type}" or
 # "{source}:{country}:{region_type}:{observer}" for generation.
 _forecast_cache_warming: dict[str, bool] = {}
@@ -126,7 +145,9 @@ async def _warm_v1_forecast_cache(
 
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
-        base = f"{prefix}:v1:timeseries:{country.upper()}:{energy_type.name.lower()}:{region_type}"
+        base = forecast_period_base_key(
+            prefix, country, energy_type.name.lower(), region_type
+        )
         first_pgv = None
 
         for i, region in enumerate(regions):
@@ -171,6 +192,7 @@ async def _warm_v1_forecast_cache(
             "model_version": first_pgv.forecaster_version if first_pgv else None,
             "created_utc": created.isoformat() if created else None,
             "init_utc": init.isoformat() if init else None,
+            "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
         }
         await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
 
@@ -244,9 +266,8 @@ async def _warm_v1_generation_cache(
 
         backend = FastAPICache.get_backend()
         prefix = FastAPICache.get_prefix()
-        base = (
-            f"{prefix}:v1:timeseries:generation"
-            f":{country.upper()}:{energy_type.name.lower()}:{region_type}:{observer}"
+        base = generation_period_base_key(
+            prefix, country, energy_type.name.lower(), region_type, observer
         )
 
         for i, region in enumerate(regions):
@@ -280,7 +301,10 @@ async def _warm_v1_generation_cache(
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
 
-        meta = {"observer_name": observer}
+        meta = {
+            "observer_name": observer,
+            "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
+        }
         await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
 
         log.info(

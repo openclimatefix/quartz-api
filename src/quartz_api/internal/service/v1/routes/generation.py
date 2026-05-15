@@ -15,7 +15,12 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from ..cache import _generation_cache_warming, _warm_v1_generation_cache, key_builder
+from ..cache import (
+    _generation_cache_warming,
+    _warm_v1_generation_cache,
+    generation_period_base_key,
+    key_builder,
+)
 from ..endpoint_types import (
     CountryParam,
     GenerationResponse,
@@ -327,9 +332,12 @@ async def get_generation_period(
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = (
-        f"{prefix}:v1:timeseries:generation"
-        f":{country.code}:{source.name.lower()}:{region_type}:{observer}"
+    base = generation_period_base_key(
+        prefix,
+        country.code,
+        source.name.lower(),
+        region_type,
+        observer,
     )
 
     raw_meta = await backend.get(f"{base}:_meta")

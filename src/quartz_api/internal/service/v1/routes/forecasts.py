@@ -15,7 +15,12 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from ..cache import _forecast_cache_warming, _warm_v1_forecast_cache, key_builder
+from ..cache import (
+    _forecast_cache_warming,
+    _warm_v1_forecast_cache,
+    forecast_period_base_key,
+    key_builder,
+)
 from ..endpoint_types import (
     CountryParam,
     ForecastResponse,
@@ -371,15 +376,11 @@ async def get_forecasts_period(
     win_start, win_end = _timeseries_window(start_utc, end_utc)
     _validate_window(win_start, win_end)
 
-    # This endpoint is cache-only: all per-region timeseries are pre-warmed at startup
-    # (and refreshable via POST /forecasts/refresh).  No live DP calls are made per
-    # request — the cache is read and window/region filtering is applied in memory.
-    # Cache key layout:
-    #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:{uuid}  — per region values
-    #   {prefix}:v1:timeseries:{COUNTRY}:{source}:{region_type}:_meta   — shared model metadata
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
-    base = f"{prefix}:v1:timeseries:{country.code}:{source.name.lower()}:{region_type}"
+    base = forecast_period_base_key(
+        prefix, country.code, source.name.lower(), region_type
+    )
 
     raw_meta = await backend.get(f"{base}:_meta")
     if raw_meta is None:

@@ -376,6 +376,7 @@ class RegionForecastMatrix(BaseModel):
     model_version: str | None = None
     created_utc: dt.datetime | None = None
     init_utc: dt.datetime | None = None
+    cache_updated_utc: dt.datetime | None = None
     times: list[dt.datetime]
     regions: list[RegionForecast]
 
@@ -392,5 +393,6 @@ class RegionGenerationMatrix(BaseModel):
     """Observed generation time series for all regions across a time window."""
 
     observer_name: str | None = None
+    cache_updated_utc: dt.datetime | None = None
     times: list[dt.datetime]
     regions: list[RegionGeneration]

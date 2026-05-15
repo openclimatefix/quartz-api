@@ -350,7 +350,7 @@ async def _set_forecast_meta() -> None:
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
     await backend.set(
-        f"{prefix}:v1:timeseries:GB:solar:gsp:_meta",
+        f"{prefix}:v1:period:GB:solar:gsp:_meta",
         json.dumps(meta).encode(),
         expire=3600,
     )
@@ -361,7 +361,7 @@ async def _set_fixed_region_values(values: list[dict]) -> None:
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
     await backend.set(
-        f"{prefix}:v1:timeseries:GB:solar:gsp:{_FIXED_GSP_UUID}",
+        f"{prefix}:v1:period:GB:solar:gsp:{_FIXED_GSP_UUID}",
         json.dumps(values).encode(),
         expire=3600,
     )
@@ -373,7 +373,7 @@ async def _set_generation_meta(observer: str = "pvlive_in_day") -> None:
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
     await backend.set(
-        f"{prefix}:v1:timeseries:generation:GB:solar:gsp:{observer}:_meta",
+        f"{prefix}:v1:period:generation:GB:solar:gsp:{observer}:_meta",
         json.dumps(meta).encode(),
         expire=3600,
     )
@@ -387,7 +387,7 @@ async def _set_fixed_generation_values(
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
     await backend.set(
-        f"{prefix}:v1:timeseries:generation:GB:solar:gsp:{observer}:{_FIXED_GSP_UUID}",
+        f"{prefix}:v1:period:generation:GB:solar:gsp:{observer}:{_FIXED_GSP_UUID}",
         json.dumps(values).encode(),
         expire=3600,
     )
@@ -730,7 +730,7 @@ async def test_get_generation_period_warm_cache(client: AsyncClient) -> None:
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
     await backend.set(
-        f"{prefix}:v1:timeseries:generation:GB:solar:gsp:{observer}:_meta",
+        f"{prefix}:v1:period:generation:GB:solar:gsp:{observer}:_meta",
         json.dumps(meta).encode(),
         expire=3600,
     )
