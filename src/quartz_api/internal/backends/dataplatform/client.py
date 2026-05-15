@@ -26,6 +26,11 @@ location_type_map: dict[models.LocationType, common_pb2.LocationType] = {
     models.LocationType.REGION: common_pb2.LocationType.LOCATION_TYPE_STATE,
     models.LocationType.NATION: common_pb2.LocationType.LOCATION_TYPE_NATION,
     models.LocationType.SUBSTATION: common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
+    models.LocationType.DNO: common_pb2.LocationType.LOCATION_TYPE_DNO,
+}
+
+dp_to_internal_location_type: dict[common_pb2.LocationType, models.LocationType] = {
+    v: k for k, v in location_type_map.items()
 }
 
 
@@ -85,10 +90,13 @@ class StorageClient(models.StorageInterface):
 
         # Limit the creation time if not set
         if created_cutoff is None:
-            created_cutoff = dt.datetime.now(tz=dt.UTC) - \
-                dt.timedelta(minutes=forecast_horizon_minutes)
+            created_cutoff = dt.datetime.now(tz=dt.UTC) - dt.timedelta(
+                minutes=forecast_horizon_minutes,
+            )
 
-        oauth_id: str | None = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        oauth_id: str | None = (
+            get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+        )
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
@@ -129,13 +137,14 @@ class StorageClient(models.StorageInterface):
             req = messages_pb2.GetLatestForecastsRequest(
                 location_uuid=str(location_uuid),
                 energy_source=energy_type_map[energy_type],
-                pivot_timestamp_utc=window_start - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=window_start
+                - dt.timedelta(minutes=forecast_horizon_minutes),
             )
             resp = await self.dpc.GetLatestForecasts(req)
             if len(resp.forecasts) == 0:
                 return []
             resp.forecasts.sort(
-                key=lambda f: f.created_timestamp_utc,
+                key=lambda f: f.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                 reverse=True,
             )
             forecaster = resp.forecasts[0].forecaster
@@ -145,6 +154,11 @@ class StorageClient(models.StorageInterface):
                 latest_versions_only=True,
             )
             resp = await self.dpc.ListForecasters(req)
+            if not resp.forecasters:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                )
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
@@ -215,7 +229,9 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError("Data platform backend doesn't support forecast input yet.")
+        raise NotImplementedError(
+            "Data platform backend doesn't support forecast input yet.",
+        )
 
     @override
     async def get_actual_generation(
@@ -256,7 +272,9 @@ class StorageClient(models.StorageInterface):
             out: list[models.ActualGenerationValue] = [
                 models.ActualGenerationValue(
                     valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                    power_kilowatts=int(v.effective_capacity_watts * v.value_fraction / 1000.0),
+                    power_kilowatts=int(
+                        v.effective_capacity_watts * v.value_fraction / 1000.0,
+                    ),
                     location_uuid=UUID(resp.location_uuid),
                     capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
                     observer_name=observer_name,
@@ -275,7 +293,9 @@ class StorageClient(models.StorageInterface):
         location_type: models.LocationType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError("Data platform backend does not yet support writing generation")
+        raise NotImplementedError(
+            "Data platform backend does not yet support writing generation",
+        )
 
     @override
     async def get_predicted_generation_snapshot(
@@ -291,10 +311,17 @@ class StorageClient(models.StorageInterface):
             raise ValueError("Forecaster name must be specified for data platform backend.")
         if forecaster_version is None:
             req = messages_pb2.ListForecastersRequest(
-                forecaster_names_filter=[forecaster_name],
+                forecaster_names_filter=(
+                    [forecaster_name] if forecaster_name is not None else []
+                ),
                 latest_versions_only=True,
             )
             resp = await self.dpc.ListForecasters(req)
+            if not resp.forecasters:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                )
             forecaster = resp.forecasters[0]
         else:
             forecaster = messages_pb2.Forecaster(
@@ -373,9 +400,11 @@ class StorageClient(models.StorageInterface):
     async def get_locations(
         self,
         energy_type: models.EnergyType,
-        location_type: models.LocationType,
+        location_type: models.LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[models.Location]:
         # For the moment, recreate the auth behaviour of the old routes in here.
         # This should be delegated to the scoping on the API endpoints themselves later.
@@ -383,23 +412,45 @@ class StorageClient(models.StorageInterface):
             case models.EnergyType.WIND, models.LocationType.REGION:
                 # get_wind_regions had no auth
                 oauth_id: str | None = None
-            case models.EnergyType.SOLAR, models.LocationType.NATION | models.LocationType.GSP:
+            case (
+                models.EnergyType.SOLAR,
+                models.LocationType.NATION | models.LocationType.GSP,
+            ):
                 # get_solar_regions had no auth
                 oauth_id = None
             case _, models.LocationType.SUBSTATION:
                 # get substations had optional auth (?) (temporary while we onboard?)
-                oauth_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
             case _, models.LocationType.SITE:
                 # get_sites had auth
                 oauth_id = get_oauth_id_from_sub(authdata["sub"])
+            case _, None:
+                # No location type filter — used by v1 API for listing all region types
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
             case _:
-                oauth_id = get_oauth_id_from_sub(authdata["sub"])
+                oauth_id = (
+                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                )
 
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=energy_type_map[energy_type],
-            location_type_filter=location_type_map[location_type],
+            location_type_filter=(
+                location_type_map[location_type] if location_type is not None else None
+            ),
             user_oauth_id_filter=oauth_id,
-            location_uuids_filter=[str(location_uuid)] if location_uuid is not None else [],
+            location_uuids_filter=(
+                [str(location_uuid)] if location_uuid is not None else []
+            ),
+            enclosing_location_uuid_filter=(
+                str(enclosing_location_uuid)
+                if enclosing_location_uuid is not None
+                else None
+            ),
+            location_names_filter=location_names or [],
         )
         resp = await self.dpc.ListLocations(req)
 
@@ -411,6 +462,7 @@ class StorageClient(models.StorageInterface):
                     capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
                     latitude=loc.latlng.latitude,
                     longitude=loc.latlng.longitude,
+                    location_type=dp_to_internal_location_type.get(loc.location_type),
                     metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},
                 )
                 for loc in resp.locations
@@ -427,7 +479,9 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> models.Location:
-        raise NotImplementedError("Data platform backend doesn't yet support location writing.")
+        raise NotImplementedError(
+            "Data platform backend doesn't yet support location writing.",
+        )
 
     @override
     async def log_api_call(

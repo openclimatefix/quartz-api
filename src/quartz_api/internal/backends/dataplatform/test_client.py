@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 from google.protobuf.struct_pb2 import Struct
-from grpc_requests import Client
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 
@@ -49,27 +48,6 @@ def mock_list_locations(
         ],
     )
 
-
-def mock_get_forecast_sync(
-    req: dict,
-    metadata: object | None = None,  # noqa: ARG001
-) -> dict:
-    return {
-        "values": [
-            {
-                "target_timestamp_utc": TEST_TIMESTAMP_UTC + dt.timedelta(hours=i),
-                "p50_value_fraction": 0.5,
-                "effective_capacity_watts": 1e6,
-                "initialization_timestamp_utc": TEST_TIMESTAMP_UTC
-                - dt.timedelta(minutes=req["horizon_mins"]),
-                "created_timestamp_utc": TEST_TIMESTAMP_UTC
-                - dt.timedelta(hours=1, minutes=req["horizon_mins"]),
-                "other_statistics_fractions": {"p90": 0.9, "p10": 0.1},
-                "metadata": {},
-            }
-            for i in range(5)
-        ],
-    }
 
 def mock_get_forecast(
     req: messages_pb2.GetForecastAsTimeseriesRequest,
@@ -205,11 +183,9 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(resp), tc.expected_num_locations)
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
-    @patch("grpc_requests.Client")
     async def test_get_site_forecast(
         self,
         client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
-        _: Client,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:
@@ -407,11 +383,9 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(resp), tc.number_of_locations)
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
-    @patch("grpc_requests.Client")
     async def test_get_substation_forecast(
         self,
         client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
-        _: Client,
     ) -> None:
         @dataclasses.dataclass
         class TestCase:

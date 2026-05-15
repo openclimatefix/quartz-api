@@ -35,7 +35,11 @@ async def get_sources_route(
     auth: AuthDependency,
 ) -> GetSourcesResponse:
     """Get available generation sources."""
-    return GetSourcesResponse(sources=["wind", "solar"])
+    return GetSourcesResponse(
+        sources=[
+            "solar",
+        ],
+    )
 
 
 @router.get(
@@ -64,7 +68,7 @@ async def get_regions_route(
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid source {source}. Must be 'wind' or 'solar'.",
+            detail=f"Invalid source {source}. Available sources: 'solar'.",
         )
     region_names = [r.name for r in regions]
     return GetRegionsResponse(regions=region_names)
@@ -89,9 +93,12 @@ async def get_historic_timeseries_route(
     try:
         agvs = await db.get_actual_generation(
             location_uuid=region,
-            energy_type=models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR,
+            energy_type=(
+                models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+            ),
             location_type=models.LocationType.REGION,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime() - dt.timedelta(days=2),
+            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
+            - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow(),
             authdata=auth,
         )
@@ -152,9 +159,13 @@ async def get_forecast_timeseries_route(
     try:
         pgvs = await db.get_predicted_generation(
             location_uuid=region,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime() - dt.timedelta(days=2),
-            window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime() + dt.timedelta(days=2),
-            energy_type=models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR,
+            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
+            - dt.timedelta(days=2),
+            window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime()
+            + dt.timedelta(days=2),
+            energy_type=(
+                models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+            ),
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
             authdata=auth,
@@ -218,9 +229,13 @@ async def get_forecast_csv(
 
     pgvs = await db.get_predicted_generation(
         location_uuid=region,
-        window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime() - dt.timedelta(days=2),
-        window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime() + dt.timedelta(days=2),
-        energy_type=models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR,
+        window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime()
+        - dt.timedelta(days=2),
+        window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
+        + dt.timedelta(days=2),
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
         location_type=models.LocationType.REGION,
         forecast_horizon_minutes=horizon_mins,
         authdata=auth,

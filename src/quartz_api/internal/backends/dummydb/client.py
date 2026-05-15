@@ -126,64 +126,114 @@ class StorageClient(models.StorageInterface):
     async def get_locations(
         self,
         energy_type: models.EnergyType,
-        location_type: models.LocationType,
+        location_type: models.LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
     ) -> list[models.Location]:
         loc_uuid = location_uuid or uuid4()
         match energy_type, location_type:
             case models.EnergyType.SOLAR, models.LocationType.REGION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name=n,
                         latitude=26,
                         longitude=76,
                         capacity_kilowatts=76000,
+                        location_type=models.LocationType.REGION,
                     )
                     for n in ["dummy_solar_region1", "dummy_solar_region2"]
                 ]
             case models.EnergyType.WIND, models.LocationType.REGION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name=n,
                         latitude=36,
                         longitude=86,
                         capacity_kilowatts=86000,
+                        location_type=models.LocationType.REGION,
                     )
                     for n in ["dummy_wind_region1", "dummy_wind_region2"]
                 ]
             case _, models.LocationType.SITE:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy Site",
                         latitude=26,
                         longitude=76,
                         capacity_kilowatts=76000,
+                        location_type=models.LocationType.SITE,
                     ),
                 ]
             case _, models.LocationType.GSP:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy GSP",
                         latitude=26,
                         longitude=76,
                         capacity_kilowatts=76000,
+                        location_type=models.LocationType.GSP,
                         metadata={"gsp_id": 12345},
                     ),
                 ]
             case _, models.LocationType.SUBSTATION:
-                return [
+                locations = [
                     models.Location(
                         uuid=loc_uuid,
                         name="Dummy Substation",
                         latitude=26,
                         longitude=76,
                         capacity_kilowatts=76000,
+                        location_type=models.LocationType.SUBSTATION,
                         metadata={"gsp_id": 12345},
+                    ),
+                ]
+            case _, models.LocationType.NATION:
+                locations = [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="uk",
+                        latitude=54,
+                        longitude=-2,
+                        capacity_kilowatts=15000000,
+                        location_type=models.LocationType.NATION,
+                    ),
+                ]
+            case _, models.LocationType.DNO:
+                locations = [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="Dummy DNO",
+                        latitude=52,
+                        longitude=-1,
+                        capacity_kilowatts=5000000,
+                        location_type=models.LocationType.DNO,
+                    ),
+                ]
+            case _, None:
+                # No type filter — return a mix of dummy locations
+                locations = [
+                    models.Location(
+                        uuid=uuid4(),
+                        name="Dummy GSP",
+                        latitude=26,
+                        longitude=76,
+                        capacity_kilowatts=76000,
+                        location_type=models.LocationType.GSP,
+                        metadata={"gsp_id": 12345},
+                    ),
+                    models.Location(
+                        uuid=uuid4(),
+                        name="Dummy DNO",
+                        latitude=52,
+                        longitude=-1,
+                        capacity_kilowatts=5000000,
+                        location_type=models.LocationType.DNO,
                     ),
                 ]
             case _:
@@ -191,6 +241,10 @@ class StorageClient(models.StorageInterface):
                     f"DummyDB client does not support {location_type} locations"
                     f"for {energy_type} energy type.",
                 )
+        if location_names:
+            name_set = {n.lower() for n in location_names}
+            locations = [loc for loc in locations if loc.name.lower() in name_set]
+        return locations
 
     @override
     async def get_predicted_generation_snapshot(

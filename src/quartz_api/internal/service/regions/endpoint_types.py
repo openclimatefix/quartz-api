@@ -11,7 +11,9 @@ class ActualPower(BaseModel):
     """Defines the data structure for an actual power value returned by the API."""
 
     PowerKW: float
-    Time: dt.datetime  # TODO: Use AwareDatetime from Pydantic and remove to_timezone conversion
+    Time: (
+        dt.datetime
+    )  # TODO: Use AwareDatetime from Pydantic and remove to_timezone conversion
     location_uuid: str = Field("not-set", exclude=True)
 
 
@@ -39,7 +41,7 @@ ValidSource = Annotated[
     str,
     Path(
         description="The source of the generation or forecast data.",
-        pattern="^(wind|solar)$",
+        pattern="^(solar)$",
     ),
 ]
 
