@@ -42,7 +42,7 @@ from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
 from quartz_api.internal.service.uk_national.gsp_router import _warm_forecast_all_cache
 
 from ._logging import setup_json_logging
-from .constants import SUPPORT_EMAIL
+from quartz_api.constants import SUPPORT_EMAIL
 
 log = logging.getLogger(__name__)
 logging.getLogger("hpack").setLevel(logging.WARNING)
