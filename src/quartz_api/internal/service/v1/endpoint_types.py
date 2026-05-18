@@ -13,6 +13,7 @@ from pydantic import (
     field_validator,
 )
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 
 from .country_config import COUNTRIES
@@ -195,7 +196,7 @@ def _check_window_start(v: dt.datetime | None) -> dt.datetime | None:
     if v < earliest:
         raise ValueError(
             "start_utc exceeds the 1-year rolling data limit. "
-            "Contact us at quartz@openclimatefix.org for access to extended history.",
+            f"Contact us at {SUPPORT_EMAIL} for access to extended history.",
         )
     return v
 

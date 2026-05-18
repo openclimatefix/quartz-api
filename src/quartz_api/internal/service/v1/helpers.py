@@ -9,6 +9,7 @@ import pandas as pd
 from fastapi import HTTPException
 from starlette import status
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -242,7 +243,7 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
         status_code=status.HTTP_403_FORBIDDEN,
         detail=(
             f"You do not have access to {cfg.permission or 'this country'}. "
-            "Contact quartz@openclimatefix.org to request access."
+            f"Contact {SUPPORT_EMAIL} to request access."
         ),
     )
 

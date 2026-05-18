@@ -204,7 +204,7 @@ _GB_GSP_FORECAST_MODELS = (
 
 _NL_NATIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
 
-_NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
+_NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND,)
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
@@ -273,7 +273,7 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.REGION,
                 source_types=("solar",),
                 forecast_models=_NL_REGIONAL_FORECAST_MODELS,
-                default_model="nl_blend_adjust",
+                default_model="nl_blend",
                 metadata_fields=("region_id",),
                 # Maps DP location names → user-facing display names.
                 # N.B. EXISTING NAMES SHOULD NOT BE CHANGED AFTER DEPLOYMENT

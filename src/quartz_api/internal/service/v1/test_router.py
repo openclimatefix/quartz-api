@@ -1646,3 +1646,43 @@ async def test_nl_forecast_snapshot(nl_client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert "time" in resp.json()
     assert "values" in resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Config invariants
+
+
+def test_country_config_default_models_are_valid() -> None:
+    """Every default_model set on a RegionTypeConfig must appear in forecast_models."""
+    for country_code, cfg in COUNTRIES.items():
+        for rt in cfg.region_types:
+            if rt.default_model is None:
+                continue
+            model_names = {fm.name for fm in rt.forecast_models}
+            assert rt.default_model in model_names, (
+                f"{country_code}/{rt.type}: default_model '{rt.default_model}' "
+                f"is not in forecast_models {sorted(model_names)}"
+            )
+
+
+def test_country_config_intraday_models_subset_of_forecast_models() -> None:
+    """intraday_models must be a subset of forecast_models for every region type."""
+    for country_code, cfg in COUNTRIES.items():
+        for rt in cfg.region_types:
+            for fm in rt.intraday_models:
+                assert fm in rt.forecast_models, (
+                    f"{country_code}/{rt.type}: intraday model '{fm.api_name}' "
+                    f"is absent from forecast_models"
+                )
+
+
+def test_country_config_intraday_default_in_intraday_models() -> None:
+    """intraday_default_model must be listed in intraday_models when both are set."""
+    for country_code, cfg in COUNTRIES.items():
+        for rt in cfg.region_types:
+            if rt.intraday_default_model is None or not rt.intraday_models:
+                continue
+            assert rt.intraday_default_model in rt.intraday_models, (
+                f"{country_code}/{rt.type}: intraday_default_model "
+                f"'{rt.intraday_default_model.api_name}' is not in intraday_models"
+            )
