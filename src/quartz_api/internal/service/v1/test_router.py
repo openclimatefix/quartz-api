@@ -1756,12 +1756,22 @@ async def test_nl_forecast_period_display_name_filter(
     base = f"{prefix}:v1:period:NL:solar:province"
     await backend.set(
         f"{base}:_meta",
-        json.dumps({"model_name": "nl_blend_adjust", "model_version": "1", "last_updated_utc": None, "latest_init_utc": None, "cache_updated_utc": None}).encode(),
+        json.dumps(
+            {
+                "model_name": "nl_blend_adjust",
+                "model_version": "1",
+                "last_updated_utc": None,
+                "latest_init_utc": None,
+                "cache_updated_utc": None,
+            },
+        ).encode(),
         expire=3600,
     )
     await backend.set(
         f"{base}:{_FIXED_NL_PROVINCE_UUID}",
-        json.dumps([{"time": "2026-01-01T12:00:00+00:00", "power_kW": 100.0, "plevels_kW": {}}]).encode(),
+        json.dumps(
+            [{"time": "2026-01-01T12:00:00+00:00", "power_kW": 100.0, "plevels_kW": {}}],
+        ).encode(),
         expire=3600,
     )
 
