@@ -409,7 +409,8 @@ async def get_forecasts_period(
     if region_names is not None:
         name_set = {n.lower() for n in region_names}
         regions = [
-            r for r in regions
+            r
+            for r in regions
             if r.name.lower() in name_set
             or location_display_name(r, country).lower() in name_set
         ]

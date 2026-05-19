@@ -98,7 +98,7 @@ async def get_countries(
                     for rt in cfg.region_types
                 ],
                 generation_sources=[
-                    GenerationSource(source=gs.source, name=gs.name, label=gs.label)
+                    GenerationSource(source=gs.source, name=gs.api_name, label=gs.label)
                     for gs in cfg.generation_sources
                 ],
             ),
@@ -164,4 +164,8 @@ async def get_generation_sources(
     generation data — for example PV_Live in-day estimates vs finalised day-after values.
     Use the `name` field as the `observer` parameter on generation endpoints.
     """
-    return [s for s in country.generation_sources if s.source == source.name.lower()]
+    return [
+        GenerationSource(source=s.source, name=s.api_name, label=s.label)
+        for s in country.generation_sources
+        if s.source == source.name.lower()
+    ]

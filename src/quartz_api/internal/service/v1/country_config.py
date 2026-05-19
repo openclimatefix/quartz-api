@@ -83,11 +83,21 @@ class RegionTypeConfig:
 
 @dataclass(frozen=True)
 class GenerationSource:
-    """Configuration for a generation source."""
+    """Configuration for a generation source.
+
+    `name` is the internal DP observer name. `slug` is the user-facing API name;
+    defaults to `name` when not set.
+    """
 
     source: str
     name: str
     label: str
+    slug: str | None = None
+
+    @property
+    def api_name(self) -> str:
+        """User-facing observer name used in API params."""
+        return self.slug if self.slug is not None else self.name
 
 
 @dataclass(frozen=True)
@@ -125,6 +135,13 @@ class CountryConfig:
             if gt.source == source:
                 return gt
         return None
+
+    def resolve_observer(self, api_name: str) -> str:
+        """Return the internal DP observer name for a user-facing API name."""
+        for gs in self.generation_sources:
+            if gs.api_name == api_name:
+                return gs.name
+        return api_name
 
 
 class FM:
@@ -312,7 +329,7 @@ COUNTRIES: dict[str, CountryConfig] = {
             ),
         ),
         generation_sources=(
-            GenerationSource(source="solar", name="nednl", label="NED NL Initial"),
+            GenerationSource(source="solar", name="nednl", label="NED NL Initial", slug="ned_nl"),
         ),
     ),
 }

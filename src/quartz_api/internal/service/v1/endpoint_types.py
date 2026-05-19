@@ -97,11 +97,11 @@ ValidPeriodRegionType = Annotated[
 
 
 def _get_observer_sources() -> tuple[str, ...]:
-    """Extract all unique observer source names from country configs."""
+    """Extract all unique observer API names from country configs."""
     sources = set()
     for country_cfg in COUNTRIES.values():
         for gen_type in country_cfg.generation_sources:
-            sources.add(gen_type.name)
+            sources.add(gen_type.api_name)
     return tuple(sorted(sources))
 
 

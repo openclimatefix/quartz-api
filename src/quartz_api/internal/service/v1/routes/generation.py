@@ -85,9 +85,10 @@ async def get_generation(
 
     NL currently has one observer for solar:
 
-    - **nednl** — NED NL estimated solar generation for provinces / national including curtailment.
+    - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
+    dp_observer = country.resolve_observer(observer)
     resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
@@ -117,7 +118,7 @@ async def get_generation(
                 window_end=chunk_end,
                 energy_type=source,
                 location_type=location_type,
-                observer_name=observer,
+                observer_name=dp_observer,
                 authdata={},  # TODO: add auth when loosed on DP side
             ),
         )
@@ -168,6 +169,7 @@ async def get_generation_at_timestamp(
     rarely have data.
     """
     check_country_access(auth, country)
+    dp_observer = country.resolve_observer(observer)
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
@@ -211,7 +213,7 @@ async def get_generation_at_timestamp(
             window_end=now,
             energy_type=source,
             location_type=location_type,
-            observer_name=observer,
+            observer_name=dp_observer,
             authdata={},
         )
         snapshot_time = (
@@ -227,7 +229,7 @@ async def get_generation_at_timestamp(
         location_uuids=[to_uuid(r.uuid) for r in regions],
         snapshot_timestamp_utc=snapshot_time,
         energy_type=source,
-        observer_name=observer,
+        observer_name=dp_observer,
         authdata={},
     )
 
@@ -312,7 +314,9 @@ async def get_generation_period(
             ),
         )
     valid_observers = {
-        gs.name for gs in country.generation_sources if gs.source == source.name.lower()
+        gs.api_name
+        for gs in country.generation_sources
+        if gs.source == source.name.lower()
     }
     if observer not in valid_observers:
         raise HTTPException(
@@ -322,6 +326,7 @@ async def get_generation_period(
                 f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}"
             ),
         )
+    dp_observer = country.resolve_observer(observer)
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
     validate_window(win_start, win_end)
@@ -333,7 +338,7 @@ async def get_generation_period(
         country.code,
         source.name.lower(),
         region_type,
-        observer,
+        dp_observer,
     )
 
     raw_meta = await backend.get(f"{base}:_meta")
@@ -361,7 +366,8 @@ async def get_generation_period(
     if region_names is not None:
         name_set = {n.lower() for n in region_names}
         regions = [
-            r for r in regions
+            r
+            for r in regions
             if r.name.lower() in name_set
             or location_display_name(r, country).lower() in name_set
         ]
@@ -414,7 +420,8 @@ async def refresh_generation_cache(
     """
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{observer}"
+    dp_observer = country.resolve_observer(observer)
+    flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{dp_observer}"
     if generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
     background_tasks.add_task(
@@ -423,6 +430,6 @@ async def refresh_generation_cache(
         source,
         country.code,
         region_type,
-        observer,
+        dp_observer,
     )
     return Response(status_code=202, content="Cache refresh triggered")
