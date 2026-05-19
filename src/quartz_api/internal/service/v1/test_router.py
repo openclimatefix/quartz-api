@@ -259,7 +259,7 @@ _NL_PROVINCE_INTERNAL_NAME = "nl_region_2_friesland"
 _NL_PROVINCE_DISPLAY_NAME = "friesland"
 
 
-class FixedNLProvinceClient(NationNameStorageClient):
+class NLProvinceClient(NationNameStorageClient):
     """NL client that returns a stable UUID for the Friesland province.
 
     Allows cache-key tests that verify display-name filtering works for NL.
@@ -1736,9 +1736,9 @@ def test_country_config_intraday_default_in_intraday_models() -> None:
 
 @pytest_asyncio.fixture
 async def nl_province_client() -> AsyncGenerator[AsyncClient, None]:
-    """NL client backed by FixedNLProvinceClient for display-name filter tests."""
+    """NL client backed by NLProvinceClient for display-name filter tests."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
-    app = _make_app(FixedNLProvinceClient(), ["read:nl"])
+    app = _make_app(NLProvinceClient(), ["read:nl"])
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
