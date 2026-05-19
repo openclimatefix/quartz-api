@@ -1770,7 +1770,13 @@ async def test_nl_forecast_period_display_name_filter(
     await backend.set(
         f"{base}:{_FIXED_NL_PROVINCE_UUID}",
         json.dumps(
-            [{"time": "2026-01-01T12:00:00+00:00", "power_kW": 100.0, "plevels_kW": {}}],
+            [
+                {
+                    "time": "2026-01-01T12:00:00+00:00",
+                    "power_kW": 100.0,
+                    "plevels_kW": {},
+                }
+            ],
         ).encode(),
         expire=3600,
     )
