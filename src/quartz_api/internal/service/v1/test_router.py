@@ -726,7 +726,7 @@ async def test_get_generation_period_wrong_country_observer_returns_400(
         "/v1/NL/solar/generation/period?region_type=province&observer=pvlive_in_day",
     )
     assert resp.status_code == 400
-    assert "nednl" in resp.json()["detail"]
+    assert "ned_nl" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -1665,11 +1665,11 @@ async def test_nl_forecast_invalid_model_400(nl_client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_nl_generation_sources(nl_client: AsyncClient) -> None:
-    """NL generation sources discovery is public and includes nednl."""
+    """NL generation sources discovery is public and includes ned_nl."""
     resp = await nl_client.get("/v1/NL/solar/generation-sources")
     assert resp.status_code == 200
     names = [s["name"] for s in resp.json()]
-    assert "nednl" in names
+    assert "ned_nl" in names
 
 
 @pytest.mark.anyio
