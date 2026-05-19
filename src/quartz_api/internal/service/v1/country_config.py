@@ -338,7 +338,10 @@ COUNTRIES: dict[str, CountryConfig] = {
         ),
         generation_sources=(
             GenerationSource(
-                source="solar", name="nednl", label="NED NL Initial", slug="ned_nl"
+                source="solar",
+                name="nednl",
+                label="NED NL Initial",
+                slug="ned_nl",
             ),
         ),
     ),
