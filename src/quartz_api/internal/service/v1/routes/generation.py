@@ -85,7 +85,7 @@ async def get_generation(
 
     NL currently has one observer for solar:
 
-    - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
+    - **nednl** — NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
