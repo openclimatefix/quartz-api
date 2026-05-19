@@ -161,7 +161,9 @@ class FM:
         label="PVNet Intraday (ECMWF, Trend Adjusted)",
     )
     PVNET_SAT = ForecastModel(
-        name="pvnet_sat_only", label="PVNet Intraday (Satellite)", slug="pvnet_sat",
+        name="pvnet_sat_only",
+        label="PVNet Intraday (Satellite)",
+        slug="pvnet_sat",
     )
     PVNET_SAT_ADJUST = ForecastModel(
         name="pvnet_sat_only_adjust",
@@ -169,7 +171,9 @@ class FM:
         slug="pvnet_sat_adjust",
     )
     PVNET_UKV = ForecastModel(
-        name="pvnet_ukv_only", label="PVNet Intraday (Met Office)", slug="pvnet_ukv",
+        name="pvnet_ukv_only",
+        label="PVNet Intraday (Met Office)",
+        slug="pvnet_ukv",
     )
     PVNET_UKV_ADJUST = ForecastModel(
         name="pvnet_ukv_only_adjust",
@@ -178,7 +182,9 @@ class FM:
     )
     # GB — PVNet v2 (intraday)
     PVNET_INTRADAY = ForecastModel(
-        name="pvnet_v2", label="PVNet Intraday", slug="pvnet_intraday",
+        name="pvnet_v2",
+        label="PVNet Intraday",
+        slug="pvnet_intraday",
     )
     PVNET_INTRADAY_ADJUST = ForecastModel(
         name="pvnet_v2_adjust",
@@ -200,12 +206,14 @@ class FM:
     )
     # NL — uncurtailed (regional and national)
     NL_UNCURTAILED = ForecastModel(
-        name="nl_regional_ecmwf_mo_sat", label="Uncurtailed", slug="uncurtailed",
+        name="nl_regional_ecmwf_mo_sat",
+        label="ECMWF + Met Office + Satellite, Uncurtailed",
+        slug="ecmwf_mo_sat_uncurtailed",
     )
     NL_UNCURTAILED_ADJUST = ForecastModel(
         name="nl_regional_ecmwf_mo_sat_adjust",
-        label="Uncurtailed (Trend Adjusted)",
-        slug="uncurtailed_adjust",
+        label="ECMWF + Met Office + Satellite, Uncurtailed (Trend Adjusted)",
+        slug="ecmwf_mo_sat_uncurtailed_adjust",
     )
 
 
@@ -329,7 +337,9 @@ COUNTRIES: dict[str, CountryConfig] = {
             ),
         ),
         generation_sources=(
-            GenerationSource(source="solar", name="nednl", label="NED NL Initial", slug="ned_nl"),
+            GenerationSource(
+                source="solar", name="nednl", label="NED NL Initial", slug="ned_nl"
+            ),
         ),
     ),
 }
