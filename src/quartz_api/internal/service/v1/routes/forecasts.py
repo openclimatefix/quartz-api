@@ -57,6 +57,7 @@ router = APIRouter(tags=["Forecasts"])
     "/{country}/{source}/regions/{region}/forecast",
     status_code=status.HTTP_200_OK,
     response_model=ForecastResponse,
+    response_model_exclude_none=True,
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_forecast(
@@ -78,7 +79,7 @@ async def get_forecast(
             "Use to retrieve the forecast 'as it was' at a point in time."
         ),
     ),
-    forecast_horizon_minutes: int | None = Query(
+    horizon_minutes: int | None = Query(
         None,
         description=(
             "Forecast horizon filter in minutes. For example, `60` returns only "
@@ -131,7 +132,7 @@ async def get_forecast(
                 location_type=location_type,
                 authdata={},  # TODO: add auth when loosed on DP side
                 created_cutoff=creation_limit_utc,
-                forecast_horizon_minutes=forecast_horizon_minutes or 0,
+                forecast_horizon_minutes=horizon_minutes or 0,
                 forecaster_name=model,
             ),
         )
@@ -142,9 +143,9 @@ async def get_forecast(
         capacity_kW=first.capacity_kilowatts if first else 0.0,
         model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        created_utc=first.created_timestamp if first else None,
-        init_utc=first.init_timestamp if first else None,
-        horizon_minutes=forecast_horizon_minutes,
+        last_updated_utc=first.created_timestamp if first else None,
+        latest_init_utc=first.init_timestamp if first else None,
+        horizon_minutes=horizon_minutes,
         values=[
             ForecastValue(
                 time=v.valid_timestamp,
@@ -173,7 +174,7 @@ async def get_forecast_last_updated_timestamp(
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region.
 
-    Queries the forecast within ±30 minutes of now and returns the `created_utc`
+    Queries the forecast within ±30 minutes of now and returns the `last_updated_utc`
     of the most recent run. Useful for monitoring freshness or driving "last updated"
     indicators in a UI. Cached for 10 seconds.
     """
@@ -288,8 +289,8 @@ async def get_forecasts_at_time(
         time=snapshot_time,
         model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        created_utc=first.created_timestamp if first else None,
-        init_utc=first.init_timestamp if first else None,
+        last_updated_utc=first.created_timestamp if first else None,
+        latest_init_utc=first.init_timestamp if first else None,
         values=[
             RegionForecastValue(
                 region_name=region_names.get(v.location_uuid, ""),

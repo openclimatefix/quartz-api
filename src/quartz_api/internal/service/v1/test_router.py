@@ -386,8 +386,8 @@ async def _set_forecast_meta() -> None:
     meta = {
         "model_name": "blend",
         "model_version": "1.0.0",
-        "created_utc": now.isoformat(),
-        "init_utc": now.isoformat(),
+        "last_updated_utc": now.isoformat(),
+        "latest_init_utc": now.isoformat(),
     }
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
@@ -563,7 +563,7 @@ async def test_get_region_forecast(client: AsyncClient) -> None:
     assert "capacity_kW" in body
     assert "values" in body
     assert "model_name" in body
-    assert "init_utc" in body
+    assert "latest_init_utc" in body
 
 
 @pytest.mark.anyio
@@ -1065,11 +1065,11 @@ async def test_get_region_forecast_creation_limit_utc(client: AsyncClient) -> No
 
 
 @pytest.mark.anyio
-async def test_get_region_forecast_horizon_minutes(client: AsyncClient) -> None:
-    """forecast_horizon_minutes passes through to backend — endpoint returns 200."""
+async def test_get_region_forecast_horizon_minutes_param(client: AsyncClient) -> None:
+    """horizon_minutes passes through to backend — endpoint returns 200."""
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?forecast_horizon_minutes=1440",
+        f"/v1/GB/solar/regions/{region_id}/forecast?horizon_minutes=1440",
     )
     assert resp.status_code == 200
 
@@ -1756,7 +1756,7 @@ async def test_nl_forecast_period_display_name_filter(
     base = f"{prefix}:v1:period:NL:solar:province"
     await backend.set(
         f"{base}:_meta",
-        json.dumps({"model_name": "nl_blend_adjust", "model_version": "1", "created_utc": None, "init_utc": None, "cache_updated_utc": None}).encode(),
+        json.dumps({"model_name": "nl_blend_adjust", "model_version": "1", "last_updated_utc": None, "latest_init_utc": None, "cache_updated_utc": None}).encode(),
         expire=3600,
     )
     await backend.set(
