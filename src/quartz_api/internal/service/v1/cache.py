@@ -154,7 +154,9 @@ async def warm_v1_forecast_cache(
             energy_type.name.lower(),
             region_type,
         )
-        first_pgv = None
+        first_found_pgv = None
+        last_updated: dt.datetime | None = None
+        latest_init: dt.datetime | None = None
 
         for i, region in enumerate(regions):
             pgvs = await db.get_predicted_generation(
@@ -166,8 +168,18 @@ async def warm_v1_forecast_cache(
                 authdata={},
                 forecaster_name=rt.default_model,
             )
-            if pgvs and first_pgv is None:
-                first_pgv = pgvs[0]
+            if pgvs:
+                if first_found_pgv is None:
+                    first_found_pgv = pgvs[0]
+                for pgv in pgvs:
+                    if pgv.created_timestamp and (
+                        last_updated is None or pgv.created_timestamp > last_updated
+                    ):
+                        last_updated = pgv.created_timestamp
+                    if pgv.init_timestamp and (
+                        latest_init is None or pgv.init_timestamp > latest_init
+                    ):
+                        latest_init = pgv.init_timestamp
             values = [
                 {
                     "time": v.valid_timestamp.isoformat(),
@@ -189,16 +201,14 @@ async def warm_v1_forecast_cache(
             # yield to event loop; keeps live requests responsive during warm
             await asyncio.sleep(0.1)
 
-        created = first_pgv.created_timestamp if first_pgv else None
-        init = first_pgv.init_timestamp if first_pgv else None
         meta = {
             "model_name": internal_to_api_name(
-                first_pgv.forecaster_name if first_pgv else None,
+                first_found_pgv.forecaster_name if first_found_pgv else None,
                 rt,
             ),
-            "model_version": first_pgv.forecaster_version if first_pgv else None,
-            "created_utc": created.isoformat() if created else None,
-            "init_utc": init.isoformat() if init else None,
+            "model_version": first_found_pgv.forecaster_version if first_found_pgv else None,
+            "last_updated_utc": last_updated.isoformat() if last_updated else None,
+            "latest_init_utc": latest_init.isoformat() if latest_init else None,
             "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
         }
         await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)

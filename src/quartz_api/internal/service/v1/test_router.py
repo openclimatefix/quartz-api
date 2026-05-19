@@ -254,6 +254,48 @@ async def trial_client() -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+_FIXED_NL_PROVINCE_UUID = uuid4()
+_NL_PROVINCE_INTERNAL_NAME = "nl_region_2_friesland"
+_NL_PROVINCE_DISPLAY_NAME = "friesland"
+
+
+class NLProvinceClient(NationNameStorageClient):
+    """NL client that returns a stable UUID for the Friesland province.
+
+    Allows cache-key tests that verify display-name filtering works for NL.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("nl_national")
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.REGION:
+            return [
+                models.Location(
+                    uuid=_FIXED_NL_PROVINCE_UUID,
+                    name=_NL_PROVINCE_INTERNAL_NAME,
+                    latitude=53.0,
+                    longitude=5.8,
+                    capacity_kilowatts=500_000,
+                    location_type=models.LocationType.REGION,
+                ),
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
 @pytest_asyncio.fixture
 async def nl_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with NL read permission backed by NationNameStorageClient."""
@@ -344,8 +386,8 @@ async def _set_forecast_meta() -> None:
     meta = {
         "model_name": "blend",
         "model_version": "1.0.0",
-        "created_utc": now.isoformat(),
-        "init_utc": now.isoformat(),
+        "last_updated_utc": now.isoformat(),
+        "latest_init_utc": now.isoformat(),
     }
     prefix = FastAPICache.get_prefix()
     backend = FastAPICache.get_backend()
@@ -521,7 +563,7 @@ async def test_get_region_forecast(client: AsyncClient) -> None:
     assert "capacity_kW" in body
     assert "values" in body
     assert "model_name" in body
-    assert "init_utc" in body
+    assert "latest_init_utc" in body
 
 
 @pytest.mark.anyio
@@ -684,7 +726,7 @@ async def test_get_generation_period_wrong_country_observer_returns_400(
         "/v1/NL/solar/generation/period?region_type=province&observer=pvlive_in_day",
     )
     assert resp.status_code == 400
-    assert "nednl" in resp.json()["detail"]
+    assert "ned_nl" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -1023,11 +1065,11 @@ async def test_get_region_forecast_creation_limit_utc(client: AsyncClient) -> No
 
 
 @pytest.mark.anyio
-async def test_get_region_forecast_horizon_minutes(client: AsyncClient) -> None:
-    """forecast_horizon_minutes passes through to backend — endpoint returns 200."""
+async def test_get_region_forecast_horizon_minutes_param(client: AsyncClient) -> None:
+    """horizon_minutes passes through to backend — endpoint returns 200."""
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?forecast_horizon_minutes=1440",
+        f"/v1/GB/solar/regions/{region_id}/forecast?horizon_minutes=1440",
     )
     assert resp.status_code == 200
 
@@ -1623,11 +1665,11 @@ async def test_nl_forecast_invalid_model_400(nl_client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_nl_generation_sources(nl_client: AsyncClient) -> None:
-    """NL generation sources discovery is public and includes nednl."""
+    """NL generation sources discovery is public and includes ned_nl."""
     resp = await nl_client.get("/v1/NL/solar/generation-sources")
     assert resp.status_code == 200
     names = [s["name"] for s in resp.json()]
-    assert "nednl" in names
+    assert "ned_nl" in names
 
 
 @pytest.mark.anyio
@@ -1686,3 +1728,71 @@ def test_country_config_intraday_default_in_intraday_models() -> None:
                 f"{country_code}/{rt.type}: intraday_default_model "
                 f"'{rt.intraday_default_model.api_name}' is not in intraday_models"
             )
+
+
+# ---------------------------------------------------------------------------
+# NL display-name filter
+
+
+@pytest_asyncio.fixture
+async def nl_province_client() -> AsyncGenerator[AsyncClient, None]:
+    """NL client backed by NLProvinceClient for display-name filter tests."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(NLProvinceClient(), ["read:nl"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest.mark.anyio
+async def test_nl_forecast_period_display_name_filter(
+    nl_province_client: AsyncClient,
+) -> None:
+    """region_names filter matches NL province display names, not internal DP names."""
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    base = f"{prefix}:v1:period:NL:solar:province"
+    await backend.set(
+        f"{base}:_meta",
+        json.dumps(
+            {
+                "model_name": "nl_blend_adjust",
+                "model_version": "1",
+                "last_updated_utc": None,
+                "latest_init_utc": None,
+                "cache_updated_utc": None,
+            },
+        ).encode(),
+        expire=3600,
+    )
+    await backend.set(
+        f"{base}:{_FIXED_NL_PROVINCE_UUID}",
+        json.dumps(
+            [
+                {
+                    "time": "2026-01-01T12:00:00+00:00",
+                    "power_kW": 100.0,
+                    "plevels_kW": {},
+                },
+            ],
+        ).encode(),
+        expire=3600,
+    )
+
+    # Filter by display name — should match despite internal name being different.
+    resp = await nl_province_client.get(
+        f"/v1/NL/solar/forecasts/period?region_type=province&region_names={_NL_PROVINCE_DISPLAY_NAME}",
+    )
+    assert resp.status_code == 200
+    regions = resp.json()["regions"]
+    assert len(regions) == 1
+    assert regions[0]["region_name"] == _NL_PROVINCE_DISPLAY_NAME
+
+    # Filter by internal DP name — should also match (fallback).
+    resp2 = await nl_province_client.get(
+        f"/v1/NL/solar/forecasts/period?region_type=province&region_names={_NL_PROVINCE_INTERNAL_NAME}",
+    )
+    assert resp2.status_code == 200
+    assert len(resp2.json()["regions"]) == 1

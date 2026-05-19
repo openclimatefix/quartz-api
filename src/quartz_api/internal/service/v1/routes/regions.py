@@ -58,8 +58,6 @@ async def get_country_regions(
     - `region_type` — restricts results to one granularity level (e.g. `gsp`).
     - `parent` — returns the direct children of the specified parent region.
     - `name` — case-insensitive substring search across region names.
-
-    Cached for 1 minute.
     """
     check_country_access(auth, country)
     nation = await resolve_nation(db, source, country, auth)
@@ -158,7 +156,7 @@ async def get_region(
     """Get details for a specific region.
 
     Returns a `RegionDetail` object with the region's name, type, installed
-    capacity, centroid, and any available metadata fields. Cached for 1 minute.
+    capacity, centroid, and any available metadata fields.
     """
     check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)

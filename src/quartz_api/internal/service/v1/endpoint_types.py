@@ -97,11 +97,11 @@ ValidPeriodRegionType = Annotated[
 
 
 def _get_observer_sources() -> tuple[str, ...]:
-    """Extract all unique observer source names from country configs."""
+    """Extract all unique observer API names from country configs."""
     sources = set()
     for country_cfg in COUNTRIES.values():
         for gen_type in country_cfg.generation_sources:
-            sources.add(gen_type.name)
+            sources.add(gen_type.api_name)
     return tuple(sorted(sources))
 
 
@@ -304,8 +304,8 @@ class ForecastResponse(BaseModel):
     capacity_kW: float
     model_name: str | None = None
     model_version: str | None = None
-    created_utc: dt.datetime | None = None
-    init_utc: dt.datetime | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
     horizon_minutes: int | None = None
     values: list[ForecastValue]
 
@@ -341,8 +341,8 @@ class ForecastSnapshot(BaseModel):
     time: dt.datetime
     model_name: str | None = None
     model_version: str | None = None
-    created_utc: dt.datetime | None = None
-    init_utc: dt.datetime | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
     values: list[RegionForecastValue]
 
 
@@ -376,8 +376,8 @@ class RegionForecastMatrix(BaseModel):
 
     model_name: str | None = None
     model_version: str | None = None
-    created_utc: dt.datetime | None = None
-    init_utc: dt.datetime | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
     cache_updated_utc: dt.datetime | None = None
     times: list[dt.datetime]
     regions: list[RegionForecast]

@@ -35,7 +35,6 @@ async def get_sources(
 
     Returns the set of energy source types supported by the API. Use the `name` value
     as the `{source}` path segment in all other v1 routes (e.g. `/v1/GB/solar/regions`).
-    Cached for 1 minute.
     """
     return [
         Source(name="solar", label="Solar"),
@@ -64,7 +63,7 @@ async def get_countries(
     - **capacity_kW** and **centroid** — installed capacity and geographic centre.
 
     Use the `country` value (e.g. `GB`, `NL`) as the `{country}` path segment in all other
-    v1 routes. Cached for 1 minute.
+    v1 routes.
     """
     nations = await db.get_locations(
         energy_type=models.EnergyType.SOLAR,
@@ -99,7 +98,7 @@ async def get_countries(
                     for rt in cfg.region_types
                 ],
                 generation_sources=[
-                    GenerationSource(source=gs.source, name=gs.name, label=gs.label)
+                    GenerationSource(source=gs.source, name=gs.api_name, label=gs.label)
                     for gs in cfg.generation_sources
                 ],
             ),
@@ -131,8 +130,6 @@ async def get_region_types(
     - **forecast_models** — the models available for that region type, with the model
       `name` used as the `model` parameter on forecast endpoints. The first listed model
       is the default.
-
-    Cached for 1 minute.
     """
     return [
         RegionType(
@@ -166,6 +163,9 @@ async def get_generation_sources(
     Generation sources represent the different observers that produce actual (measured)
     generation data — for example PV_Live in-day estimates vs finalised day-after values.
     Use the `name` field as the `observer` parameter on generation endpoints.
-    Cached for 1 minute.
     """
-    return [s for s in country.generation_sources if s.source == source.name.lower()]
+    return [
+        GenerationSource(source=s.source, name=s.api_name, label=s.label)
+        for s in country.generation_sources
+        if s.source == source.name.lower()
+    ]
