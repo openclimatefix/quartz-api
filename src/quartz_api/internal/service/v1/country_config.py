@@ -127,10 +127,6 @@ class CountryConfig:
         return None
 
 
-def _m(name: str, label: str, slug: str | None = None) -> ForecastModel:
-    return ForecastModel(name=name, label=label, slug=slug)
-
-
 class FM:
     """All API-ready forecast models defined once — name, label, and slug in one place.
 
@@ -139,51 +135,59 @@ class FM:
     """
 
     # GB — blend
-    BLEND = _m("blend", "Blend")
-    BLEND_ADJUST = _m("blend_adjust", "Blend (Trend Adjusted)")
+    BLEND = ForecastModel(name="blend", label="Blend")
+    BLEND_ADJUST = ForecastModel(name="blend_adjust", label="Blend (Trend Adjusted)")
     # GB — PVNet single-source models
-    PVNET_ECMWF = _m("pvnet_ecmwf", "PVNet Intraday (ECMWF)")
-    PVNET_ECMWF_ADJUST = _m(
-        "pvnet_ecmwf_adjust",
-        "PVNet Intraday (ECMWF, Trend Adjusted)",
+    PVNET_ECMWF = ForecastModel(name="pvnet_ecmwf", label="PVNet Intraday (ECMWF)")
+    PVNET_ECMWF_ADJUST = ForecastModel(
+        name="pvnet_ecmwf_adjust",
+        label="PVNet Intraday (ECMWF, Trend Adjusted)",
     )
-    PVNET_SAT = _m("pvnet_sat_only", "PVNet Intraday (Satellite)", slug="pvnet_sat")
-    PVNET_SAT_ADJUST = _m(
-        "pvnet_sat_only_adjust",
-        "PVNet Intraday (Satellite, Trend Adjusted)",
+    PVNET_SAT = ForecastModel(
+        name="pvnet_sat_only", label="PVNet Intraday (Satellite)", slug="pvnet_sat",
+    )
+    PVNET_SAT_ADJUST = ForecastModel(
+        name="pvnet_sat_only_adjust",
+        label="PVNet Intraday (Satellite, Trend Adjusted)",
         slug="pvnet_sat_adjust",
     )
-    PVNET_UKV = _m("pvnet_ukv_only", "PVNet Intraday (Met Office)", slug="pvnet_ukv")
-    PVNET_UKV_ADJUST = _m(
-        "pvnet_ukv_only_adjust",
-        "PVNet Intraday (Met Office, Trend Adjusted)",
+    PVNET_UKV = ForecastModel(
+        name="pvnet_ukv_only", label="PVNet Intraday (Met Office)", slug="pvnet_ukv",
+    )
+    PVNET_UKV_ADJUST = ForecastModel(
+        name="pvnet_ukv_only_adjust",
+        label="PVNet Intraday (Met Office, Trend Adjusted)",
         slug="pvnet_ukv_adjust",
     )
     # GB — PVNet v2 (intraday)
-    PVNET_INTRADAY = _m("pvnet_v2", "PVNet Intraday", slug="pvnet_intraday")
-    PVNET_INTRADAY_ADJUST = _m(
-        "pvnet_v2_adjust",
-        "PVNet Intraday (Trend Adjusted)",
+    PVNET_INTRADAY = ForecastModel(
+        name="pvnet_v2", label="PVNet Intraday", slug="pvnet_intraday",
+    )
+    PVNET_INTRADAY_ADJUST = ForecastModel(
+        name="pvnet_v2_adjust",
+        label="PVNet Intraday (Trend Adjusted)",
         slug="pvnet_intraday_adjust",
     )
     # GB — PVNet day-ahead
-    PVNET_DAY_AHEAD = _m("pvnet_day_ahead", "PVNet Day Ahead")
-    PVNET_DAY_AHEAD_ADJUST = _m(
-        "pvnet_day_ahead_adjust",
-        "PVNet Day Ahead (Trend Adjusted)",
+    PVNET_DAY_AHEAD = ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead")
+    PVNET_DAY_AHEAD_ADJUST = ForecastModel(
+        name="pvnet_day_ahead_adjust",
+        label="PVNet Day Ahead (Trend Adjusted)",
     )
     # NL — blend (slugs match GB blend slugs so API is consistent across countries)
-    NL_BLEND = _m("nl_blend", "Blend", slug="blend")
-    NL_BLEND_ADJUST = _m(
-        "nl_blend_adjust",
-        "Blend (Trend Adjusted)",
+    NL_BLEND = ForecastModel(name="nl_blend", label="Blend", slug="blend")
+    NL_BLEND_ADJUST = ForecastModel(
+        name="nl_blend_adjust",
+        label="Blend (Trend Adjusted)",
         slug="blend_adjust",
     )
     # NL — uncurtailed (regional and national)
-    NL_UNCURTAILED = _m("nl_regional_ecmwf_mo_sat", "Uncurtailed", slug="uncurtailed")
-    NL_UNCURTAILED_ADJUST = _m(
-        "nl_regional_ecmwf_mo_sat_adjust",
-        "Uncurtailed (Trend Adjusted)",
+    NL_UNCURTAILED = ForecastModel(
+        name="nl_regional_ecmwf_mo_sat", label="Uncurtailed", slug="uncurtailed",
+    )
+    NL_UNCURTAILED_ADJUST = ForecastModel(
+        name="nl_regional_ecmwf_mo_sat_adjust",
+        label="Uncurtailed (Trend Adjusted)",
         slug="uncurtailed_adjust",
     )
 
