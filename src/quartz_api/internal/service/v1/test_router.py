@@ -1775,7 +1775,7 @@ async def test_nl_forecast_period_display_name_filter(
                     "time": "2026-01-01T12:00:00+00:00",
                     "power_kW": 100.0,
                     "plevels_kW": {},
-                }
+                },
             ],
         ).encode(),
         expire=3600,
