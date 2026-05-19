@@ -95,7 +95,6 @@ async def get_forecast(
 
     By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
-    Cached for 1 minute.
     """
     is_intraday_only = not check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
@@ -176,7 +175,7 @@ async def get_forecast_last_updated_timestamp(
 
     Queries the forecast within ±30 minutes of now and returns the `last_updated_utc`
     of the most recent run. Useful for monitoring freshness or driving "last updated"
-    indicators in a UI. Cached for 10 seconds.
+    indicators in a UI.
     """
     is_intraday_only = not check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
@@ -239,7 +238,7 @@ async def get_forecasts_at_time(
 
     Returns a `ForecastSnapshot` — a single point in time with one forecast value per
     region. Useful for rendering a map of forecast output across an entire country at
-    a glance. Cached for 2 minutes.
+    a glance.
     """
     is_intraday_only = not check_country_access(auth, country)
     nation = await resolve_nation(db, source, country, auth)
