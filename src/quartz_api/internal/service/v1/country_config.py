@@ -179,6 +179,13 @@ class FM:
         "Blend (Trend Adjusted)",
         slug="blend_adjust",
     )
+    # NL — uncurtailed (regional and national)
+    NL_UNCURTAILED = _m("nl_regional_ecmwf_mo_sat", "Uncurtailed", slug="uncurtailed")
+    NL_UNCURTAILED_ADJUST = _m(
+        "nl_regional_ecmwf_mo_sat_adjust",
+        "Uncurtailed (Trend Adjusted)",
+        slug="uncurtailed_adjust",
+    )
 
 
 _GB_NATIONAL_FORECAST_MODELS = (
@@ -202,9 +209,14 @@ _GB_GSP_FORECAST_MODELS = (
     FM.PVNET_DAY_AHEAD,
 )
 
-_NL_NATIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_BLEND_ADJUST)
+_NL_NATIONAL_FORECAST_MODELS = (
+    FM.NL_BLEND,
+    FM.NL_BLEND_ADJUST,
+    FM.NL_UNCURTAILED,
+    FM.NL_UNCURTAILED_ADJUST,
+)
 
-_NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND,)
+_NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_UNCURTAILED)
 
 COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
