@@ -154,7 +154,7 @@ async def warm_v1_forecast_cache(
             energy_type.name.lower(),
             region_type,
         )
-        any_pgv = None
+        first_found_pgv = None
         last_updated: dt.datetime | None = None
         latest_init: dt.datetime | None = None
 
@@ -169,8 +169,8 @@ async def warm_v1_forecast_cache(
                 forecaster_name=rt.default_model,
             )
             if pgvs:
-                if any_pgv is None:
-                    any_pgv = pgvs[0]
+                if first_found_pgv is None:
+                    first_found_pgv = pgvs[0]
                 for pgv in pgvs:
                     if pgv.created_timestamp and (
                         last_updated is None or pgv.created_timestamp > last_updated
@@ -203,10 +203,10 @@ async def warm_v1_forecast_cache(
 
         meta = {
             "model_name": internal_to_api_name(
-                any_pgv.forecaster_name if any_pgv else None,
+                first_found_pgv.forecaster_name if first_found_pgv else None,
                 rt,
             ),
-            "model_version": any_pgv.forecaster_version if any_pgv else None,
+            "model_version": first_found_pgv.forecaster_version if first_found_pgv else None,
             "last_updated_utc": last_updated.isoformat() if last_updated else None,
             "latest_init_utc": latest_init.isoformat() if latest_init else None,
             "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
