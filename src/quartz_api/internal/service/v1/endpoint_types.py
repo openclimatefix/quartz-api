@@ -332,7 +332,7 @@ class RegionForecastValue(BaseModel):
     region_name: str
     capacity_kW: float
     power_kW: float
-    plevels_kW: dict[str, float] = Field(default_factory=dict)
+    plevels_kW: dict[str, float] | None = None
 
 
 class ForecastSnapshot(BaseModel):

@@ -218,6 +218,7 @@ async def get_forecast_last_updated_timestamp(
     status_code=status.HTTP_200_OK,
     summary="Get Forecasts at Timestamp",
     response_model=ForecastSnapshot,
+    response_model_exclude_none=True,
 )
 @cache(key_builder=key_builder, expire=120)
 async def get_forecasts_at_time(
@@ -295,7 +296,7 @@ async def get_forecasts_at_time(
                 region_name=region_names.get(v.location_uuid, ""),
                 capacity_kW=v.capacity_kilowatts,
                 power_kW=v.power_kilowatts,
-                plevels_kW=v.plevels_kilowatts,
+                plevels_kW=v.plevels_kilowatts or None,
             )
             for v in snapshot
         ],
