@@ -640,7 +640,7 @@ async def test_get_forecasts_snapshot(client: AsyncClient) -> None:
     resp = await client.get("/v1/GB/solar/forecasts/snapshot?region_type=gsp")
     assert resp.status_code == 200
     body = resp.json()
-    assert "time" in body
+    assert "time_utc" in body
     assert "values" in body
 
 
@@ -655,7 +655,7 @@ async def test_get_generation_snapshot(client: AsyncClient) -> None:
     resp = await client.get("/v1/GB/solar/generation/snapshot?region_type=gsp")
     assert resp.status_code == 200
     body = resp.json()
-    assert "time" in body
+    assert "time_utc" in body
     assert "observer_name" in body
     assert "values" in body
 
@@ -674,7 +674,7 @@ async def test_get_forecasts_snapshot_national_fallback(client: AsyncClient) -> 
     resp = await client.get("/v1/GB/solar/forecasts/snapshot?region_type=national")
     assert resp.status_code == 200
     body = resp.json()
-    assert "time" in body
+    assert "time_utc" in body
     assert "values" in body
 
 
@@ -810,8 +810,8 @@ async def test_get_forecasts_period_window_includes_cached_values(
     await _set_forecast_meta()
     await _set_fixed_region_values(
         [
-            {"time": t_early.isoformat(), "power_kW": 100.0, "plevels_kW": {}},
-            {"time": t_late.isoformat(), "power_kW": 200.0, "plevels_kW": {}},
+            {"time_utc": t_early.isoformat(), "power_kW": 100.0, "plevels_kW": {}},
+            {"time_utc": t_late.isoformat(), "power_kW": 200.0, "plevels_kW": {}},
         ],
     )
 
@@ -828,7 +828,7 @@ async def test_get_forecasts_period_window_includes_cached_values(
     body = resp.json()
     regions = body["regions"]
     assert len(regions) == 1
-    assert len(body["times"]) == 1
+    assert len(body["times_utc"]) == 1
     assert regions[0]["power_kW"] == [100.0]
 
 
@@ -843,7 +843,7 @@ async def test_get_forecasts_period_window_excludes_out_of_range_values(
     await _set_forecast_meta()
     await _set_fixed_region_values(
         [
-            {"time": t_past.isoformat(), "power_kW": 50.0, "plevels_kW": {}},
+            {"time_utc": t_past.isoformat(), "power_kW": 50.0, "plevels_kW": {}},
         ],
     )
 
@@ -858,7 +858,7 @@ async def test_get_forecasts_period_window_excludes_out_of_range_values(
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["times"] == []
+    assert body["times_utc"] == []
     assert body["regions"][0]["power_kW"] == []
 
 
@@ -1195,7 +1195,7 @@ async def test_get_forecasts_snapshot_explicit_timestamp(client: AsyncClient) ->
         f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc={ts}",
     )
     assert resp.status_code == 200
-    assert resp.json()["time"].startswith("2026-04-17T12:00:00")
+    assert resp.json()["time_utc"].startswith("2026-04-17T12:00:00")
 
 
 @pytest.mark.anyio
@@ -1265,7 +1265,7 @@ async def test_get_generation_snapshot_explicit_timestamp(client: AsyncClient) -
         f"/v1/GB/solar/generation/snapshot?region_type=gsp&time_utc={ts}",
     )
     assert resp.status_code == 200
-    assert resp.json()["time"].startswith("2026-04-17T10:30:00")
+    assert resp.json()["time_utc"].startswith("2026-04-17T10:30:00")
 
 
 @pytest.mark.anyio
@@ -1367,8 +1367,8 @@ async def test_get_generation_period_start_and_end_utc(
     await _set_generation_meta()
     await _set_fixed_generation_values(
         [
-            {"time": t_early.isoformat(), "power_kW": 111.0},
-            {"time": t_late.isoformat(), "power_kW": 222.0},
+            {"time_utc": t_early.isoformat(), "power_kW": 111.0},
+            {"time_utc": t_late.isoformat(), "power_kW": 222.0},
         ],
     )
 
@@ -1384,7 +1384,7 @@ async def test_get_generation_period_start_and_end_utc(
     body = resp.json()
     regions = body["regions"]
     assert len(regions) == 1
-    assert len(body["times"]) == 1
+    assert len(body["times_utc"]) == 1
     assert regions[0]["power_kW"] == [111.0]
 
 
@@ -1686,7 +1686,7 @@ async def test_nl_forecast_snapshot(nl_client: AsyncClient) -> None:
     """NL forecast snapshot for national region type returns 200."""
     resp = await nl_client.get("/v1/NL/solar/forecasts/snapshot?region_type=national")
     assert resp.status_code == 200
-    assert "time" in resp.json()
+    assert "time_utc" in resp.json()
     assert "values" in resp.json()
 
 
@@ -1772,7 +1772,7 @@ async def test_nl_forecast_period_display_name_filter(
         json.dumps(
             [
                 {
-                    "time": "2026-01-01T12:00:00+00:00",
+                    "time_utc": "2026-01-01T12:00:00+00:00",
                     "power_kW": 100.0,
                     "plevels_kW": {},
                 },

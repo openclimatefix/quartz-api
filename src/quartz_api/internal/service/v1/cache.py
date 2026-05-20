@@ -182,7 +182,7 @@ async def warm_v1_forecast_cache(
                         latest_init = pgv.init_timestamp
             values = [
                 {
-                    "time": v.valid_timestamp.isoformat(),
+                    "time_utc": v.valid_timestamp.isoformat(),
                     "power_kW": v.power_kilowatts,
                     "plevels_kW": v.plevels_kilowatts,
                 }
@@ -307,7 +307,7 @@ async def warm_v1_generation_cache(
             )
             values = [
                 {
-                    "time": v.valid_timestamp.isoformat(),
+                    "time_utc": v.valid_timestamp.isoformat(),
                     "power_kW": v.power_kilowatts,
                 }
                 for v in agvs

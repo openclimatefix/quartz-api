@@ -292,7 +292,7 @@ class RegionDetail(RegionSummary):
 class ForecastValue(BaseModel):
     """A single forecast value at a point in time."""
 
-    time: dt.datetime
+    time_utc: dt.datetime
     power_kW: float
     plevels_kW: dict[str, float] = Field(default_factory=dict)
 
@@ -313,7 +313,7 @@ class ForecastResponse(BaseModel):
 class GenerationValue(BaseModel):
     """A single observed generation value at a point in time."""
 
-    time: dt.datetime
+    time_utc: dt.datetime
     power_kW: float
 
 
@@ -338,7 +338,7 @@ class RegionForecastValue(BaseModel):
 class ForecastSnapshot(BaseModel):
     """Snapshot forecast across all regions at a single point in time."""
 
-    time: dt.datetime
+    time_utc: dt.datetime
     model_name: str | None = None
     model_version: str | None = None
     last_updated_utc: dt.datetime | None = None
@@ -357,7 +357,7 @@ class RegionGenerationValue(BaseModel):
 class GenerationSnapshot(BaseModel):
     """Snapshot observed generation across all regions at a single point in time."""
 
-    time: dt.datetime
+    time_utc: dt.datetime
     observer_name: str | None = None
     values: list[RegionGenerationValue]
 
@@ -379,7 +379,7 @@ class RegionForecastMatrix(BaseModel):
     last_updated_utc: dt.datetime | None = None
     latest_init_utc: dt.datetime | None = None
     cache_updated_utc: dt.datetime | None = None
-    times: list[dt.datetime]
+    times_utc: list[dt.datetime]
     regions: list[RegionForecast]
 
 
@@ -396,5 +396,5 @@ class RegionGenerationMatrix(BaseModel):
 
     observer_name: str | None = None
     cache_updated_utc: dt.datetime | None = None
-    times: list[dt.datetime]
+    times_utc: list[dt.datetime]
     regions: list[RegionGeneration]

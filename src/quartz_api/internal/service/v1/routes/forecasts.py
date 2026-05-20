@@ -147,7 +147,7 @@ async def get_forecast(
         horizon_minutes=horizon_minutes,
         values=[
             ForecastValue(
-                time=v.valid_timestamp,
+                time_utc=v.valid_timestamp,
                 power_kW=v.power_kilowatts,
                 plevels_kW=v.plevels_kilowatts,
             )
@@ -285,7 +285,7 @@ async def get_forecasts_at_time(
     region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     first = snapshot[0] if snapshot else None
     return ForecastSnapshot(
-        time=snapshot_time,
+        time_utc=snapshot_time,
         model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
         last_updated_utc=first.created_timestamp if first else None,
@@ -421,10 +421,10 @@ async def get_forecasts_period(
         if raw is None:
             continue
         all_values = [ForecastValue.model_validate(v) for v in json.loads(raw)]
-        windowed = [v for v in all_values if win_start <= v.time <= win_end]
+        windowed = [v for v in all_values if win_start <= v.time_utc <= win_end]
         all_region_data.append((r, windowed))
 
-    times = [v.time for v in all_region_data[0][1]] if all_region_data else []
+    times = [v.time_utc for v in all_region_data[0][1]] if all_region_data else []
     region_series: list[RegionForecast] = []
     for r, windowed in all_region_data:
         plevel_keys = {k for v in windowed for k in v.plevels_kW}
@@ -440,7 +440,7 @@ async def get_forecasts_period(
         )
 
     metadata = json.loads(raw_meta)
-    return RegionForecastMatrix(**metadata, times=times, regions=region_series)
+    return RegionForecastMatrix(**metadata, times_utc=times, regions=region_series)
 
 
 @router.post(
