@@ -182,7 +182,7 @@ async def warm_v1_forecast_cache(
                         latest_init = pgv.init_timestamp
             values = [
                 {
-                    "time": v.valid_timestamp.isoformat(),
+                    "time_utc": v.valid_timestamp.isoformat(),
                     "power_kW": v.power_kilowatts,
                     "plevels_kW": v.plevels_kilowatts,
                 }
@@ -206,7 +206,9 @@ async def warm_v1_forecast_cache(
                 first_found_pgv.forecaster_name if first_found_pgv else None,
                 rt,
             ),
-            "model_version": first_found_pgv.forecaster_version if first_found_pgv else None,
+            "model_version": (
+                first_found_pgv.forecaster_version if first_found_pgv else None
+            ),
             "last_updated_utc": last_updated.isoformat() if last_updated else None,
             "latest_init_utc": latest_init.isoformat() if latest_init else None,
             "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
@@ -290,6 +292,8 @@ async def warm_v1_generation_cache(
             region_type,
             observer,
         )
+        gs = next((gs for gs in cfg.generation_sources if gs.name == observer), None)
+        api_observer_name = gs.api_name if gs else observer
 
         for i, region in enumerate(regions):
             agvs = await db.get_actual_generation(
@@ -303,7 +307,7 @@ async def warm_v1_generation_cache(
             )
             values = [
                 {
-                    "time": v.valid_timestamp.isoformat(),
+                    "time_utc": v.valid_timestamp.isoformat(),
                     "power_kW": v.power_kilowatts,
                 }
                 for v in agvs
@@ -323,7 +327,7 @@ async def warm_v1_generation_cache(
             await asyncio.sleep(0.1)
 
         meta = {
-            "observer_name": observer,
+            "observer_name": api_observer_name,
             "cache_updated_utc": dt.datetime.now(tz=dt.UTC).isoformat(),
         }
         await backend.set(f"{base}:_meta", json.dumps(meta), expire=86400)
