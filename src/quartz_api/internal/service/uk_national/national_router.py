@@ -201,7 +201,7 @@ async def get_national_forecast(
         for v in all_pgvs
     ]
 
-    if not include_metadata:
+    if not include_metadata or len(out) == 0:
         return out
 
     else:
