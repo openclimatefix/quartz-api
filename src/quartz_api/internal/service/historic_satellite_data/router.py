@@ -1,7 +1,6 @@
-"""Historic satellite data router
-"""
-
+"""Historic satellite data router."""
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -14,7 +13,7 @@ router = APIRouter(
     tags=["Historic Satellite Data"],
 )
 
-VALID_CHANNELS = [
+VALID_CHANNELS = frozenset({
     "IR_016",
     "IR_039",
     "IR_087",
@@ -26,27 +25,31 @@ VALID_CHANNELS = [
     "VIS008",
     "WV_062",
     "WV_073",
-]
+})
+
+S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
+
 
 @router.get("/", response_model=HistoricSatelliteData)
 def get_historic_satellite_data_url(
     channel: str,
     timestamp: datetime,
-    s3_client: S3Client = Depends(get_s3_client),
-):
-    """Get a pre-signed URL for a historic satellite data file.
-    """
+    s3_client: S3ClientDep,
+) -> HistoricSatelliteData:
+    """Get a pre-signed URL for a historic satellite data file."""
     if channel not in VALID_CHANNELS:
-        raise HTTPException(status_code=400, detail=f"Invalid channel. Must be one of {VALID_CHANNELS}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
+        )
 
     bucket = "historical-cloud-data-geotiff"
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
 
     if not s3_client.object_exists(bucket, key):
-        raise HTTPException(status_code=404, detail="File not found for the given channel and timestamp")
+        raise HTTPException(
+            status_code=404,
+            detail="File not found for the given channel and timestamp",
+        )
 
-    return HistoricSatelliteData(
-        url=s3_client.get_presigned_url(
-            bucket, key,
-        ),
-    )
+    return HistoricSatelliteData(url=s3_client.get_presigned_url(bucket, key))

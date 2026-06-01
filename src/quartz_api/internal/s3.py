@@ -1,15 +1,21 @@
-"""S3 client"""
-
+"""S3 client."""
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 
 
 class S3Client:
-    """S3 client"""
+    """S3 client."""
 
-    def __init__(self, region_name: str):
+    def __init__(self, region_name: str) -> None:
+        """Initialise S3 client.
+
+        :param region_name: The AWS region name.
+        """
         self.client = boto3.client(
-            "s3", region_name=region_name, config=Config(signature_version="s3v4")
+            "s3",
+            region_name=region_name,
+            config=Config(signature_version="s3v4"),
         )
 
     def get_presigned_url(self, bucket: str, key: str) -> str:
@@ -25,11 +31,10 @@ class S3Client:
         try:
             self.client.head_object(Bucket=bucket, Key=key)
             return True
-        except self.client.exceptions.ClientError as e:
+        except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 return False
-            else:
-                raise
+            raise
 
 
 _s3_client: S3Client | None = None
