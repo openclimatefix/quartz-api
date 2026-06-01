@@ -1,11 +1,13 @@
-"""
-Historic satellite data router
+"""Historic satellite data router
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
-from .endpoint_types import HistoricSatelliteData
+
 from quartz_api.internal.s3 import S3Client, get_s3_client
-from datetime import datetime, timezone
+
+from .endpoint_types import HistoricSatelliteData
 
 router = APIRouter(
     prefix="/historic-satellite-data",
@@ -32,8 +34,7 @@ def get_historic_satellite_data_url(
     timestamp: datetime,
     s3_client: S3Client = Depends(get_s3_client),
 ):
-    """
-    Get a pre-signed URL for a historic satellite data file.
+    """Get a pre-signed URL for a historic satellite data file.
     """
     if channel not in VALID_CHANNELS:
         raise HTTPException(status_code=400, detail=f"Invalid channel. Must be one of {VALID_CHANNELS}")
@@ -46,6 +47,6 @@ def get_historic_satellite_data_url(
 
     return HistoricSatelliteData(
         url=s3_client.get_presigned_url(
-            bucket, key
-        )
+            bucket, key,
+        ),
     )
