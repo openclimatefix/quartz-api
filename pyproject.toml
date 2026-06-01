@@ -38,6 +38,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "scalar-fastapi>=1.8.2",
     "protobuf>=7.34.1",
+    "boto3>=1.43.18",
 ]
 
 [dependency-groups]
