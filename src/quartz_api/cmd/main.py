@@ -274,7 +274,7 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
                     )
                     if attempt == 5:
                         raise
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(1 * (2 ** (attempt - 1)))
 
         case _ as backend_type:
             raise ValueError(f"Unknown backend: {backend_type}")
