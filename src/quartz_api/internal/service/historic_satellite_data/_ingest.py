@@ -32,7 +32,7 @@ def run_ingest() -> tuple[str, str]:
             bucket="nowcasting-sat-development",
             prefix="odegree_v1/data/odegree_uk3000m.icechunk",
             region="eu-west-1",
-        )
+        ),
     )
     ds = xr.open_zarr(repo.readonly_session("main").store)
 
@@ -40,7 +40,7 @@ def run_ingest() -> tuple[str, str]:
     src_crs = CRS.from_proj4(
         f"+proj=geos +lon_0={proj['lon_0']} +h={proj['h']} "
         f"+x_0={proj['x_0']} +y_0={proj['y_0']} "
-        f"+a={proj['a']} +rf={proj['rf']}"
+        f"+a={proj['a']} +rf={proj['rf']}",
     )
 
     x = ds["x_geostationary"].values
@@ -48,7 +48,7 @@ def run_ingest() -> tuple[str, str]:
     xres = abs(x[1] - x[0])
     yres = abs(y[1] - y[0])
     src_tf = rasterio.transform.from_origin(
-        x.min() - xres / 2, y.max() + yres / 2, xres, yres
+        x.min() - xres / 2, y.max() + yres / 2, xres, yres,
     )
 
     dst_crs = CRS.from_epsg(4326)

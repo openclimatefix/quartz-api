@@ -7,8 +7,8 @@ from starlette import status
 
 from quartz_api.internal.s3 import S3Client, get_s3_client
 
-from .endpoint_types import HistoricSatelliteData, IngestResponse
 from ._ingest import run_ingest
+from .endpoint_types import HistoricSatelliteData, IngestResponse
 
 router = APIRouter(
     prefix="/historic-satellite-data",
