@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 LEFT, BOTTOM, RIGHT, TOP = -20.0, 45.8, 15.0, 64.2
 S3_BUCKET = "historical-cloud-data-geotiff"
-BACKFILL_HOURS = 48
+BACKFILL_HOURS = 4
 
 
 def run_ingest() -> tuple[str, str]:
