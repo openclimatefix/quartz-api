@@ -38,6 +38,8 @@ dependencies = [
     "jinja2>=3.1.6",
     "scalar-fastapi>=1.8.2",
     "protobuf>=7.34.1",
+    "fsspec>=2026.4.0",
+    "s3fs>=2026.4.0",
 ]
 
 [dependency-groups]
