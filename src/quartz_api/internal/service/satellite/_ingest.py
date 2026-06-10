@@ -1,6 +1,7 @@
 """Ingest latest satellite data for all channels into S3."""
 import io
 import logging
+import os
 
 import icechunk
 import numpy as np
@@ -14,7 +15,6 @@ from rasterio.windows import from_bounds as window_from_bounds
 log = logging.getLogger(__name__)
 
 LEFT, BOTTOM, RIGHT, TOP = -20.0, 45.8, 15.0, 64.2
-S3_BUCKET = "historical-cloud-data-geotiff"
 BACKFILL_HOURS = 4
 
 
@@ -29,13 +29,18 @@ def run_ingest() -> tuple[str, str]:
     """
     log.info("Ingest started")
 
-    fs = s3fs.S3FileSystem(client_kwargs={"region_name": "eu-west-1"})
+    s3_bucket = os.environ["HISTORIC_SAT_S3_BUCKET"]
+    icechunk_bucket = os.environ["ICECHUNK_S3_BUCKET"]
+    icechunk_prefix = os.environ["ICECHUNK_S3_PREFIX"]
+    region = os.environ.get("AWS_DEFAULT_REGION")
+
+    fs = s3fs.S3FileSystem(**({"client_kwargs": {"region_name": region}} if region else {}))
 
     repo = icechunk.Repository.open(
         storage=icechunk.s3_storage(
-            bucket="nowcasting-sat-development",
-            prefix="odegree_v1/data/odegree_uk3000m.icechunk",
-            region="eu-west-1",
+            bucket=icechunk_bucket,
+            prefix=icechunk_prefix,
+            **({"region": region} if region else {}),
         ),
     )
     ds = xr.open_zarr(repo.readonly_session("main").store)
@@ -77,7 +82,7 @@ def run_ingest() -> tuple[str, str]:
         ts_str = str(t)[:19].replace("-", "").replace("T", "_").replace(":", "")
 
         for channel in channels:
-            s3_path = f"s3://{S3_BUCKET}/layers/{channel}/{ts_str}.tif"
+            s3_path = f"s3://{s3_bucket}/layers/{channel}/{ts_str}.tif"
 
             if fs.exists(s3_path):
                 skipped += 1

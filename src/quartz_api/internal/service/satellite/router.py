@@ -1,4 +1,5 @@
 """Historic satellite data router."""
+import os
 from datetime import datetime
 from typing import Annotated
 
@@ -50,7 +51,7 @@ def get_historic_satellite_data_url(
             detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
         )
 
-    bucket = "historical-cloud-data-geotiff"
+    bucket = os.environ["HISTORIC_SAT_S3_BUCKET"]
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
 
     if not s3_client.object_exists(bucket, key):
