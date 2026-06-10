@@ -1,16 +1,18 @@
 """Historic satellite data router."""
+import os
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.s3 import S3Client, get_s3_client
 
 from .endpoint_types import HistoricSatelliteData
 
 router = APIRouter(
-    prefix="/historic-satellite-data",
-    tags=["Historic Satellite Data"],
+    prefix="/satellite",
+    tags=["Satellite"],
 )
 
 VALID_CHANNELS = frozenset({
@@ -35,6 +37,7 @@ def get_historic_satellite_data_url(
     channel: str,
     timestamp: datetime,
     s3_client: S3ClientDep,
+    _: AuthDependency,
 ) -> HistoricSatelliteData:
     """Get a pre-signed URL for a historic satellite data file."""
     if channel not in VALID_CHANNELS:
@@ -43,7 +46,7 @@ def get_historic_satellite_data_url(
             detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
         )
 
-    bucket = "historical-cloud-data-geotiff"
+    bucket = os.environ["HISTORIC_SAT_S3_BUCKET"]
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
 
     if not s3_client.object_exists(bucket, key):

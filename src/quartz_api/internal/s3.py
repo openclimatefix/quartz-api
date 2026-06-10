@@ -1,13 +1,18 @@
 """S3 client."""
+import os
 import fsspec
 
 
 class S3Client:
     """S3 client."""
 
-    def __init__(self, region_name: str) -> None:
+    def __init__(self) -> None:
         """Initialise S3 client."""
-        self.fs = fsspec.filesystem("s3", client_kwargs={"region_name": region_name})
+        region = os.environ.get("AWS_DEFAULT_REGION")
+        self.fs = fsspec.filesystem(
+            "s3",
+            **({"client_kwargs": {"region_name": region}} if region else {}),
+        )
 
     def get_presigned_url(self, bucket: str, key: str) -> str:
         """Get a pre-signed URL for a file."""
@@ -25,5 +30,5 @@ def get_s3_client() -> S3Client:
     """Get the S3 client."""
     global _s3_client
     if _s3_client is None:
-        _s3_client = S3Client(region_name="eu-west-1")
+        _s3_client = S3Client()
     return _s3_client
