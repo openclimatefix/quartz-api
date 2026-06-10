@@ -12,8 +12,8 @@ from ._ingest import run_ingest
 from .endpoint_types import HistoricSatelliteData, IngestResponse
 
 router = APIRouter(
-    prefix="/historic-satellite-data",
-    tags=["Historic Satellite Data"],
+    prefix="/satellite",
+    tags=["Satellite"],
 )
 
 VALID_CHANNELS = frozenset({
