@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from starlette import status
 
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.s3 import S3Client, get_s3_client
 
 from ._ingest import run_ingest
@@ -40,6 +41,7 @@ def get_historic_satellite_data_url(
     channel: str,
     timestamp: datetime,
     s3_client: S3ClientDep,
+    _: AuthDependency,
 ) -> HistoricSatelliteData:
     """Get a pre-signed URL for a historic satellite data file."""
     if channel not in VALID_CHANNELS:
@@ -64,7 +66,10 @@ def get_historic_satellite_data_url(
     "/ingest",
     status_code=status.HTTP_202_ACCEPTED,
 )
-def trigger_ingest(background_tasks: BackgroundTasks) -> IngestResponse:
+def trigger_ingest(
+    background_tasks: BackgroundTasks,
+    _: AuthDependency,
+) -> IngestResponse:
     """Trigger ingest of latest satellite data for all channels."""
     background_tasks.add_task(run_ingest)
     return IngestResponse(
