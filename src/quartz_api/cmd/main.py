@@ -236,34 +236,45 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
             storage = DummyStorage()
             log.warning("disabled backend. NOT recommended for production")
         case "dataplatform":
-            from ocf.dp.dp_data import service_pb2_grpc
+            for attempt in range(1, 6):
+                try:
+                    from ocf.dp.dp_data import service_pb2_grpc
 
-            trace_interceptor = trace.TraceInterceptor()
-            grpc_channel = grpc.aio.insecure_channel(
-                target=conf.get_string("backend.dataplatform.host")
-                + ":"
-                + conf.get_string("backend.dataplatform.port"),
-                interceptors=[trace_interceptor],
-            )
-            client = service_pb2_grpc.DataPlatformDataServiceStub(grpc_channel)
-            storage = DataPlatformStorage.from_dp(dp_client=client)
+                    trace_interceptor = trace.TraceInterceptor()
+                    grpc_channel = grpc.aio.insecure_channel(
+                        target=conf.get_string("backend.dataplatform.host")
+                        + ":"
+                        + conf.get_string("backend.dataplatform.port"),
+                        interceptors=[trace_interceptor],
+                    )
+                    client = service_pb2_grpc.DataPlatformDataServiceStub(grpc_channel)
+                    storage = DataPlatformStorage.from_dp(dp_client=client)
 
-            if "uk_national" in conf.get_string("api.routers").split(","):
-                # Populate the GSP ID to UUID mapping
-                resp = await storage.get_locations(
-                    location_type=models.LocationType.GSP,
-                    energy_type=models.EnergyType.SOLAR,
-                    authdata={},
-                )
-                resp += await storage.get_locations(
-                    location_type=models.LocationType.NATION,
-                    energy_type=models.EnergyType.SOLAR,
-                    authdata={},
-                )
-                for loc in resp:
-                    if "gsp_id" in loc.metadata:
-                        gsp_id_map[int(loc.metadata["gsp_id"])] = loc
-                log.info(f"Populated GSP ID map with {len(gsp_id_map)} entries")
+                    if "uk_national" in conf.get_string("api.routers").split(","):
+                        # Populate the GSP ID to UUID mapping
+                        resp = await storage.get_locations(
+                            location_type=models.LocationType.GSP,
+                            energy_type=models.EnergyType.SOLAR,
+                            authdata={},
+                        )
+                        resp += await storage.get_locations(
+                            location_type=models.LocationType.NATION,
+                            energy_type=models.EnergyType.SOLAR,
+                            authdata={},
+                        )
+                        for loc in resp:
+                            if "gsp_id" in loc.metadata:
+                                gsp_id_map[int(loc.metadata["gsp_id"])] = loc
+                        log.info(f"Populated GSP ID map with {len(gsp_id_map)} entries")
+
+                    break
+                except Exception:
+                    log.warning(
+                        f"Failed to initialise dataplatform (attempt {attempt}/5)",
+                    )
+                    if attempt == 5:
+                        raise
+                    await asyncio.sleep(1 * (2 ** (attempt - 1)))
 
         case _ as backend_type:
             raise ValueError(f"Unknown backend: {backend_type}")
