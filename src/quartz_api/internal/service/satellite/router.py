@@ -34,10 +34,7 @@ VALID_CHANNELS = frozenset({
 S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
 
 
-@router.get(
-    "/",
-    status_code=status.HTTP_200_OK,
-)
+@router.get("/", response_model=HistoricSatelliteData)
 def get_historic_satellite_data_url(
     channel: str,
     timestamp: datetime,
@@ -47,7 +44,7 @@ def get_historic_satellite_data_url(
     """Get a pre-signed URL for a historic satellite data file."""
     if channel not in VALID_CHANNELS:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
         )
 
@@ -56,7 +53,7 @@ def get_historic_satellite_data_url(
 
     if not s3_client.object_exists(bucket, key):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="File not found for the given channel and timestamp",
         )
 
