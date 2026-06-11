@@ -9,7 +9,7 @@ class S3Client:
 
     def __init__(self) -> None:
         """Initialise S3 client."""
-        region = os.environ.get("AWS_DEFAULT_REGION")
+        region = os.environ.get("AWS_DEFAULT_REGION", "eu-west-1")
         self.fs = fsspec.filesystem(
             "s3",
             **({"client_kwargs": {"region_name": region}} if region else {}),

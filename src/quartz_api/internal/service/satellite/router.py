@@ -46,7 +46,7 @@ def get_historic_satellite_data_url(
             detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
         )
 
-    bucket = os.environ["HISTORIC_SAT_S3_BUCKET"]
+    bucket = os.environ.get("HISTORIC_SAT_S3_BUCKET", "historical-cloud-data-geotiff")
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
 
     if not s3_client.object_exists(bucket, key):
