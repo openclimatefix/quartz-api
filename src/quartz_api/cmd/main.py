@@ -33,6 +33,7 @@ from starlette.staticfiles import StaticFiles
 
 from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models, service
+from quartz_api.internal import s3 as s3_module
 from quartz_api.internal.backends import (
     DataPlatformStorage,
     DummyStorage,
@@ -337,6 +338,13 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
 
     FastAPICache.init(ClearedInMemoryBackend(), expire=120, prefix="fastapi-cache")
+
+    # Configure satellite S3 access from the parsed config, before routers register.
+    s3_module.configure(
+        region=conf.get_string("satellite.aws_region"),
+        geotiff_bucket=conf.get_string("satellite.geotiff_bucket"),
+        source_bucket=conf.get_string("satellite.source_bucket"),
+    )
 
     # Add the default routes
     server.mount("/static", StaticFiles(directory=static_dir.as_posix()), name="static")
