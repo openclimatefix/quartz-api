@@ -25,6 +25,8 @@ log = logging.getLogger(__name__)
 LEFT, BOTTOM, RIGHT, TOP = -20.0, 45.8, 15.0, 64.2
 BACKFILL_HOURS = 4
 
+_ingest_running: bool = False
+
 
 def run_ingest() -> tuple[str, str]:
     """Run ingest of latest satellite data for all channels.
@@ -35,6 +37,18 @@ def run_ingest() -> tuple[str, str]:
     Returns:
         Tuple of (latest timestamp, ts_str).
     """
+    global _ingest_running
+    if _ingest_running:
+        log.info("Ingest already running, skipping")
+        return "", ""
+    _ingest_running = True
+    try:
+        return _run_ingest()
+    finally:
+        _ingest_running = False
+
+
+def _run_ingest() -> tuple[str, str]:
     log.info("Ingest started")
 
     s3_bucket = get_geotiff_bucket()

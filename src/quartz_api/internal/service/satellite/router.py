@@ -1,16 +1,16 @@
 """Historic satellite data router."""
-
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from starlette import status
+from starlette.responses import Response
 
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
-from ._ingest import run_ingest
-from .endpoint_types import HistoricSatelliteData, IngestResponse
+from ._ingest import _ingest_running, run_ingest
+from .endpoint_types import HistoricSatelliteData
 
 router = APIRouter(
     prefix="/satellite",
@@ -69,12 +69,11 @@ def get_historic_satellite_data_url(
 def trigger_ingest(
     background_tasks: BackgroundTasks,
     auth: AuthDependency,
-) -> IngestResponse:
+) -> Response:
     """Trigger ingest of latest satellite data for all channels."""
     if "ocf:admin" not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if _ingest_running:
+        return Response(status_code=202, content="Ingest already in progress")
     background_tasks.add_task(run_ingest)
-    return IngestResponse(
-        message="Ingest started for all channels",
-        timestamp="processing in background",
-    )
+    return Response(status_code=202, content="Ingest started for all channels")
