@@ -5,6 +5,7 @@ import logging
 import icechunk
 import numpy as np
 import rasterio
+import sentry_sdk
 import xarray as xr
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, calculate_default_transform, reproject
@@ -17,7 +18,6 @@ from quartz_api.internal.s3 import (
     get_region,
     get_s3_client,
 )
-import sentry_sdk
 
 log = logging.getLogger(__name__)
 
