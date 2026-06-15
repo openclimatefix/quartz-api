@@ -55,6 +55,13 @@ def struct_to_dict(pb_struct: Struct) -> dict[str, str | float | bool]:
     return out
 
 
+def dict_to_struct(d: dict[str, str | int | float | bool]) -> Struct:
+    """Convert a flat python dictionary into a protobuf Struct."""
+    s = Struct()
+    s.update(d)
+    return s
+
+
 class StorageClient(models.StorageInterface):
     """Defines a data platform conneciton that conforms to the StorageInterface."""
 
@@ -289,13 +296,37 @@ class StorageClient(models.StorageInterface):
     async def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError(
-            "Data platform backend does not yet support writing generation",
+        if not generation_values:
+            return
+
+        if authdata != {}:
+            _ = await self._check_user_access(
+                location_uuid=location_uuid,
+                energy_source=energy_type_map[energy_type],
+                location_type=location_type_map[location_type],
+                oauth_id=get_oauth_id_from_sub(authdata["sub"]),
+            )
+
+        observer_name = generation_values[0].observer_name
+
+        req = messages_pb2.CreateObservationsRequest(
+            location_uuid=str(location_uuid),
+            energy_source=energy_type_map[energy_type],
+            observer_name=observer_name,
+            values=[
+                messages_pb2.CreateObservationsRequest.Value(
+                    timestamp_utc=gv.valid_timestamp,
+                    value_watts=max(0, int(gv.power_kilowatts * 1000)),
+                )
+                for gv in generation_values
+            ],
         )
+        await self.dpc.CreateObservations(req)
 
     @override
     async def get_predicted_generation_snapshot(
@@ -479,8 +510,43 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> models.Location:
-        raise NotImplementedError(
-            "Data platform backend doesn't yet support location writing.",
+        existing = await self.get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location.uuid,
+        )
+        if not existing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No location found for UUID '{location.uuid}'",
+            )
+        current = existing[0]
+
+        """new_metadata replaces existing metadata entirely, so merge new values over the
+        current.
+        """
+        merged_metadata = {**current.metadata, **location.metadata}
+
+        req = messages_pb2.UpdateLocationRequest(
+            location_uuid=str(location.uuid),
+            energy_source=energy_type_map[energy_type],
+            new_effective_capacity_watts=int(location.capacity_kilowatts * 1000),
+            new_metadata=dict_to_struct(merged_metadata),
+        )
+        if location.name:
+            req.new_location_name = location.name
+
+        resp = await self.dpc.UpdateLocation(req)
+
+        return models.Location(
+            uuid=UUID(resp.location_uuid),
+            name=resp.location_name,
+            latitude=current.latitude,
+            longitude=current.longitude,
+            capacity_kilowatts=resp.effective_capacity_watts / 1000.0,
+            location_type=location_type,
+            metadata=merged_metadata,
         )
 
     @override

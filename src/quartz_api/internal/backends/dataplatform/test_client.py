@@ -521,3 +521,103 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(resp[0].power_kilowatts, 500.0)
 
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_put_actual_generation(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        site_uuid = uuid.uuid4()
+        gen_values = [
+            models.ActualGenerationValue(
+                power_kilowatts=1.5,
+                valid_timestamp=TEST_TIMESTAMP_UTC,
+                location_uuid=site_uuid,
+                capacity_kilowatts=0,
+                observer_name="ruvnl",
+            ),
+        ]
+        client = StorageClient.from_dp(client_mock)
+
+        # When the user has access, observations are written as absolute watts.
+        client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+        client_mock.CreateObservations = AsyncMock(
+            return_value=messages_pb2.CreateObservationsResponse(),
+        )
+        await client.put_actual_generation(
+            generation_values=gen_values,
+            location_uuid=site_uuid,
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
+            authdata={"sub": "access_user"},
+        )
+        client_mock.CreateObservations.assert_called_once()
+        sent = client_mock.CreateObservations.call_args.args[0]
+        self.assertEqual(sent.observer_name, "ruvnl")
+        self.assertEqual(sent.values[0].value_watts, 1500)
+
+        # When the user has no access, the write is rejected.
+        client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+        with self.assertRaises(HTTPException):
+            await client.put_actual_generation(
+                generation_values=gen_values,
+                location_uuid=site_uuid,
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.SITE,
+                authdata={"sub": "no_access_user"},
+            )
+
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_put_location(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        def mock_update_location(
+            req: messages_pb2.UpdateLocationRequest,
+            metadata: object | None = None,  # noqa: ARG001
+        ) -> messages_pb2.UpdateLocationResponse:
+            return messages_pb2.UpdateLocationResponse(
+                location_uuid=req.location_uuid,
+                location_name=req.new_location_name or "mock_location",
+                effective_capacity_watts=req.new_effective_capacity_watts,
+            )
+
+        site_uuid = uuid.uuid4()
+        loc = models.Location(
+            uuid=site_uuid,
+            name="updated_site_name",
+            latitude=0.0,
+            longitude=0.0,
+            capacity_kilowatts=5.0,
+            metadata={"tilt": 35.0},
+        )
+        client = StorageClient.from_dp(client_mock)
+
+        client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+        client_mock.UpdateLocation = AsyncMock(side_effect=mock_update_location)
+
+        resp = await client.put_location(
+            location=loc,
+            location_type=models.LocationType.SITE,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "access_user"},
+        )
+        # Capacity round-trips kW -> watts -> kW, and lat/lng come from the fetched location.
+        self.assertEqual(resp.capacity_kilowatts, 5.0)
+        self.assertEqual(resp.latitude, 51.5)
+
+        sent = client_mock.UpdateLocation.call_args.args[0]
+        self.assertEqual(sent.new_effective_capacity_watts, 5000)
+        # Metadata is merged: existing orientation preserved, tilt overridden by the new value.
+        self.assertEqual(dict(sent.new_metadata)["orientation"], 180.0)
+        self.assertEqual(dict(sent.new_metadata)["tilt"], 35.0)
+
+        # Updating a location the user cannot see raises a 404.
+        client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+        with self.assertRaises(HTTPException):
+            await client.put_location(
+                location=loc,
+                location_type=models.LocationType.SITE,
+                energy_type=models.EnergyType.SOLAR,
+                authdata={"sub": "no_access_user"},
+            )
+
