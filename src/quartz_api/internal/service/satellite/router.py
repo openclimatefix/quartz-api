@@ -68,9 +68,11 @@ def get_historic_satellite_data_url(
 )
 def trigger_ingest(
     background_tasks: BackgroundTasks,
-    _: AuthDependency,
+    auth: AuthDependency,
 ) -> IngestResponse:
     """Trigger ingest of latest satellite data for all channels."""
+    if "ocf:admin" not in auth.get("permissions", []):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     background_tasks.add_task(run_ingest)
     return IngestResponse(
         message="Ingest started for all channels",
