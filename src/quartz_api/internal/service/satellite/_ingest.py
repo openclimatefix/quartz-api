@@ -17,6 +17,7 @@ from quartz_api.internal.s3 import (
     get_region,
     get_s3_client,
 )
+import sentry_sdk
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +143,8 @@ def run_ingest() -> tuple[str, str]:
             except Exception as e:
                 failed += 1
                 log.exception("Failed %s @ %s: %s", channel, ts_str, e)
+                sentry_sdk.capture_exception(e)
+
 
     latest_t = all_times[-1]
     latest_ts = str(latest_t)[:19].replace("-", "").replace("T", "_").replace(":", "")
