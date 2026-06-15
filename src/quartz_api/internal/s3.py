@@ -1,7 +1,41 @@
 """S3 client."""
-import os
-
 import fsspec
+
+# Satellite S3 config, populated at startup via configure() from the parsed
+# HOCON schema (cmd/server.conf). server.conf is the single source of truth for
+# values and defaults; this module just holds whatever it is handed.
+_config: dict[str, str] | None = None
+
+
+def configure(*, region: str, geotiff_bucket: str, source_bucket: str) -> None:
+    """Set satellite S3 config from the parsed application config.
+
+    Called once at startup from ``_create_server`` before routers are registered.
+    """
+    global _config, _s3_client
+    _config = {
+        "region": region,
+        "geotiff_bucket": geotiff_bucket,
+        "source_bucket": source_bucket,
+    }
+    # Reset the cached client so it picks up the new region.
+    _s3_client = None
+
+
+def _require_config() -> dict[str, str]:
+    if _config is None:
+        raise RuntimeError("s3.configure() must be called at startup before use")
+    return _config
+
+
+def get_geotiff_bucket() -> str:
+    """Bucket holding the historic GeoTIFF layers served by the API."""
+    return _require_config()["geotiff_bucket"]
+
+
+def get_source_bucket() -> str:
+    """Bucket holding the raw satellite source data for ingest."""
+    return _require_config()["source_bucket"]
 
 
 class S3Client:
@@ -9,7 +43,7 @@ class S3Client:
 
     def __init__(self) -> None:
         """Initialise S3 client."""
-        region = os.environ.get("AWS_DEFAULT_REGION")
+        region = _require_config()["region"]
         self.fs = fsspec.filesystem(
             "s3",
             **({"client_kwargs": {"region_name": region}} if region else {}),
