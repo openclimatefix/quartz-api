@@ -1,19 +1,26 @@
 """Ingest latest satellite data for all channels into S3."""
 import io
 import logging
-import os
 
 import icechunk
 import numpy as np
 import rasterio
-import s3fs
 import xarray as xr
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from rasterio.windows import from_bounds as window_from_bounds
 
+from quartz_api.internal.s3 import (
+    get_geotiff_bucket,
+    get_icechunk_bucket,
+    get_icechunk_prefix,
+    get_region,
+    get_s3_client,
+)
+
 log = logging.getLogger(__name__)
 
+# Bounding box to crop to UK
 LEFT, BOTTOM, RIGHT, TOP = -20.0, 45.8, 15.0, 64.2
 BACKFILL_HOURS = 4
 
@@ -21,7 +28,7 @@ BACKFILL_HOURS = 4
 def run_ingest() -> tuple[str, str]:
     """Run ingest of latest satellite data for all channels.
 
-    Uploads any missing channel+timestamp combos from the last 48 hours,
+    Uploads any missing channel+timestamp combos from the last 4 hours,
     skipping ones already present in S3.
 
     Returns:
@@ -29,12 +36,11 @@ def run_ingest() -> tuple[str, str]:
     """
     log.info("Ingest started")
 
-    s3_bucket = os.environ["HISTORIC_SAT_S3_BUCKET"]
-    icechunk_bucket = os.environ["ICECHUNK_S3_BUCKET"]
-    icechunk_prefix = os.environ["ICECHUNK_S3_PREFIX"]
-    region = os.environ.get("AWS_DEFAULT_REGION")
-
-    fs = s3fs.S3FileSystem(**({"client_kwargs": {"region_name": region}} if region else {}))
+    s3_bucket = get_geotiff_bucket()
+    icechunk_bucket = get_icechunk_bucket()
+    icechunk_prefix = get_icechunk_prefix()
+    region = get_region()
+    s3_client = get_s3_client()
 
     repo = icechunk.Repository.open(
         storage=icechunk.s3_storage(
@@ -68,7 +74,7 @@ def run_ingest() -> tuple[str, str]:
         right=x.max() + xres / 2, top=y.max() + yres / 2,
     )
 
-    # Filter to last 48 hours
+    # Filter to last 4 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
     all_times = ds.time.values
     window_times = [(i, t) for i, t in enumerate(all_times) if t >= cutoff]
@@ -82,9 +88,9 @@ def run_ingest() -> tuple[str, str]:
         ts_str = str(t)[:19].replace("-", "").replace("T", "_").replace(":", "")
 
         for channel in channels:
-            s3_path = f"s3://{s3_bucket}/layers/{channel}/{ts_str}.tif"
+            key = f"layers/{channel}/{ts_str}.tif"
 
-            if fs.exists(s3_path):
+            if s3_client.object_exists(s3_bucket, key):
                 skipped += 1
                 continue
 
@@ -128,9 +134,7 @@ def run_ingest() -> tuple[str, str]:
                         dst.write(cropped, 1)
                         dst.update_tags(channel=channel, timestamp=ts_str)
 
-                crop_buf.seek(0)
-                with fs.open(s3_path, "wb") as f:
-                    f.write(crop_buf.read())
+                s3_client.upload_bytes(s3_bucket, key, crop_buf.getvalue())
 
                 uploaded += 1
                 log.info("Uploaded %s @ %s (%d/%d)", channel, ts_str, uploaded + skipped, total)

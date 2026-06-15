@@ -344,6 +344,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         region=conf.get_string("satellite.aws_region"),
         geotiff_bucket=conf.get_string("satellite.geotiff_bucket"),
         source_bucket=conf.get_string("satellite.source_bucket"),
+        icechunk_bucket=conf.get_string("satellite.icechunk_bucket"),
+        icechunk_prefix=conf.get_string("satellite.icechunk_prefix"),
     )
 
     # Add the default routes
