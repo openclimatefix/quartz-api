@@ -581,6 +581,16 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 effective_capacity_watts=req.new_effective_capacity_watts,
             )
 
+        def mock_create_location(
+            req: messages_pb2.CreateLocationRequest,
+            metadata: object | None = None,  # noqa: ARG001
+        ) -> messages_pb2.CreateLocationResponse:
+            return messages_pb2.CreateLocationResponse(
+                location_uuid=str(uuid.uuid4()),
+                location_name=req.location_name,
+                effective_capacity_watts=req.effective_capacity_watts,
+            )
+
         site_uuid = uuid.uuid4()
         loc = models.Location(
             uuid=site_uuid,
@@ -611,13 +621,21 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dict(sent.new_metadata)["orientation"], 180.0)
         self.assertEqual(dict(sent.new_metadata)["tilt"], 35.0)
 
-        # Updating a location the user cannot see raises a 404.
+        # When no matching location is visible to the caller, a new one is created instead.
         client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
-        with self.assertRaises(HTTPException):
-            await client.put_location(
-                location=loc,
-                location_type=models.LocationType.SITE,
-                energy_type=models.EnergyType.SOLAR,
-                authdata={"sub": "no_access_user"},
-            )
+        client_mock.CreateLocation = AsyncMock(side_effect=mock_create_location)
+        created = await client.put_location(
+            location=loc,
+            location_type=models.LocationType.SITE,
+            energy_type=models.EnergyType.SOLAR,
+            authdata={"sub": "no_access_user"},
+        )
+        self.assertNotEqual(created.uuid, site_uuid)
+        self.assertEqual(created.capacity_kilowatts, 5.0)
+        self.assertEqual(created.latitude, 0.0)
+
+        sent_create = client_mock.CreateLocation.call_args.args[0]
+        self.assertEqual(sent_create.effective_capacity_watts, 5000)
+        self.assertEqual(sent_create.geometry_wkt, "POINT (0.0 0.0)")
+        self.assertEqual(dict(sent_create.metadata)["tilt"], 35.0)
 

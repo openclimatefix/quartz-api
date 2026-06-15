@@ -517,9 +517,23 @@ class StorageClient(models.StorageInterface):
             location_uuid=location.uuid,
         )
         if not existing:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No location found for UUID '{location.uuid}'",
+            create_req = messages_pb2.CreateLocationRequest(
+                location_name=location.name,
+                energy_source=energy_type_map[energy_type],
+                geometry_wkt=f"POINT ({location.longitude} {location.latitude})",
+                effective_capacity_watts=int(location.capacity_kilowatts * 1000),
+                location_type=location_type_map[location_type],
+                metadata=dict_to_struct(location.metadata),
+            )
+            created = await self.dpc.CreateLocation(create_req)
+            return models.Location(
+                uuid=UUID(created.location_uuid),
+                name=created.location_name,
+                latitude=location.latitude,
+                longitude=location.longitude,
+                capacity_kilowatts=created.effective_capacity_watts / 1000.0,
+                location_type=location_type,
+                metadata=location.metadata,
             )
         current = existing[0]
 
