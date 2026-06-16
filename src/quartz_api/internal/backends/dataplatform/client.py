@@ -495,9 +495,9 @@ class StorageClient(models.StorageInterface):
 
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=energy_type_map[energy_type],
-            # location_type_filter=(
-            #     location_type_map[location_type] if location_type is not None else None
-            # ),
+            location_type_filter=(
+                location_type_map[location_type] if location_type is not None else None
+            ),
             user_oauth_id_filter=oauth_id,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []
