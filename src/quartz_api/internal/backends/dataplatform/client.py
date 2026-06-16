@@ -172,12 +172,9 @@ class StorageClient(models.StorageInterface):
             )
 
         if not day_ahead:
-            windows = [
-                {"window":messages_pb2.TimeWindow(
-                    start_timestamp_utc=window_start,
-                    end_timestamp_utc=window_end,
-                ),
-                "pivot_timestamp_utc":created_cutoff},
+            windows = [{"start": window_start,
+                "end": window_end,
+                "pivot_timestamp_utc": created_cutoff},
                 ]
 
         else:
@@ -185,7 +182,7 @@ class StorageClient(models.StorageInterface):
             # this is made up of chunks of different forecasts
             # for each day in the day-ahead window.
 
-            tz = timezone_at(lng=location.longitude, lat=location.latitude)
+            tz = timezone_at(lng=location.latlng.longitude, lat=location.latlng.latitude)
             windows = make_day_ahead_windows(window_start=window_start,
                                              window_end=window_end,
                                              tz_string=tz,
@@ -195,14 +192,18 @@ class StorageClient(models.StorageInterface):
         values = []
         for window in windows:
 
-            time_window = window["window"]
+            start = window["start"]
+            end = window["end"]
             pivot_timestamp_utc = window["pivot_timestamp_utc"]
 
             req = messages_pb2.GetForecastAsTimeseriesRequest(
                     location_uuid=str(location_uuid),
                     energy_source=energy_type_map[energy_type],
                     horizon_mins=forecast_horizon_minutes,
-                    time_window=time_window,
+                    time_window=messages_pb2.TimeWindow(
+                        start_timestamp_utc=start,
+                        end_timestamp_utc=end,
+                    ),
                     forecaster=forecaster,
                     pivot_timestamp_utc=pivot_timestamp_utc,
                 )
@@ -470,7 +471,7 @@ class StorageClient(models.StorageInterface):
                 oauth_id: str | None = None
             case (
                 models.EnergyType.SOLAR,
-                models.LocationType.NATION | models.LocationType.GSP,
+                models.LocationType.NATION | models.LocationType.GSP | models.LocationType.REGION,
             ):
                 # get_solar_regions had no auth
                 oauth_id = None
@@ -494,9 +495,9 @@ class StorageClient(models.StorageInterface):
 
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=energy_type_map[energy_type],
-            location_type_filter=(
-                location_type_map[location_type] if location_type is not None else None
-            ),
+            # location_type_filter=(
+            #     location_type_map[location_type] if location_type is not None else None
+            # ),
             user_oauth_id_filter=oauth_id,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []

@@ -63,7 +63,7 @@ async def get_regions_route(
         regions = await db.get_locations(
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.REGION,
-            authdata=auth,
+            authdata={},
         )
     else:
         raise HTTPException(
@@ -147,6 +147,16 @@ async def get_forecast_timeseries_route(
     day_ahead_forecast = False
     day_ahead_closure_time_local = None
 
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=models.LocationType.REGION,
+        authdata={},
+    )
+    locations = [location for location in locations if location.name == region]
+    location = locations[0] if locations else None
+
 
     match forecast_horizon, forecast_horizon_minutes:
         case models.ForecastHorizon.latest, _:
@@ -163,7 +173,7 @@ async def get_forecast_timeseries_route(
 
     try:
         pgvs = await db.get_predicted_generation(
-            location_uuid=region,
+            location_uuid=location.uuid,
             window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime()
@@ -173,8 +183,8 @@ async def get_forecast_timeseries_route(
             ),
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
-            authdata=auth,
-            day_ahead_forecast=day_ahead_forecast,
+            authdata={},
+            day_ahead=day_ahead_forecast,
             day_ahead_closure_time_local=day_ahead_closure_time_local,
         )
     except Exception as e:
