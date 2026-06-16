@@ -11,7 +11,7 @@ from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 
 from quartz_api.internal import models
 
-from .client import StorageClient
+from .client import StorageClient, make_day_ahead_windows
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
@@ -639,3 +639,142 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent_create.geometry_wkt, "POINT (0.0 0.0)")
         self.assertEqual(dict(sent_create.metadata)["tilt"], 35.0)
 
+
+class TestDayAheadWindows(unittest.IsolatedAsyncioTestCase):
+    """Test the creation of day-ahead windows.
+
+    1. Test the creation of day-ahead windows for a full day.
+    2. Test the creation of day-ahead windows for half days.
+    3. Test the creation of day-ahead windows for British Summer Time.
+    4. Test the creation of day-ahead windows for UK clock changes.
+    5. Test the creation of day-ahead windows for IST.
+    6. Test the creation of day-ahead windows for less than one day in timezone, across two utc days
+    """
+
+    # 1. Test the creation of day-ahead windows for a full day.
+    def test_make_day_ahead_windows(self):
+        window_start = dt.datetime(2023, 3, 2, 0, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 3, 3, 0, 0, tzinfo=dt.UTC)
+        tz = "Europe/London"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 3, 2, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 3, 3, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 3, 1, 9, tzinfo=dt.UTC))
+
+    # 2. Test across 2 half days
+    def test_make_day_ahead_windows_half_days(self):
+        window_start = dt.datetime(2023, 3, 1, 12, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 3, 2, 12, 0, tzinfo=dt.UTC)
+        tz = "Europe/London"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 2)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 3, 1, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 3, 1, 23, 59, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["start"], dt.datetime(2023, 3, 2, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["end"], dt.datetime(2023, 3, 2, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 2, 28, 9, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 3, 1, 9, tzinfo=dt.UTC))
+
+
+    # 3. test for british summer time
+    def test_make_day_ahead_windows_bst(self):
+        window_start = dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC)
+        tz = "Europe/London"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 2)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 7, 1, 22, 59, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 6, 30, 8, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["start"], dt.datetime(2023, 7, 1, 23, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["end"], dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 7, 1, 8, tzinfo=dt.UTC))
+
+
+    # 4. test for UK clock change
+    def test_make_day_ahead_windows_uk_clock_change(self):
+        window_start = dt.datetime(2023, 3, 25, 12, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 3, 27, 12, 0, tzinfo=dt.UTC)
+        tz = "Europe/London"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 3)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 3, 25, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 3, 25, 23, 59, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 3, 24, 9, tzinfo=dt.UTC))
+        # this day is the clock change
+        self.assertEqual(windows[1]["start"], dt.datetime(2023, 3, 26, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["end"], dt.datetime(2023, 3, 26, 22, 59, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 3, 25, 9, tzinfo=dt.UTC))
+        self.assertEqual(windows[2]["start"], dt.datetime(2023, 3, 26, 23, tzinfo=dt.UTC))
+        self.assertEqual(windows[2]["end"], dt.datetime(2023, 3, 27, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[2]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 3, 26, 8, tzinfo=dt.UTC))
+
+
+    # test for CET
+    def test_make_day_ahead_windows_cet(self):
+        window_start = dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC)
+        tz = "Europe/Berlin"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(10, 0))
+
+        self.assertEqual(len(windows), 2)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 7, 1, 21, 59, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 6, 30, 8, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["start"], dt.datetime(2023, 7, 1, 22, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["end"], dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 7, 1, 8, tzinfo=dt.UTC))
+
+
+    # 5. test for IST
+    def test_make_day_ahead_windows_ist(self):
+        window_start = dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC)
+        tz = "Asia/Kolkata"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 2)
+        self.assertEqual(windows[0]["start"], dt.datetime(2023, 7, 1, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["end"], dt.datetime(2023, 7, 1, 18, 29, 59, tzinfo=dt.UTC))
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 6, 30, 3, 30, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["start"], dt.datetime(2023, 7, 1, 18, 30, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["end"], dt.datetime(2023, 7, 2, 12, 0, tzinfo=dt.UTC))
+        self.assertEqual(windows[1]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 7, 1, 3, 30, tzinfo=dt.UTC))
+
+
+    # 6. test for less than one day in timezone, across two utc days
+    def test_make_day_ahead_windows_less_one_day_in_timezone(self):
+        window_start = dt.datetime(2023, 7, 1, 19, 0, tzinfo=dt.UTC)
+        window_end = dt.datetime(2023, 7, 2, 1, 0, tzinfo=dt.UTC)
+        tz = "Asia/Kolkata"
+
+        windows = make_day_ahead_windows(window_start, window_end, tz, dt.time(9, 0))
+
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0]["start"], window_start)
+        self.assertEqual(windows[0]["end"], window_end)
+        self.assertEqual(windows[0]["pivot_timestamp_utc"],
+                         dt.datetime(2023, 7, 1, 3, 30, tzinfo=dt.UTC))
