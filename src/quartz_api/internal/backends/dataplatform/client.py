@@ -217,7 +217,7 @@ class StorageClient(models.StorageInterface):
                 for v in resp.values:
                     v.effective_capacity_watts = location.effective_capacity_watts
 
-            values.append(resp.values)
+            values += resp.values
 
         def _map_resp(values: list[messages_pb2.GetForecastAsTimeseriesResponse.Value]) \
                 -> list[models.PredictedGenerationValue]:
