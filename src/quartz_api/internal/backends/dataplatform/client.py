@@ -90,7 +90,7 @@ class StorageClient(models.StorageInterface):
         forecaster_name: str | None = None,
         forecaster_version: str | None = None,
         day_ahead: bool = False,
-        day_ahead_closure_time_utc: dt.time | None = None,
+        day_ahead_closure_time_local: dt.time | None = None,
     ) -> list[models.PredictedGenerationValue]:
 
         # Limit the creation time if not set
@@ -188,8 +188,8 @@ class StorageClient(models.StorageInterface):
             tz = timezone_at(lng=location.longitude, lat=location.latitude)
             windows = make_day_ahead_windows(window_start=window_start,
                                              window_end=window_end,
-                                             tz=tz,
-                                             day_ahead_closure_time_utc=day_ahead_closure_time_utc,
+                                             tz_string=tz,
+                                             day_ahead_closure_time_local=day_ahead_closure_time_local,
                                              created_cutoff=created_cutoff)
 
         values = []

@@ -144,12 +144,17 @@ async def get_forecast_timeseries_route(
     Note that for Day Ahead forecasts, smoothing is never applied.
     """
     values: list[PredictedPower] = []
+    day_ahead_forecast = False
+    day_ahead_closure_time_local = None
+
 
     match forecast_horizon, forecast_horizon_minutes:
         case models.ForecastHorizon.latest, _:
             horizon_mins: int = 0
         case models.ForecastHorizon.day_ahead, None:
-            horizon_mins = 60 * 24
+            horizon_mins = 0
+            day_ahead_forecast = True
+            day_ahead_closure_time_local = dt.time(9, 0)
             smooth_flag = False
         case models.ForecastHorizon.horizon, int():
             horizon_mins = forecast_horizon_minutes
@@ -169,6 +174,8 @@ async def get_forecast_timeseries_route(
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
             authdata=auth,
+            day_ahead_forecast=day_ahead_forecast,
+            day_ahead_closure_time_local=day_ahead_closure_time_local,
         )
     except Exception as e:
         raise HTTPException(
