@@ -192,20 +192,16 @@ class StorageClient(models.StorageInterface):
         values = []
         for window in windows:
 
-            start = window["start"]
-            end = window["end"]
-            pivot_timestamp_utc = window["pivot_timestamp_utc"]
-
             req = messages_pb2.GetForecastAsTimeseriesRequest(
                     location_uuid=str(location_uuid),
                     energy_source=energy_type_map[energy_type],
                     horizon_mins=forecast_horizon_minutes,
                     time_window=messages_pb2.TimeWindow(
-                        start_timestamp_utc=start,
-                        end_timestamp_utc=end,
+                        start_timestamp_utc=window["start"],
+                        end_timestamp_utc=window["end"],
                     ),
                     forecaster=forecaster,
-                    pivot_timestamp_utc=pivot_timestamp_utc,
+                    pivot_timestamp_utc=window["pivot_timestamp_utc"],
                 )
 
             resp = await self.dpc.GetForecastAsTimeseries(req)
