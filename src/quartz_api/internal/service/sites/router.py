@@ -120,8 +120,8 @@ async def get_forecast(
     )
     out: list[PredictedPower] = [
         PredictedPower(
-            power_kW=v.power_kilowatts,
-            time=v.valid_timestamp.astimezone(tz=tz),
+            PowerKW=v.power_kilowatts,
+            Time=v.valid_timestamp.astimezone(tz=tz),
             created_time=v.created_timestamp.astimezone(tz=tz),
             initialization_timestamp_utc=v.init_timestamp.astimezone(tz=tz),
             forecaster_name=v.forecaster_name,

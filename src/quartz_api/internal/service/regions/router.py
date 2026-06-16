@@ -179,8 +179,8 @@ async def get_forecast_timeseries_route(
     values: list[PredictedPower] = [
         PredictedPower(
             location_uuid=str(pgv.location_uuid),
-            power_kW=pgv.power_kilowatts,
-            time=pgv.valid_timestamp.astimezone(tz=tz),
+            PowerKW=pgv.power_kilowatts,
+            Time=pgv.valid_timestamp.astimezone(tz=tz),
             created_time=pgv.created_timestamp.astimezone(tz=tz),
             initialization_timestamp_utc=pgv.init_timestamp.astimezone(tz=tz),
             forecaster_version=pgv.forecaster_version,

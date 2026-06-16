@@ -20,8 +20,8 @@ class ActualPower(BaseModel):
 class PredictedPower(BaseModel):
     """Defines the data structure for a predicted power value returned by the API."""
 
-    power_kW: float
-    time: dt.datetime
+    PowerKW: float
+    Time: dt.datetime
     created_time: dt.datetime | None = Field(None, exclude=True)
     initialization_timestamp_utc: dt.datetime | None = Field(
         None,
