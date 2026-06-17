@@ -591,6 +591,15 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 effective_capacity_watts=req.effective_capacity_watts,
             )
 
+        def mock_update_location_owner(
+            req: messages_pb2.UpdateLocationOwnerRequest,
+            metadata: object | None = None,  # noqa: ARG001
+        ) -> messages_pb2.UpdateLocationOwnerResponse:
+            return messages_pb2.UpdateLocationOwnerResponse(
+                location_uuid=req.location_uuid,
+                organisation_id=req.new_organisation_id,
+            )
+
         site_uuid = uuid.uuid4()
         loc = models.Location(
             uuid=site_uuid,
@@ -624,6 +633,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         # When no matching location is visible to the caller, a new one is created instead.
         client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
         client_mock.CreateLocation = AsyncMock(side_effect=mock_create_location)
+        client_mock.UpdateLocationOwner = AsyncMock(side_effect=mock_update_location_owner)
         created = await client.put_location(
             location=loc,
             location_type=models.LocationType.SITE,
@@ -638,6 +648,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent_create.effective_capacity_watts, 5000)
         self.assertEqual(sent_create.geometry_wkt, "POINT (0.0 0.0)")
         self.assertEqual(dict(sent_create.metadata)["tilt"], 35.0)
+
+        sent_owner = client_mock.UpdateLocationOwner.call_args.args[0]
+        self.assertEqual(sent_owner.location_uuid, str(created.uuid))
+        self.assertEqual(sent_owner.new_organisation_id, "no_access_user")
 
 
 class TestDayAheadWindows(unittest.IsolatedAsyncioTestCase):

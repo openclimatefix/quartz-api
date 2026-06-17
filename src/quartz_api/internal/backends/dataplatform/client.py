@@ -548,6 +548,14 @@ class StorageClient(models.StorageInterface):
                 metadata=dict_to_struct(location.metadata),
             )
             created = await self.dpc.CreateLocation(create_req)
+            owner_id = get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+            if owner_id:
+                await self.dpc.UpdateLocationOwner(
+                    messages_pb2.UpdateLocationOwnerRequest(
+                        location_uuid=created.location_uuid,
+                        new_organisation_id=owner_id,
+                    ),
+                )
             return models.Location(
                 uuid=UUID(created.location_uuid),
                 name=created.location_name,
