@@ -106,7 +106,7 @@ class StorageClient(models.StorageInterface):
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
             location_type_filter=location_type_map[location_type],
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=oauth_id,
         )
         resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
@@ -122,7 +122,7 @@ class StorageClient(models.StorageInterface):
             req = messages_pb2.ListLocationsRequest(
                 enclosed_location_uuid_filter=str(location_uuid),
                 location_type_filter=common_pb2.LocationType.LOCATION_TYPE_GSP,
-                user_oauth_id_filter=oauth_id,
+                organisation_id_filter=oauth_id,
             )
             gsps = await self.dpc.ListLocations(req)
             if len(gsps.locations) == 0:
@@ -494,7 +494,7 @@ class StorageClient(models.StorageInterface):
             location_type_filter=(
                 location_type_map[location_type] if location_type is not None else None
             ),
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=oauth_id,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []
             ),
@@ -605,7 +605,7 @@ class StorageClient(models.StorageInterface):
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_source,
             location_type_filter=location_type,
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=oauth_id,
         )
         resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:

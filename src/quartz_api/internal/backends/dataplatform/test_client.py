@@ -20,7 +20,7 @@ def mock_list_locations(
     req: messages_pb2.ListLocationsRequest,
     metadata: object | None = None,
 ) -> messages_pb2.ListLocationsResponse:
-    if req.user_oauth_id_filter != "access_user":
+    if req.organisation_id_filter != "access_user":
         return messages_pb2.ListLocationsResponse(locations=[])
 
     match req.location_type_filter:
