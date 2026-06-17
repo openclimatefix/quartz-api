@@ -2,11 +2,12 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from starlette import status
 from starlette.responses import Response
 
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
 from ._ingest import _ingest_running, run_ingest
@@ -37,7 +38,9 @@ S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
 
 
 @router.get("/", response_model=HistoricSatelliteData)
+@limiter.limit("50/second")
 def get_historic_satellite_data_url(
+    request: Request,  # noqa: ARG001
     channel: str,
     timestamp: datetime,
     s3_client: S3ClientDep,

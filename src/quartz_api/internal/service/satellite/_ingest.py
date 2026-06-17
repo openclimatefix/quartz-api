@@ -96,10 +96,12 @@ def _run_ingest() -> tuple[str, str]:
         right=x.max() + xres / 2, top=y.max() + yres / 2,
     )
     left_3857, bottom_3857, right_3857, top_3857 = transform_bounds(
-        "EPSG:4326", "EPSG:3857", LEFT, BOTTOM, RIGHT, TOP
+        "EPSG:4326", "EPSG:3857", LEFT, BOTTOM, RIGHT, TOP,
     )
     wgs84_bounds_tag = f"{LEFT},{BOTTOM},{RIGHT},{TOP}"
-    geos_left, geos_bottom, geos_right, geos_top = transform_bounds("EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP)
+    geos_left, geos_bottom, geos_right, geos_top = transform_bounds(
+        "EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP,
+    )
     inv_tf = ~src_tf
     col_min, row_max = inv_tf * (geos_left, geos_bottom)
     col_max, row_min = inv_tf * (geos_right, geos_top)
@@ -132,17 +134,17 @@ def _run_ingest() -> tuple[str, str]:
                 arr = np.flipud(arr)
 
                 if channel in SOLAR_NOISE_CONFIG:
-                    config = SOLAR_NOISE_CONFIG[channel]  
+                    config = SOLAR_NOISE_CONFIG[channel]
                     uk_subwindow = arr[r0:r1, c0:c1]
                     valid_local = uk_subwindow[~np.isnan(uk_subwindow)]
-                    
+
                     if len(valid_local) > 0:
                         p_val = float(np.percentile(valid_local, config["percentile"]))
-                        
-                        # Cliff logic switch: if noise distribution crosses the limit, 
+
+                        # Cliff logic switch: if noise distribution crosses the limit,
                         # true daylight is active -> Drop threshold to 0.0
                         applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
-                        
+
                         # Flatten noise floor cleanly to uniform black
                         if applied_threshold > 0.0:
                             arr = np.where(arr < applied_threshold, 0.0, arr)
@@ -169,7 +171,9 @@ def _run_ingest() -> tuple[str, str]:
                 full_buf.seek(0)
                 crop_buf = io.BytesIO()
                 with rasterio.open(full_buf) as src:
-                    window = window_from_bounds(left_3857, bottom_3857, right_3857, top_3857, src.transform)
+                    window = window_from_bounds(
+                        left_3857, bottom_3857, right_3857, top_3857, src.transform,
+                    )
                     cropped = src.read(1, window=window)
                     crop_transform = src.window_transform(window)
                     with rasterio.open(
