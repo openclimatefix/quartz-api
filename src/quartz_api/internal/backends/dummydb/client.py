@@ -158,6 +158,44 @@ class StorageClient(models.StorageInterface):
                     )
                     for n in ["dummy_wind_region1", "dummy_wind_region2"]
                 ]
+            case _, models.LocationType.SITE if energy_type is None:
+                # energy_type=None means "return all energy types" — used by sites router
+                locations = [
+                    models.Location(
+                        uuid=loc_uuid,
+                        name="Dummy Wind Site",
+                        latitude=23.25,
+                        longitude=69.25,
+                        capacity_kilowatts=300000,
+                        location_type=models.LocationType.SITE,
+                        energy_type=models.EnergyType.WIND,
+                    ),
+                    models.Location(
+                        uuid=uuid4(),
+                        name="Dummy Solar Site",
+                        latitude=26.0,
+                        longitude=76.0,
+                        capacity_kilowatts=5000,
+                        location_type=models.LocationType.SITE,
+                        energy_type=models.EnergyType.SOLAR,
+                    ),
+                ]
+                if location_uuid is not None:
+                    # Filter to just the requested UUID
+                    locations = [loc for loc in locations if loc.uuid == location_uuid]
+                    if not locations:
+                        # UUID not found — return a single match with the requested UUID
+                        locations = [
+                            models.Location(
+                                uuid=location_uuid,
+                                name="Dummy Wind Site",
+                                latitude=23.25,
+                                longitude=69.25,
+                                capacity_kilowatts=300000,
+                                location_type=models.LocationType.SITE,
+                                energy_type=models.EnergyType.WIND,
+                            ),
+                        ]
             case _, models.LocationType.SITE:
                 locations = [
                     models.Location(
@@ -167,6 +205,7 @@ class StorageClient(models.StorageInterface):
                         longitude=76,
                         capacity_kilowatts=76000,
                         location_type=models.LocationType.SITE,
+                        energy_type=energy_type,
                     ),
                 ]
             case _, models.LocationType.GSP:

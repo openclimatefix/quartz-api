@@ -73,6 +73,7 @@ class Location:
     longitude: float
     capacity_kilowatts: float
     location_type: LocationType | None = None
+    energy_type: EnergyType | None = None
     metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 
@@ -171,7 +172,7 @@ class StorageInterface(abc.ABC):
     @abc.abstractmethod
     async def get_locations(
         self,
-        energy_type: EnergyType,
+        energy_type: EnergyType | None,
         location_type: LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
@@ -180,6 +181,7 @@ class StorageInterface(abc.ABC):
     ) -> list[Location]:
         """Return a list of locations for a given energy and location type.
 
+        If energy_type is None, locations of all energy types are returned.
         If location_type is None, locations of all types are returned.
         If enclosing_location_uuid is provided, only locations enclosed by that
         location (i.e. children/descendants) are returned.
