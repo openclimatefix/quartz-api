@@ -2,12 +2,14 @@
 import datetime as dt
 import logging
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from google.protobuf.struct_pb2 import Struct
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
+from timezonefinder import timezone_at
 from typing_extensions import override
 
 from quartz_api.internal import models
@@ -55,6 +57,13 @@ def struct_to_dict(pb_struct: Struct) -> dict[str, str | float | bool]:
     return out
 
 
+def dict_to_struct(d: dict[str, str | int | float | bool]) -> Struct:
+    """Convert a flat python dictionary into a protobuf Struct."""
+    s = Struct()
+    s.update(d)
+    return s
+
+
 class StorageClient(models.StorageInterface):
     """Defines a data platform conneciton that conforms to the StorageInterface."""
 
@@ -80,13 +89,9 @@ class StorageClient(models.StorageInterface):
         forecast_horizon_minutes: int = 0,
         forecaster_name: str | None = None,
         forecaster_version: str | None = None,
+        day_ahead: bool = False,
+        day_ahead_closure_time_local: dt.time | None = None,
     ) -> list[models.PredictedGenerationValue]:
-        if forecast_horizon_minutes == 24 * 60:
-            # The user is requesting day-ahead.
-            # The intra-day forecast caps out at 8 hours horizon, so anything greater than that is
-            # assumed to be day-ahead. It doesn't seem like it's as simple as just using 24 hours,
-            # from my asking around at least
-            forecast_horizon_minutes = 9 * 60
 
         # Limit the creation time if not set
         if created_cutoff is None:
@@ -166,30 +171,55 @@ class StorageClient(models.StorageInterface):
                 forecaster_version=forecaster_version,
             )
 
-        req = messages_pb2.GetForecastAsTimeseriesRequest(
-            location_uuid=str(location_uuid),
-            energy_source=energy_type_map[energy_type],
-            horizon_mins=forecast_horizon_minutes,
-            time_window=messages_pb2.TimeWindow(
-                start_timestamp_utc=window_start,
-                end_timestamp_utc=window_end,
-            ),
-            forecaster=forecaster,
-            pivot_timestamp_utc=created_cutoff,
-        )
+        if not day_ahead:
+            windows = [{"start": window_start,
+                "end": window_end,
+                "pivot_timestamp_utc": created_cutoff},
+                ]
 
-        resp = await self.dpc.GetForecastAsTimeseries(req)
+        else:
+            # We are now getting the DA forecaster,
+            # this is made up of chunks of different forecasts
+            # for each day in the day-ahead window.
 
-        if location_type == models.LocationType.SUBSTATION:
-            # Spoof the forecast values so that the capacity and id corresponds to the substation
-            resp.location_uuid = str(location_uuid)
-            for v in resp.values:
-                v.effective_capacity_watts = location.effective_capacity_watts
+            tz = timezone_at(lng=location.latlng.longitude, lat=location.latlng.latitude)
+            windows = make_day_ahead_windows(window_start=window_start,
+                                             window_end=window_end,
+                                             tz_string=tz,
+                                             day_ahead_closure_time_local=day_ahead_closure_time_local,
+                                             created_cutoff=created_cutoff)
 
-        def _map_resp(resp: messages_pb2.GetForecastAsTimeseriesResponse) \
+        values = []
+        for window in windows:
+
+            req = messages_pb2.GetForecastAsTimeseriesRequest(
+                    location_uuid=str(location_uuid),
+                    energy_source=energy_type_map[energy_type],
+                    horizon_mins=forecast_horizon_minutes,
+                    time_window=messages_pb2.TimeWindow(
+                        start_timestamp_utc=window["start"],
+                        end_timestamp_utc=window["end"],
+                    ),
+                    forecaster=forecaster,
+                    pivot_timestamp_utc=window["pivot_timestamp_utc"],
+                )
+
+            resp = await self.dpc.GetForecastAsTimeseries(req)
+
+
+            if location_type == models.LocationType.SUBSTATION:
+                # Spoof the forecast values so that the capacity
+                # and id corresponds to the substation
+                resp.location_uuid = str(location_uuid)
+                for v in resp.values:
+                    v.effective_capacity_watts = location.effective_capacity_watts
+
+            values += resp.values
+
+        def _map_resp(values: list[messages_pb2.GetForecastAsTimeseriesResponse.Value]) \
                 -> list[models.PredictedGenerationValue]:
             out: list[models.PredictedGenerationValue] = []
-            for v in resp.values:
+            for v in values:
                 plevels: dict[str, int | float] = {}
                 stats = v.other_statistics_fractions
                 for plevel in ["p10", "p90"]:
@@ -218,8 +248,7 @@ class StorageClient(models.StorageInterface):
 
             return out
 
-        return await run_in_threadpool(_map_resp, resp)
-
+        return await run_in_threadpool(_map_resp, values)
 
     @override
     async def put_predicted_generation(
@@ -289,13 +318,37 @@ class StorageClient(models.StorageInterface):
     async def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
         authdata: dict[str, str],
     ) -> None:
-        raise NotImplementedError(
-            "Data platform backend does not yet support writing generation",
+        if not generation_values:
+            return
+
+        if authdata != {}:
+            _ = await self._check_user_access(
+                location_uuid=location_uuid,
+                energy_source=energy_type_map[energy_type],
+                location_type=location_type_map[location_type],
+                oauth_id=get_oauth_id_from_sub(authdata["sub"]),
+            )
+
+        observer_name = generation_values[0].observer_name
+
+        req = messages_pb2.CreateObservationsRequest(
+            location_uuid=str(location_uuid),
+            energy_source=energy_type_map[energy_type],
+            observer_name=observer_name,
+            values=[
+                messages_pb2.CreateObservationsRequest.Value(
+                    timestamp_utc=gv.valid_timestamp,
+                    value_watts=max(0, int(gv.power_kilowatts * 1000)),
+                )
+                for gv in generation_values
+            ],
         )
+        await self.dpc.CreateObservations(req)
 
     @override
     async def get_predicted_generation_snapshot(
@@ -414,7 +467,7 @@ class StorageClient(models.StorageInterface):
                 oauth_id: str | None = None
             case (
                 models.EnergyType.SOLAR,
-                models.LocationType.NATION | models.LocationType.GSP,
+                models.LocationType.NATION | models.LocationType.GSP | models.LocationType.REGION,
             ):
                 # get_solar_regions had no auth
                 oauth_id = None
@@ -479,8 +532,57 @@ class StorageClient(models.StorageInterface):
         energy_type: models.EnergyType,
         authdata: dict[str, str],
     ) -> models.Location:
-        raise NotImplementedError(
-            "Data platform backend doesn't yet support location writing.",
+        existing = await self.get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location.uuid,
+        )
+        if not existing:
+            create_req = messages_pb2.CreateLocationRequest(
+                location_name=location.name,
+                energy_source=energy_type_map[energy_type],
+                geometry_wkt=f"POINT ({location.longitude} {location.latitude})",
+                effective_capacity_watts=int(location.capacity_kilowatts * 1000),
+                location_type=location_type_map[location_type],
+                metadata=dict_to_struct(location.metadata),
+            )
+            created = await self.dpc.CreateLocation(create_req)
+            return models.Location(
+                uuid=UUID(created.location_uuid),
+                name=created.location_name,
+                latitude=location.latitude,
+                longitude=location.longitude,
+                capacity_kilowatts=created.effective_capacity_watts / 1000.0,
+                location_type=location_type,
+                metadata=location.metadata,
+            )
+        current = existing[0]
+
+        """new_metadata replaces existing metadata entirely, so merge new values over the
+        current.
+        """
+        merged_metadata = {**current.metadata, **location.metadata}
+
+        req = messages_pb2.UpdateLocationRequest(
+            location_uuid=str(location.uuid),
+            energy_source=energy_type_map[energy_type],
+            new_effective_capacity_watts=int(location.capacity_kilowatts * 1000),
+            new_metadata=dict_to_struct(merged_metadata),
+        )
+        if location.name:
+            req.new_location_name = location.name
+
+        resp = await self.dpc.UpdateLocation(req)
+
+        return models.Location(
+            uuid=UUID(resp.location_uuid),
+            name=resp.location_name,
+            latitude=current.latitude,
+            longitude=current.longitude,
+            capacity_kilowatts=resp.effective_capacity_watts / 1000.0,
+            location_type=location_type,
+            metadata=merged_metadata,
         )
 
     @override
@@ -523,3 +625,86 @@ class StorageClient(models.StorageInterface):
         )
 
 
+def make_day_ahead_windows(window_start: dt.datetime,
+                           window_end: dt.datetime,
+                           tz_string: str,
+                           day_ahead_closure_time_local: dt.time,
+                           created_cutoff: dt.datetime | None = None) -> \
+                           list[dict[str, messages_pb2.TimeWindow | dt.datetime]]:
+    """Make the day-ahead time windows for a given time range.
+
+    For a given period of time, the DA forecast is broken into several forecast.
+    Here we define those windows.
+
+    1. Change start and end times to local time zone.
+    2. Take the dates from the local time zone.
+    3. Create list of start and end windows in local time
+    4. Change back to UTC
+    5. Create pivot_timestamp_utc based of the market closing time
+    6. Return all windows
+
+    Examples:
+    UK (winter): From 2026-02-02 09:00 to 2026-02-02 18:00, DA market closing time is 09:00
+    We get a window from 2026-02-02 09:00 to 2026-02-02 18:00
+    and a pivot timestamp of 2026-02-01 09:00
+
+    UK (summer): From 2026-07-02 09:00 to 2026-07-03 18:00, DA market closing time is 09:00
+    We get a windows
+    1. 2026-07-02 09:00 to 2026-07-02 23:00 and a pivot timestamp of 2026-07-01 08:00
+    2. 2026-07-02 23:00 to 2026-07-03 18:00 and a pivot timestamp of 2026-07-02 08:00
+
+    IST: From 2026-07-02 09:00 to 2026-07-03 18:00, DA market closing time is 09:00
+    We get a windows
+    1. 2026-07-02 09:00 to 2026-07-02 18:30 and a pivot timestamp of 2026-07-01 03:30
+    2. 2026-07-02 18:30 to 2026-07-03 18:00 and a pivot timestamp of 2026-07-02 03:30
+
+    """
+    # change tz string to timezone, e.g. "Europe/London"
+    tz = ZoneInfo(tz_string)
+
+    # change to local time zones and take the dates
+    window_start_local = window_start.astimezone(tz).date()
+    window_end_local = window_end.astimezone(tz).date()
+
+    if window_end.astimezone(tz).time() != dt.time.min:
+        window_end_local = window_end_local + dt.timedelta(days=1)
+
+    # convert from dates to datetimes
+    window_start_local = dt.datetime.combine(window_start_local, dt.time.min, tzinfo=tz)
+    window_end_local = dt.datetime.combine(window_end_local, dt.time.min, tzinfo=tz)
+
+    N = (window_end_local - window_start_local).days
+    windows = []
+    for i in range(0, N, 1):
+        start = window_start_local + dt.timedelta(days=i)
+        end = window_start_local + dt.timedelta(days=i+1)
+
+        if i < N - 1:
+            # this is to make sure windows dont overlap
+            end = end - dt.timedelta(seconds=1)
+
+        # convert back to utc
+        start = start.astimezone(dt.UTC)
+        end = end.astimezone(dt.UTC)
+
+        # clip to start and end of window
+        start = max(start, window_start)
+        end = min(end, window_end)
+
+        # lets calculate the time at which the latest forecast can be loaded from.
+        # e.g for UK 2026-02-02, the latest DA forecast is made before 2026-01-01 09:00
+        pivot_timestamp_local = dt.datetime.combine(
+            (start.astimezone(tz).date() - dt.timedelta(days=1)),
+            day_ahead_closure_time_local, tzinfo=tz)
+        pivot_timestamp_utc = pivot_timestamp_local.astimezone(dt.UTC)
+        # make sure we don't go past the created cutoff
+        if created_cutoff is not None:
+            pivot_timestamp_utc = min(pivot_timestamp_utc, created_cutoff)
+
+        windows.append({"start": start,
+            "end": end,
+            "pivot_timestamp_utc": pivot_timestamp_utc,
+        })
+
+
+    return windows

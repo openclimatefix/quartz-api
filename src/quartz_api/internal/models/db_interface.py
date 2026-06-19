@@ -92,6 +92,8 @@ class StorageInterface(abc.ABC):
         forecast_horizon_minutes: int = 0,
         forecaster_name: str | None = None,
         forecaster_version: str | None = None,
+        day_ahead: bool = False,
+        day_ahead_closure_time_local: dt.time | None = None,
     ) -> list[PredictedGenerationValue]:
         """Return a list of predicted power values for a given location and time window.
 

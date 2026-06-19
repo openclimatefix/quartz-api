@@ -206,13 +206,13 @@ class FM:
     )
     # NL — uncurtailed (regional and national)
     NL_UNCURTAILED = ForecastModel(
-        name="nl_regional_ecmwf_mo_sat",
-        label="ECMWF + Met Office + Satellite, Uncurtailed",
+        name="nl_regional_pv_ecmwf_mo_sat_uncurtailed",
+        label="PV + ECMWF + Met Office + Satellite, Uncurtailed",
         slug="ecmwf_mo_sat_uncurtailed",
     )
     NL_UNCURTAILED_ADJUST = ForecastModel(
-        name="nl_regional_ecmwf_mo_sat_adjust",
-        label="ECMWF + Met Office + Satellite, Uncurtailed (Trend Adjusted)",
+        name="nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
+        label="PV + ECMWF + Met Office + Satellite, Uncurtailed (Trend Adjusted)",
         slug="ecmwf_mo_sat_uncurtailed_adjust",
     )
 

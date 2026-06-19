@@ -59,8 +59,8 @@ class Site(SiteProperties):
 class PredictedPower(BaseModel):
     """Defines the data structure for a predicted power value returned by the API."""
 
-    power_kW: float
-    time: AwareDatetime
+    PowerKW: float
+    Time: AwareDatetime
     created_time: AwareDatetime | None = Field(None, exclude=True)
     initialization_timestamp_utc: AwareDatetime | None = Field(
         None,

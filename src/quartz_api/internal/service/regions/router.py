@@ -63,7 +63,7 @@ async def get_regions_route(
         regions = await db.get_locations(
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.REGION,
-            authdata=auth,
+            authdata={},
         )
     else:
         raise HTTPException(
@@ -144,12 +144,27 @@ async def get_forecast_timeseries_route(
     Note that for Day Ahead forecasts, smoothing is never applied.
     """
     values: list[PredictedPower] = []
+    day_ahead_forecast = False
+    day_ahead_closure_time_local = None
+
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=models.LocationType.REGION,
+        authdata={},
+    )
+    locations = [location for location in locations if location.name == region]
+    location = locations[0] if locations else None
+
 
     match forecast_horizon, forecast_horizon_minutes:
         case models.ForecastHorizon.latest, _:
             horizon_mins: int = 0
         case models.ForecastHorizon.day_ahead, None:
-            horizon_mins = 60 * 24
+            horizon_mins = 0
+            day_ahead_forecast = True
+            day_ahead_closure_time_local = dt.time(9, 0)
             smooth_flag = False
         case models.ForecastHorizon.horizon, int():
             horizon_mins = forecast_horizon_minutes
@@ -158,7 +173,7 @@ async def get_forecast_timeseries_route(
 
     try:
         pgvs = await db.get_predicted_generation(
-            location_uuid=region,
+            location_uuid=location.uuid,
             window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime()
@@ -168,7 +183,9 @@ async def get_forecast_timeseries_route(
             ),
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
-            authdata=auth,
+            authdata={},
+            day_ahead=day_ahead_forecast,
+            day_ahead_closure_time_local=day_ahead_closure_time_local,
         )
     except Exception as e:
         raise HTTPException(
@@ -179,8 +196,8 @@ async def get_forecast_timeseries_route(
     values: list[PredictedPower] = [
         PredictedPower(
             location_uuid=str(pgv.location_uuid),
-            power_kW=pgv.power_kilowatts,
-            time=pgv.valid_timestamp.astimezone(tz=tz),
+            PowerKW=pgv.power_kilowatts,
+            Time=pgv.valid_timestamp.astimezone(tz=tz),
             created_time=pgv.created_timestamp.astimezone(tz=tz),
             initialization_timestamp_utc=pgv.init_timestamp.astimezone(tz=tz),
             forecaster_version=pgv.forecaster_version,

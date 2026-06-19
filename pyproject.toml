@@ -43,6 +43,7 @@ dependencies = [
     "icechunk>=1.1.21",
     "rasterio>=1.4.4",
     "xarray>=2026.4.0",
+    "timezonefinder>=8.2.4",
 ]
 
 [dependency-groups]
