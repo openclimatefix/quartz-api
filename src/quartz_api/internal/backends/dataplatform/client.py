@@ -1,6 +1,5 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 import datetime as dt
-import logging
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -13,22 +12,7 @@ from timezonefinder import timezone_at
 from typing_extensions import override
 
 from quartz_api.internal import models
-
-log = logging.getLogger("dataplatform.client")
-
-HUBSPOT_COMPANY_ID_KEY = "hubspot_company_id"
-
-
-def get_org_id_from_authdata(authdata: dict[str, str]) -> str | None:
-    """Extract the HubSpot company ID from JWT app_metadata claims.
-
-    The JWT contains app_metadata with hubspot_company_id which maps
-    to organisation_id_filter in the Data Platform.
-    """
-    app_metadata = authdata.get("app_metadata", {})
-    if isinstance(app_metadata, dict):
-        return app_metadata.get("hubspot_company_id")
-    return None
+from quartz_api.internal.middleware.auth import get_org_id_from_authdata
 
 energy_type_map: dict[models.EnergyType, common_pb2.EnergySource] = {
     models.EnergyType.SOLAR: common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
