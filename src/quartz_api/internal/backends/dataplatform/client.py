@@ -27,7 +27,7 @@ def get_org_id_from_authdata(authdata: dict[str, str]) -> str | None:
     """
     app_metadata = authdata.get("app_metadata", {})
     if isinstance(app_metadata, dict):
-        return app_metadata.get(HUBSPOT_COMPANY_ID_KEY)
+        return app_metadata.get("hubspot_company_id")
     return None
 
 energy_type_map: dict[models.EnergyType, common_pb2.EnergySource] = {
