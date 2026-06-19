@@ -287,7 +287,7 @@ class StorageClient(models.StorageInterface):
         if observer_name is None:
             raise ValueError("Observer must be specified for data platform backend.")
 
-        if authdata != {}:
+        if authdata != {} and location_type == models.LocationType.SITE:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
@@ -336,7 +336,7 @@ class StorageClient(models.StorageInterface):
         if not generation_values:
             return
 
-        if authdata != {}:
+        if authdata != {} and location_type == models.LocationType.SITE:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
@@ -469,10 +469,35 @@ class StorageClient(models.StorageInterface):
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
     ) -> list[models.Location]:
-        # Filter by org ID (HubSpot company ID) from the JWT app_metadata.
-        organisation_id: str | None = (
-            get_org_id_from_authdata(authdata) if authdata != {} else None
-        )
+        # For the moment, recreate the auth behaviour of the old routes in here.
+        # This should be delegated to the scoping on the API endpoints themselves later.
+        match energy_type, location_type:
+            case models.EnergyType.WIND, models.LocationType.REGION:
+                # get_wind_regions had no auth
+                organisation_id: str | None = None
+            case (
+                models.EnergyType.SOLAR,
+                models.LocationType.NATION | models.LocationType.GSP | models.LocationType.REGION,
+            ):
+                # get_solar_regions had no auth
+                organisation_id = None
+            case _, models.LocationType.SUBSTATION:
+                # get substations had optional auth (?) (temporary while we onboard?)
+                organisation_id = None
+            case _, models.LocationType.SITE:
+                # get_sites had auth (HubSpot company ID)
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
+                )
+            case _, None:
+                # No location type filter — used by v1 API for listing all region types
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
+                )
+            case _:
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
+                )
 
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=(
