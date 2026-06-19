@@ -21,10 +21,14 @@ def mock_list_locations(
     metadata: object | None = None,
 ) -> messages_pb2.ListLocationsResponse:
     if (
-        req.location_type_filter == common_pb2.LOCATION_TYPE_SITE
+        req.location_type_filter in (
+            common_pb2.LOCATION_TYPE_SITE,
+            common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
+        )
         and req.organisation_id_filter != "access_org"
     ):
         return messages_pb2.ListLocationsResponse(locations=[])
+
 
     match req.location_type_filter:
         case common_pb2.LOCATION_TYPE_SITE:
@@ -316,9 +320,9 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 expected_num_substations=1,
             ),
             TestCase(
-                name="Should return substations even when user has no access",
+                name="Should return no substations when user has no access",
                 authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
-                expected_num_substations=1,
+                expected_num_substations=0,
             ),
         ]
 
@@ -354,11 +358,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 number_of_locations=1,
             ),
             TestCase(
-                name="Should return substation even when user has no access",
+                name="Should raise HTTPException when user has no access",
                 location_uuid=uuid.uuid4(),
                 authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 should_error=False,
-                number_of_locations=1,
+                number_of_locations=0,
             ),
         ]
 
@@ -410,11 +414,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 should_error=False,
             ),
             TestCase(
-                name="Should return GSP-scaled forecast even when user has no access",
+                name="Should raise HTTPException when user has no access",
                 substation_uuid=uuid.uuid4(),
                 authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
-                expected_values=[50] * 5,
-                should_error=False,
+                expected_values=[],
+                should_error=True,
             ),
         ]
 

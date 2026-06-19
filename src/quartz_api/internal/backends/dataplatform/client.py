@@ -467,7 +467,9 @@ class StorageClient(models.StorageInterface):
                 organisation_id = None
             case _, models.LocationType.SUBSTATION:
                 # get substations had optional auth (?) (temporary while we onboard?)
-                organisation_id = None
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
+                )
             case _, models.LocationType.SITE:
                 # get_sites had auth (HubSpot company ID)
                 organisation_id = (
