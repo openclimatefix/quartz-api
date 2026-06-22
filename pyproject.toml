@@ -40,6 +40,9 @@ dependencies = [
     "protobuf>=7.34.1",
     "fsspec>=2026.4.0",
     "s3fs>=2026.4.0",
+    "icechunk>=1.1.21",
+    "rasterio>=1.4.4",
+    "xarray>=2026.4.0",
     "timezonefinder>=8.2.4",
 ]
 
