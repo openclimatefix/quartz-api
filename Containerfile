@@ -38,6 +38,7 @@ RUN rm -rf /opt/app/.venv/lib/python3.12/site-packages/**/test_*
 # --- Runtime image (use distroless if feasible for 100MB saving) --- #
 FROM python:3.12-slim-bookworm AS runtime
 
+# Add runtime dependencies for rasterio
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libexpat1 \
     libgdal32 \
