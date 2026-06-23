@@ -8,7 +8,6 @@ Tests cover:
 - GET /sites/{invalid}/generation — returns 404 for an unknown site UUID
 - POST /sites/{uuid}/generation   — persists generation data, returns 200
 - PUT  /sites/{uuid}              — updates site properties, returns 200
-- _resolve_observer_name          — unit tests for the observer resolution helper
 """
 
 # ruff: noqa: ARG002
@@ -26,7 +25,7 @@ from quartz_api.internal import models
 from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .router import _resolve_observer_name, router
+from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
 
@@ -71,7 +70,7 @@ class SitesStorageClient(StorageClient):
                 ),
                 models.Location(
                     uuid=_SOLAR_SITE_UUID,
-                    name="ind_rajasthan_test_farm",
+                    name="dummy_solar_farm",
                     latitude=26.0,
                     longitude=76.0,
                     capacity_kilowatts=5_000,
@@ -186,7 +185,7 @@ async def test_get_sites_returns_both_solar_and_wind(client: AsyncClient) -> Non
     assert len(sites) == 2
     names = {s["client_site_name"] for s in sites}
     assert "ad_seci_5" in names
-    assert "ind_rajasthan_test_farm" in names
+    assert "dummy_solar_farm" in names
 
 
 @pytest.mark.anyio
@@ -374,52 +373,3 @@ async def test_put_site_unknown_uuid_returns_404(empty_client: AsyncClient) -> N
     }
     resp = await empty_client.put(f"/sites/{_UNKNOWN_UUID}", json=payload)
     assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# _resolve_observer_name — unit tests
-# ---------------------------------------------------------------------------
-
-
-def _make_site(name: str, energy_type: models.EnergyType) -> models.Location:
-    """Build a minimal Location for observer-resolution tests."""
-    return models.Location(
-        uuid=uuid4(),
-        name=name,
-        latitude=0.0,
-        longitude=0.0,
-        capacity_kilowatts=100.0,
-        energy_type=energy_type,
-    )
-
-
-def test_resolve_observer_ind_solar() -> None:
-    """ind_-prefixed solar site resolves to 'ind_rajasthan'."""
-    site = _make_site("ind_rajasthan_farm_1", models.EnergyType.SOLAR)
-    assert _resolve_observer_name(site, models.EnergyType.SOLAR) == "ind_rajasthan"
-
-
-def test_resolve_observer_ind_wind() -> None:
-    """ind_-prefixed wind site resolves to 'ind_rajasthan'."""
-    site = _make_site("ind_rajasthan_wind_park", models.EnergyType.WIND)
-    assert _resolve_observer_name(site, models.EnergyType.WIND) == "ind_rajasthan"
-
-
-def test_resolve_observer_adani_prefix() -> None:
-    """ad_-prefixed site (Adani) resolves to India observer 'ind_rajasthan'."""
-    site = _make_site("ad_seci_5", models.EnergyType.WIND)
-    assert _resolve_observer_name(site, models.EnergyType.WIND) == "ind_rajasthan"
-
-
-def test_resolve_observer_unknown_prefix_uses_fallback() -> None:
-    """A site with an unrecognised prefix falls back to the default."""
-    site = _make_site("gb_national", models.EnergyType.SOLAR)
-    result = _resolve_observer_name(site, models.EnergyType.SOLAR, fallback="fallback_observer")
-    assert result == "fallback_observer"
-
-
-def test_resolve_observer_default_fallback_value() -> None:
-    """The built-in fallback is 'ind_rajasthan' when no explicit fallback is given."""
-    site = _make_site("unknown_xyz", models.EnergyType.SOLAR)
-    assert _resolve_observer_name(site, models.EnergyType.SOLAR) == "ind_rajasthan"
-

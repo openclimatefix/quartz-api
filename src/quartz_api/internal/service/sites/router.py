@@ -1,7 +1,6 @@
 """The 'sites' FastAPI router object and associated routes logic."""
 
 import datetime as dt
-import logging
 import pathlib
 from uuid import UUID
 
@@ -11,55 +10,8 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-from quartz_api.internal.service.v1.country_config import COUNTRIES
 
 from .endpoint_types import ActualPower, PredictedPower, Site, SiteProperties
-
-log = logging.getLogger(__name__)
-
-# Maps DP site-name prefixes to country codes in COUNTRIES.
-# Add entries here as new countries are onboarded to the sites API.
-_SITE_PREFIX_TO_COUNTRY: dict[str, str] = {
-    "ind_": "IN",
-    "ad_": "IN",   # Adani sites also belong to India
-}
-
-
-def _resolve_observer_name(
-    site: models.Location,
-    energy_type: models.EnergyType,
-    fallback: str = "ind_rajasthan",
-) -> str:
-    """Return the DP observer_name for a site, derived from the V1 CountryConfig.
-
-    Looks up the site's name prefix in _SITE_PREFIX_TO_COUNTRY to find the
-    matching CountryConfig, then picks the first GenerationSource whose source
-    matches the energy type ("solar" or "wind").
-
-    Falls back to *fallback* with a warning if no match is found.
-    """
-    source = "solar" if energy_type == models.EnergyType.SOLAR else "wind"
-    for prefix, country_code in _SITE_PREFIX_TO_COUNTRY.items():
-        if site.name.startswith(prefix):
-            country = COUNTRIES.get(country_code)
-            if country is None:
-                break
-            for gs in country.generation_sources:
-                if gs.source == source:
-                    return gs.name
-            # Country found but no matching source type — use first available
-            if country.generation_sources:
-                return country.generation_sources[0].name
-            break
-    log.warning(
-        "Could not resolve observer_name for site '%s' (energy_type=%s); "
-        "falling back to '%s'",
-        site.name,
-        energy_type,
-        fallback,
-    )
-    return fallback
-
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
@@ -216,14 +168,16 @@ async def get_generation(
     tz: models.TZDependency,
 ) -> list[ActualPower]:
     """Get generation of a site (Solar or Wind, auto-detected)."""
+    # TODO: observer_name should be derived from the site's organization_id metadata
+    # in the data platform (via get_locations -> location.metadata["organization_id"]).
+    # Hardcoded for now until the DP migration is complete.
+    observer_name = "ind_rajasthan"
     site = await _get_site_with_energy_type(db, site_uuid, auth)
-    energy_type = site.energy_type or models.EnergyType.SOLAR
-    observer_name = _resolve_observer_name(site, energy_type)
     agvs = await db.get_actual_generation(
         location_uuid=site_uuid,
         window_start=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() - dt.timedelta(days=2),
         window_end=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() + dt.timedelta(days=2),
-        energy_type=energy_type,
+        energy_type=site.energy_type or models.EnergyType.SOLAR,
         location_type=models.LocationType.SITE,
         authdata=auth,
         observer_name=observer_name,
@@ -279,16 +233,17 @@ async def post_generation(
     **Note**: Users should wait up to 1 day(s) to start experiencing the full
     effects from using live PV data.
     """
+    # TODO: observer_name should be derived from the site's organization_id metadata
+    # in the data platform (via get_locations -> location.metadata["organization_id"]).
+    # Hardcoded for now until the DP migration is complete.
     site = await _get_site_with_energy_type(db, site_uuid, auth)
-    energy_type = site.energy_type or models.EnergyType.SOLAR
-    observer_name = _resolve_observer_name(site, energy_type)
     agvs: list[models.ActualGenerationValue] = [
         models.ActualGenerationValue(
             power_kilowatts=g.PowerKW,
             valid_timestamp=g.Time,
             location_uuid=site_uuid,
             capacity_kilowatts=0,  # NOTE: This is ignored when writing
-            observer_name=observer_name,
+            observer_name="ind_rajasthan",  # TODO: presumably this could change based on user input
         )
         for g in generation
     ]

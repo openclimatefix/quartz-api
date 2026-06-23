@@ -345,27 +345,6 @@ COUNTRIES: dict[str, CountryConfig] = {
             ),
         ),
     ),
-    "IN": CountryConfig(
-        code="IN",
-        nation_name="ind_national",  # internal DP name — not used by sites router yet
-        display_name="India",
-        permission="read:india",
-        region_types=(),  # no V1 region routes for India yet
-        generation_sources=(
-            GenerationSource(
-                source="solar",
-                name="ind_rajasthan",
-                label="India Rajasthan Solar",
-            ),
-            GenerationSource(
-                source="wind",
-                name="ind_rajasthan",
-                label="India Rajasthan Wind",
-            ),
-        ),
-    ),
 }
 
 VALID_COUNTRY_CODES: set[str] = set(COUNTRIES.keys())
-
-
