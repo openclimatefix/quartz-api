@@ -20,8 +20,15 @@ def mock_list_locations(
     req: messages_pb2.ListLocationsRequest,
     metadata: object | None = None,
 ) -> messages_pb2.ListLocationsResponse:
-    if req.user_oauth_id_filter != "access_user":
+    if (
+        req.location_type_filter in (
+            common_pb2.LOCATION_TYPE_SITE,
+            common_pb2.LocationType.LOCATION_TYPE_PRIMARY_SUBSTATION,
+        )
+        and req.organisation_id_filter != "access_org"
+    ):
         return messages_pb2.ListLocationsResponse(locations=[])
+
 
     match req.location_type_filter:
         case common_pb2.LOCATION_TYPE_SITE:
@@ -162,12 +169,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return locations when user has access",
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 expected_num_locations=1,
             ),
             TestCase(
                 name="Should return no locations when user has no access",
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 expected_num_locations=0,
             ),
         ]
@@ -198,13 +205,13 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             TestCase(
                 name="Should return forecast when user has access",
                 site_uuid=uuid.uuid4(),
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 should_error=False,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
                 site_uuid=uuid.uuid4(),
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 should_error=True,
             ),
         ]
@@ -253,13 +260,13 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             TestCase(
                 name="Should return generation when user has access",
                 site_uuid=uuid.uuid4(),
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 should_error=False,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
                 site_uuid=uuid.uuid4(),
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 should_error=True,
             ),
         ]
@@ -309,12 +316,12 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         testcases: list[TestCase] = [
             TestCase(
                 name="Should return substations when user has access",
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 expected_num_substations=1,
             ),
             TestCase(
                 name="Should return no substations when user has no access",
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 expected_num_substations=0,
             ),
         ]
@@ -346,14 +353,14 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             TestCase(
                 name="Should return substation when user has access",
                 location_uuid=uuid.uuid4(),
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 should_error=False,
                 number_of_locations=1,
             ),
             TestCase(
                 name="Should raise HTTPException when user has no access",
                 location_uuid=uuid.uuid4(),
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 should_error=False,
                 number_of_locations=0,
             ),
@@ -399,7 +406,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             TestCase(
                 name="Should return GSP-scaled forecast when user has access",
                 substation_uuid=uuid.uuid4(),
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 # The forecast returns 5e5 watts for every value, and the substation's
                 # effective capacity is 1e5 watts (10% of the GSP's 1e6 watts), so
                 # the scaled values should be 0.1*5e5W = 50kW for each entry.
@@ -409,7 +416,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             TestCase(
                 name="Should raise HTTPException when user has no access",
                 substation_uuid=uuid.uuid4(),
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
                 expected_values=[],
                 should_error=True,
             ),
@@ -469,7 +476,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 location_uuids=test_uuids,
                 snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
                 energy_type=models.EnergyType.SOLAR,
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 forecaster_name=None,
             )
 
@@ -477,7 +484,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location_uuids=test_uuids,
             snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
             energy_type=models.EnergyType.SOLAR,
-            authdata={"sub": "access_user"},
+            authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
             forecaster_name="blend",
             # forecaster_version is omitted to force ListForecasters call
         )
@@ -504,7 +511,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 location_uuids=test_uuids,
                 snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
                 energy_type=models.EnergyType.SOLAR,
-                authdata={"sub": "access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
                 observer_name=None,
             )
 
@@ -512,7 +519,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location_uuids=test_uuids,
             snapshot_timestamp_utc=TEST_TIMESTAMP_UTC,
             energy_type=models.EnergyType.SOLAR,
-            authdata={"sub": "access_user"},
+            authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
             observer_name="test_observer",
         )
 
@@ -533,6 +540,8 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 valid_timestamp=TEST_TIMESTAMP_UTC,
                 location_uuid=site_uuid,
                 capacity_kilowatts=0,
+                # observer_name is hardcoded at the router layer for now.
+                # TODO: derive from site metadata organization_id once DP migration is complete.
                 observer_name="ruvnl",
             ),
         ]
@@ -548,7 +557,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location_uuid=site_uuid,
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.SITE,
-            authdata={"sub": "access_user"},
+            authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
         )
         client_mock.CreateObservations.assert_called_once()
         sent = client_mock.CreateObservations.call_args.args[0]
@@ -563,7 +572,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                 location_uuid=site_uuid,
                 energy_type=models.EnergyType.SOLAR,
                 location_type=models.LocationType.SITE,
-                authdata={"sub": "no_access_user"},
+                authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
             )
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
@@ -609,7 +618,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location=loc,
             location_type=models.LocationType.SITE,
             energy_type=models.EnergyType.SOLAR,
-            authdata={"sub": "access_user"},
+            authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
         )
         # Capacity round-trips kW -> watts -> kW, and lat/lng come from the fetched location.
         self.assertEqual(resp.capacity_kilowatts, 5.0)
@@ -628,7 +637,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             location=loc,
             location_type=models.LocationType.SITE,
             energy_type=models.EnergyType.SOLAR,
-            authdata={"sub": "no_access_user"},
+            authdata={"app_metadata": {"hubspot_company_id": "no_access_org"}},
         )
         self.assertNotEqual(created.uuid, site_uuid)
         self.assertEqual(created.capacity_kilowatts, 5.0)
