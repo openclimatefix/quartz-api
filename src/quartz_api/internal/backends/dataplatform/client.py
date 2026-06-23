@@ -271,7 +271,7 @@ class StorageClient(models.StorageInterface):
         if observer_name is None:
             raise ValueError("Observer must be specified for data platform backend.")
 
-        if authdata != {} and location_type == models.LocationType.SITE:
+        if authdata != {}:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
@@ -320,7 +320,7 @@ class StorageClient(models.StorageInterface):
         if not generation_values:
             return
 
-        if authdata != {} and location_type == models.LocationType.SITE:
+        if authdata != {}:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
