@@ -171,7 +171,7 @@ async def get_generation(
     # TODO: observer_name should be derived from the site's organization_id metadata
     # in the data platform (via get_locations -> location.metadata["organization_id"]).
     # Hardcoded for now until the DP migration is complete.
-    observer_name = "ind_rajasthan"
+    observer_name = "site_api"
     site = await _get_site_with_energy_type(db, site_uuid, auth)
     agvs = await db.get_actual_generation(
         location_uuid=site_uuid,
@@ -243,7 +243,7 @@ async def post_generation(
             valid_timestamp=g.Time,
             location_uuid=site_uuid,
             capacity_kilowatts=0,  # NOTE: This is ignored when writing
-            observer_name="ind_rajasthan",  # TODO: presumably this could change based on user input
+            observer_name="site_api",  # TODO: presumably this could change based on user input
         )
         for g in generation
     ]
