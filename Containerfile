@@ -38,6 +38,11 @@ RUN rm -rf /opt/app/.venv/lib/python3.12/site-packages/**/test_*
 # --- Runtime image (use distroless if feasible for 100MB saving) --- #
 FROM python:3.12-slim-bookworm AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libexpat1 \
+    libgdal32 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/app
 # Copy just the virtual environment into a runtime image
 COPY --from=build-app /opt/app/.venv /opt/app/.venv
