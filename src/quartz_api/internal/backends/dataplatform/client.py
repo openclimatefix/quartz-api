@@ -96,9 +96,13 @@ class StorageClient(models.StorageInterface):
                 minutes=forecast_horizon_minutes,
             )
 
+        _site_level = location_type in (
+            models.LocationType.SITE,
+            models.LocationType.SUBSTATION,
+        )
         organisation_id: str | None = (
             get_org_id_from_authdata(authdata)
-            if authdata != {} and location_type in (models.LocationType.SITE, models.LocationType.SUBSTATION)
+            if authdata != {} and _site_level
             else None
         )
         req = messages_pb2.ListLocationsRequest(
