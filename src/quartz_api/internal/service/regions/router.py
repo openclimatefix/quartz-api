@@ -168,11 +168,16 @@ async def get_forecast_timeseries_route(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
         ),
-        location_type=models.LocationType.REGION,
+        location_type=None,
         authdata={},
     )
-    locations = [location for location in locations if location.name == region]
+    locations = [loc for loc in locations if loc.name == region]
     location = locations[0] if locations else None
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region or GSP '{region}' not found.",
+        )
 
 
     match forecast_horizon, forecast_horizon_minutes:
@@ -261,8 +266,24 @@ async def get_forecast_csv(
                 detail="Invalid forecast_horizon. Must be 'latest' or 'day_ahead'.",
             )
 
+    # Resolve the region/GSP name to a location object (and UUID)
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=None,
+        authdata={},
+    )
+    locations = [loc for loc in locations if loc.name == region]
+    location = locations[0] if locations else None
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region or GSP '{region}' not found.",
+        )
+
     pgvs = await db.get_predicted_generation(
-        location_uuid=region,
+        location_uuid=location.uuid,
         window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime()
         - dt.timedelta(days=2),
         window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
@@ -270,7 +291,7 @@ async def get_forecast_csv(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
         ),
-        location_type=models.LocationType.REGION,
+        location_type=location.location_type,
         forecast_horizon_minutes=horizon_mins,
         authdata=auth,
     )
