@@ -25,7 +25,7 @@ from .endpoint_types import (
 )
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
-
+SITE_OBSERVER_NAME = "site_api"
 
 @router.get(
     "/sources",
@@ -90,17 +90,34 @@ async def get_historic_timeseries_route(
     """Get observed generation as a timeseries for a given source and region."""
     values: list[ActualPower] = []
 
+    # Resolve the region/GSP name to a location object (and UUID)
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=None,
+        authdata={},
+    )
+    locations = [loc for loc in locations if loc.name == region]
+    location = locations[0] if locations else None
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region or GSP '{region}' not found.",
+        )
+
     try:
         agvs = await db.get_actual_generation(
-            location_uuid=region,
+            location_uuid=location.uuid,
             energy_type=(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
             ),
-            location_type=models.LocationType.REGION,
+            location_type=location.location_type,
             window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow(),
             authdata=auth,
+            observer_name=SITE_OBSERVER_NAME,
         )
     except Exception as e:
         raise HTTPException(
