@@ -96,7 +96,11 @@ class StorageClient(models.StorageInterface):
                 minutes=forecast_horizon_minutes,
             )
 
-        organisation_id: str | None = get_org_id_from_authdata(authdata) if authdata != {} else None
+        organisation_id: str | None = (
+            get_org_id_from_authdata(authdata)
+            if authdata != {} and location_type in (models.LocationType.SITE, models.LocationType.SUBSTATION)
+            else None
+        )
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
@@ -271,7 +275,7 @@ class StorageClient(models.StorageInterface):
         if observer_name is None:
             raise ValueError("Observer must be specified for data platform backend.")
 
-        if authdata != {}:
+        if authdata != {} and location_type == models.LocationType.SITE:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
@@ -320,7 +324,7 @@ class StorageClient(models.StorageInterface):
         if not generation_values:
             return
 
-        if authdata != {}:
+        if authdata != {} and location_type == models.LocationType.SITE:
             _ = await self._check_user_access(
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
