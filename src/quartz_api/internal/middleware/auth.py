@@ -109,6 +109,18 @@ def get_oauth_id_from_sub(auth0_sub: str) -> str:
     return auth0_sub.split("|")[1]
 
 
+def get_org_id_from_authdata(authdata: dict) -> str | None:
+    """Extract the HubSpot company ID from JWT app_metadata claims.
+
+    The JWT contains app_metadata with hubspot_company_id which maps
+    to organisation_id_filter in the Data Platform.
+    """
+    app_metadata = authdata.get("app_metadata", {})
+    if isinstance(app_metadata, dict):
+        return app_metadata.get("hubspot_company_id")
+    return None
+
+
 def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:
     """Generate API authentication description."""
     # note that the odd indentation here is needed for to make the f-string and markdown work

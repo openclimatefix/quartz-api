@@ -1,6 +1,5 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 import datetime as dt
-import logging
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -13,9 +12,7 @@ from timezonefinder import timezone_at
 from typing_extensions import override
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import get_oauth_id_from_sub
-
-log = logging.getLogger("dataplatform.client")
+from quartz_api.internal.middleware.auth import get_org_id_from_authdata
 
 energy_type_map: dict[models.EnergyType, common_pb2.EnergySource] = {
     models.EnergyType.SOLAR: common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
@@ -99,14 +96,12 @@ class StorageClient(models.StorageInterface):
                 minutes=forecast_horizon_minutes,
             )
 
-        oauth_id: str | None = (
-            get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
-        )
+        organisation_id: str | None = get_org_id_from_authdata(authdata) if authdata != {} else None
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
             location_type_filter=location_type_map[location_type],
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=organisation_id,
         )
         resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
@@ -122,7 +117,6 @@ class StorageClient(models.StorageInterface):
             req = messages_pb2.ListLocationsRequest(
                 enclosed_location_uuid_filter=str(location_uuid),
                 location_type_filter=common_pb2.LocationType.LOCATION_TYPE_GSP,
-                user_oauth_id_filter=oauth_id,
             )
             gsps = await self.dpc.ListLocations(req)
             if len(gsps.locations) == 0:
@@ -282,7 +276,7 @@ class StorageClient(models.StorageInterface):
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
-                oauth_id=get_oauth_id_from_sub(authdata["sub"]),
+                org_id=get_org_id_from_authdata(authdata),
             )
 
         req = messages_pb2.GetObservationsAsTimeseriesRequest(
@@ -331,7 +325,7 @@ class StorageClient(models.StorageInterface):
                 location_uuid=location_uuid,
                 energy_source=energy_type_map[energy_type],
                 location_type=location_type_map[location_type],
-                oauth_id=get_oauth_id_from_sub(authdata["sub"]),
+                org_id=get_org_id_from_authdata(authdata),
             )
 
         observer_name = generation_values[0].observer_name
@@ -452,7 +446,7 @@ class StorageClient(models.StorageInterface):
     @override
     async def get_locations(
         self,
-        energy_type: models.EnergyType,
+        energy_type: models.EnergyType | None,
         location_type: models.LocationType | None,
         authdata: dict[str, str],
         location_uuid: UUID | None = None,
@@ -464,37 +458,41 @@ class StorageClient(models.StorageInterface):
         match energy_type, location_type:
             case models.EnergyType.WIND, models.LocationType.REGION:
                 # get_wind_regions had no auth
-                oauth_id: str | None = None
+                organisation_id: str | None = None
             case (
                 models.EnergyType.SOLAR,
                 models.LocationType.NATION | models.LocationType.GSP | models.LocationType.REGION,
             ):
                 # get_solar_regions had no auth
-                oauth_id = None
+                organisation_id = None
             case _, models.LocationType.SUBSTATION:
                 # get substations had optional auth (?) (temporary while we onboard?)
-                oauth_id = (
-                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
                 )
             case _, models.LocationType.SITE:
-                # get_sites had auth
-                oauth_id = get_oauth_id_from_sub(authdata["sub"])
+                # get_sites had auth (HubSpot company ID)
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
+                )
             case _, None:
                 # No location type filter — used by v1 API for listing all region types
-                oauth_id = (
-                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
                 )
             case _:
-                oauth_id = (
-                    get_oauth_id_from_sub(authdata["sub"]) if authdata != {} else None
+                organisation_id = (
+                    get_org_id_from_authdata(authdata) if authdata != {} else None
                 )
 
         req = messages_pb2.ListLocationsRequest(
-            energy_source_filter=energy_type_map[energy_type],
+            energy_source_filter=(
+                energy_type_map[energy_type] if energy_type is not None else None
+            ),
             location_type_filter=(
                 location_type_map[location_type] if location_type is not None else None
             ),
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=organisation_id,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []
             ),
@@ -507,6 +505,11 @@ class StorageClient(models.StorageInterface):
         )
         resp = await self.dpc.ListLocations(req)
 
+        # Reverse map from proto EnergySource -> internal EnergyType
+        dp_to_internal_energy_type: dict[common_pb2.EnergySource, models.EnergyType] = {
+            v: k for k, v in energy_type_map.items()
+        }
+
         def _map_resp(resp: messages_pb2.ListLocationsResponse) -> list[models.Location]:
             out: list[models.Location] = [
                 models.Location(
@@ -516,6 +519,7 @@ class StorageClient(models.StorageInterface):
                     latitude=loc.latlng.latitude,
                     longitude=loc.latlng.longitude,
                     location_type=dp_to_internal_location_type.get(loc.location_type),
+                    energy_type=dp_to_internal_energy_type.get(loc.energy_source),
                     metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},
                 )
                 for loc in resp.locations
@@ -598,20 +602,20 @@ class StorageClient(models.StorageInterface):
         location_uuid: UUID,
         energy_source: common_pb2.EnergySource,
         location_type: common_pb2.LocationType,
-        oauth_id: str,
+        org_id: str | None,
     ) -> models.Location:
-        """Check if a user has access to a given location."""
+        """Check if an organisation has access to a given location."""
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_source,
             location_type_filter=location_type,
-            user_oauth_id_filter=oauth_id,
+            organisation_id_filter=org_id,
         )
         resp = await self.dpc.ListLocations(req)
         if len(resp.locations) == 0:
             raise HTTPException(
                 status_code=404,
-                detail=f"No location found for UUID {location_uuid} and OAuth ID {oauth_id}",
+                detail=f"No location found for UUID {location_uuid} and org ID {org_id}",
             )
         loc = resp.locations[0]
 
