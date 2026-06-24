@@ -27,6 +27,33 @@ from .endpoint_types import (
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 SITE_OBSERVER_NAME = "site_api"
 
+
+async def _resolve_region(
+    db: models.StorageInterface,
+    source: str,
+    region_name: str,
+) -> models.Location:
+    """Resolve a region/GSP name to its location object.
+
+    Raises HTTP 404 if not found.
+    """
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=None,
+        authdata={},
+    )
+    locations = [loc for loc in locations if loc.name == region_name]
+    location = locations[0] if locations else None
+    if location is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region or GSP '{region_name}' not found.",
+        )
+    return location
+
+
 @router.get(
     "/sources",
     status_code=status.HTTP_200_OK,
@@ -90,21 +117,7 @@ async def get_historic_timeseries_route(
     """Get observed generation as a timeseries for a given source and region."""
     values: list[ActualPower] = []
 
-    # Resolve the region/GSP name to a location object (and UUID)
-    locations = await db.get_locations(
-        energy_type=(
-            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
-        ),
-        location_type=None,
-        authdata={},
-    )
-    locations = [loc for loc in locations if loc.name == region]
-    location = locations[0] if locations else None
-    if location is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region or GSP '{region}' not found.",
-        )
+    location = await _resolve_region(db, source, region)
 
     try:
         agvs = await db.get_actual_generation(
@@ -164,20 +177,7 @@ async def get_forecast_timeseries_route(
     day_ahead_forecast = False
     day_ahead_closure_time_local = None
 
-    locations = await db.get_locations(
-        energy_type=(
-            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
-        ),
-        location_type=None,
-        authdata={},
-    )
-    locations = [loc for loc in locations if loc.name == region]
-    location = locations[0] if locations else None
-    if location is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region or GSP '{region}' not found.",
-        )
+    location = await _resolve_region(db, source, region)
 
 
     match forecast_horizon, forecast_horizon_minutes:
@@ -266,21 +266,7 @@ async def get_forecast_csv(
                 detail="Invalid forecast_horizon. Must be 'latest' or 'day_ahead'.",
             )
 
-    # Resolve the region/GSP name to a location object (and UUID)
-    locations = await db.get_locations(
-        energy_type=(
-            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
-        ),
-        location_type=None,
-        authdata={},
-    )
-    locations = [loc for loc in locations if loc.name == region]
-    location = locations[0] if locations else None
-    if location is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region or GSP '{region}' not found.",
-        )
+    location = await _resolve_region(db, source, region)
 
     pgvs = await db.get_predicted_generation(
         location_uuid=location.uuid,
