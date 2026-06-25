@@ -114,10 +114,12 @@ async def get_national_forecast(
     10am today is the 4-hour forecast for 10am.
 
     #### Parameters
-    - **forecast_horizon_minutes**: optional forecast horizon in minutes (ex.
-    60 returns the forecast made an hour before the target time)
+    - **include_metadata**: if true, returns a NationalForecast object with
+    metadata about the forecast, including model name and creation datetime.
     - **start_datetime_utc**: optional start datetime for the query.
     - **end_datetime_utc**: optional end datetime for the query.
+    - **forecast_horizon_minutes**: optional forecast horizon in minutes (ex.
+    60 returns the forecast made an hour before the target time)
     - **creation_limit_utc**: optional, only return forecasts made before this datetime.
     Note you can only go 7 days back at the moment
     - **model_name**: optional, specify which model to use for the forecast.
