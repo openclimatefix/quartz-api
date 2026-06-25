@@ -31,7 +31,10 @@ async def test_get_sources(api_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_regions(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_regions(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving regions for solar."""
     mock_storage.get_locations.return_value = [
         models.Location(
@@ -42,7 +45,7 @@ async def test_get_regions(api_client: AsyncClient, mock_storage: AsyncMock) -> 
             capacity_kilowatts=5_000,
             location_type=models.LocationType.REGION,
             energy_type=models.EnergyType.SOLAR,
-        )
+        ),
     ]
     resp = await api_client.get("/solar/regions")
     assert resp.status_code == 200
@@ -50,7 +53,10 @@ async def test_get_regions(api_client: AsyncClient, mock_storage: AsyncMock) -> 
 
 
 @pytest.mark.asyncio
-async def test_get_historic_generation_success(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_historic_generation_success(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving historic generation for a valid region."""
     mock_storage.get_locations.return_value = [
         models.Location(
@@ -61,7 +67,7 @@ async def test_get_historic_generation_success(api_client: AsyncClient, mock_sto
             capacity_kilowatts=5_000,
             location_type=models.LocationType.REGION,
             energy_type=models.EnergyType.SOLAR,
-        )
+        ),
     ]
     mock_storage.get_actual_generation.return_value = []
 
@@ -76,7 +82,10 @@ async def test_get_historic_generation_success(api_client: AsyncClient, mock_sto
 
 
 @pytest.mark.asyncio
-async def test_get_historic_generation_404(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_historic_generation_404(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving historic generation for an invalid region."""
     mock_storage.get_locations.return_value = []
     resp = await api_client.get("/solar/invalid_region/generation")
@@ -85,7 +94,10 @@ async def test_get_historic_generation_404(api_client: AsyncClient, mock_storage
 
 
 @pytest.mark.asyncio
-async def test_get_forecast_success(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_forecast_success(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving forecast for a valid region."""
     mock_storage.get_locations.return_value = [
         models.Location(
@@ -96,7 +108,7 @@ async def test_get_forecast_success(api_client: AsyncClient, mock_storage: Async
             capacity_kilowatts=5_000,
             location_type=models.LocationType.REGION,
             energy_type=models.EnergyType.SOLAR,
-        )
+        ),
     ]
     mock_storage.get_predicted_generation.return_value = []
 
@@ -106,7 +118,10 @@ async def test_get_forecast_success(api_client: AsyncClient, mock_storage: Async
 
 
 @pytest.mark.asyncio
-async def test_get_forecast_404(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_forecast_404(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving forecast for an invalid region."""
     mock_storage.get_locations.return_value = []
     resp = await api_client.get("/solar/invalid_region/forecast?forecast_horizon=latest")
@@ -115,7 +130,10 @@ async def test_get_forecast_404(api_client: AsyncClient, mock_storage: AsyncMock
 
 
 @pytest.mark.asyncio
-async def test_get_forecast_csv_success(api_client: AsyncClient, mock_storage: AsyncMock) -> None:
+async def test_get_forecast_csv_success(
+    api_client: AsyncClient,
+    mock_storage: AsyncMock,
+) -> None:
     """Test retrieving forecast CSV for a valid region."""
     mock_storage.get_locations.return_value = [
         models.Location(
@@ -126,9 +144,9 @@ async def test_get_forecast_csv_success(api_client: AsyncClient, mock_storage: A
             capacity_kilowatts=5_000,
             location_type=models.LocationType.REGION,
             energy_type=models.EnergyType.SOLAR,
-        )
+        ),
     ]
-    
+
     now = dt.datetime.now(tz=dt.UTC)
     mock_storage.get_predicted_generation.return_value = [
         models.PredictedGenerationValue(
@@ -140,7 +158,7 @@ async def test_get_forecast_csv_success(api_client: AsyncClient, mock_storage: A
             forecaster_version="1.0.0",
             created_timestamp=now,
             init_timestamp=now,
-        )
+        ),
     ]
 
     resp = await api_client.get(f"/solar/{_REGIONAL_NAME}/forecast/csv?forecast_horizon=latest")
