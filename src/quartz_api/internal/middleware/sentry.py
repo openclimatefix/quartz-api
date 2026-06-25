@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from quartz_api.internal.middleware import auth
+from quartz_api.internal.middleware.auth import get_org_id_from_authdata
 
 
 class SentryUserMiddleware(BaseHTTPMiddleware):
@@ -41,6 +42,9 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
                             "email": payload.get(auth.EMAIL_KEY),
                         },
                     )
+                    org_id = get_org_id_from_authdata(payload)
+                    if org_id:
+                        sentry_sdk.set_tag("hubspot_company_id", org_id)
             except Exception:
                 # silently fail to not break requests
                 logging.debug("Could not extract user for Sentry")
