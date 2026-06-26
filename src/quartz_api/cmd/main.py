@@ -466,7 +466,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     if conf.get_string("backend.source") != "dataplatform":
         server.add_middleware(audit.RequestLoggerMiddleware)
-    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=None)
+    server.add_middleware(sentry.SentryUserMiddleware, auth_instance=auth.auth_instance)
     if conf.get_string("apitally.client_id") != "":
         server.add_middleware(
             ApitallyMiddleware,
