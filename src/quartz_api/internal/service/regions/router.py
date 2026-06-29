@@ -25,33 +25,6 @@ from .endpoint_types import (
 )
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
-SITE_OBSERVER_NAME = "site_api"
-
-
-async def _resolve_region(
-    db: models.StorageInterface,
-    source: str,
-    region_name: str,
-) -> models.Location:
-    """Resolve a region/GSP name to its location object.
-
-    Raises HTTP 404 if not found.
-    """
-    locations = await db.get_locations(
-        energy_type=(
-            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
-        ),
-        location_type=None,
-        authdata={},
-    )
-    locations = [loc for loc in locations if loc.name == region_name]
-    location = locations[0] if locations else None
-    if location is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region or GSP '{region_name}' not found.",
-        )
-    return location
 
 
 @router.get(
@@ -117,20 +90,17 @@ async def get_historic_timeseries_route(
     """Get observed generation as a timeseries for a given source and region."""
     values: list[ActualPower] = []
 
-    location = await _resolve_region(db, source, region)
-
     try:
         agvs = await db.get_actual_generation(
-            location_uuid=location.uuid,
+            location_uuid=region,
             energy_type=(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
             ),
-            location_type=location.location_type,
+            location_type=models.LocationType.REGION,
             window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow(),
             authdata=auth,
-            observer_name=SITE_OBSERVER_NAME,
         )
     except Exception as e:
         raise HTTPException(
@@ -177,7 +147,15 @@ async def get_forecast_timeseries_route(
     day_ahead_forecast = False
     day_ahead_closure_time_local = None
 
-    location = await _resolve_region(db, source, region)
+    locations = await db.get_locations(
+        energy_type=(
+            models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
+        ),
+        location_type=models.LocationType.REGION,
+        authdata={},
+    )
+    locations = [location for location in locations if location.name == region]
+    location = locations[0] if locations else None
 
 
     match forecast_horizon, forecast_horizon_minutes:
@@ -266,10 +244,8 @@ async def get_forecast_csv(
                 detail="Invalid forecast_horizon. Must be 'latest' or 'day_ahead'.",
             )
 
-    location = await _resolve_region(db, source, region)
-
     pgvs = await db.get_predicted_generation(
-        location_uuid=location.uuid,
+        location_uuid=region,
         window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime()
         - dt.timedelta(days=2),
         window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
@@ -277,7 +253,7 @@ async def get_forecast_csv(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
         ),
-        location_type=location.location_type,
+        location_type=models.LocationType.REGION,
         forecast_horizon_minutes=horizon_mins,
         authdata=auth,
     )
