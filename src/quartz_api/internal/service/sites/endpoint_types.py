@@ -17,8 +17,8 @@ class SiteProperties(BaseModel):
                 "latitude": -90,
                 "longitude": -180,
                 "capacity_kw": 0,
-            }
-        }
+            },
+        },
     }
 
     latitude: float | None = Field(
@@ -85,8 +85,8 @@ class Site(SiteProperties):
                 "latitude": -90,
                 "longitude": -180,
                 "capacity_kw": 0,
-            }
-        }
+            },
+        },
     }
 
     site_uuid: UUID = Field(

@@ -57,7 +57,7 @@ def _resolve_forecaster_name(site: models.Location) -> str:
 
     raise ValueError(
         f"Site {site.uuid} has no forecast_name in metadata and an unrecognised "
-        f"energy_type '{energy_type}'. Set metadata.forecast_name explicitly."
+        f"energy_type '{energy_type}'. Set metadata.forecast_name explicitly.",
     )
 
 
@@ -180,7 +180,7 @@ async def get_forecast(
     try:
         forecaster_name = _resolve_forecaster_name(site)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
     pgvs = await db.get_predicted_generation(
         location_uuid=site_uuid,
