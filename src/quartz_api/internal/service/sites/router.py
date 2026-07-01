@@ -1,6 +1,7 @@
 """The 'sites' FastAPI router object and associated routes logic."""
 
 import datetime as dt
+import logging
 import pathlib
 from uuid import UUID
 
@@ -11,13 +12,53 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .endpoint_types import ActualPower, PredictedPower, Site, SiteProperties
+from .endpoint_types import Site, SiteActualPower, SitePredictedPower, SiteProperties
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
 # Observer name used when reading/writing site-level generation data.
 # TODO: should be derived per-site from organisation metadata once DP migration is complete.
 SITE_OBSERVER_NAME = "site_api"
+
+# Default forecaster names by energy type, used when a site has no
+# explicit forecast_name set in its metadata.
+_DEFAULT_FORECASTER: dict[models.EnergyType, str] = {
+    models.EnergyType.WIND: "windnet_ad_sites",
+    models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long",
+}
+
+
+def _resolve_forecaster_name(site: models.Location) -> str:
+    """Return the forecaster model name to use for a given site.
+
+    Resolution order:
+    1. ``site.metadata["forecast_name"]`` — explicit per-site override stored in the DP.
+    2. Hardcoded default keyed by ``site.energy_type`` — fallback for any new sites
+       that don't yet have forecast_name set in their DP metadata.
+    3. Raises ValueError if the energy type is unrecognised and there is no override
+       (fail loudly rather than silently serving the wrong model).
+    """
+    override = site.metadata.get("forecast_name")
+    if override:
+        log.info("Using forecast_name from metadata for site %s: %s", site.uuid, override)
+        return str(override)
+
+    energy_type = site.energy_type
+    if energy_type in _DEFAULT_FORECASTER:
+        name = _DEFAULT_FORECASTER[energy_type]
+        log.info(
+            "No forecast_name in metadata for site %s; defaulting to %s",
+            site.uuid,
+            name,
+        )
+        return name
+
+    raise ValueError(
+        f"Site {site.uuid} has no forecast_name in metadata and an unrecognised "
+        f"energy_type '{energy_type}'. Set metadata.forecast_name explicitly."
+    )
 
 
 async def _get_site_with_energy_type(
@@ -61,13 +102,12 @@ async def get_sites(
     out: list[Site] = [
         Site(
             site_uuid=s.uuid,
-            client_site_name=s.name,
+            client_site_name=s.metadata.get("client_site_name") or s.name,
             latitude=s.latitude,
             longitude=s.longitude,
-            capacity_kW=s.capacity_kilowatts,
+            capacity_kw=s.capacity_kilowatts,
             orientation=s.metadata.get("orientation"),
             tilt=s.metadata.get("tilt"),
-            metadata=s.metadata,
         )
         for s in sites
     ]
@@ -93,7 +133,7 @@ async def put_site_info(
     loc: models.Location = models.Location(
         uuid=site_uuid,
         name=site_info.client_site_name,
-        capacity_kilowatts=site_info.capacity_kW,
+        capacity_kilowatts=site_info.capacity_kw,
         latitude=site_info.latitude,
         longitude=site_info.longitude,
         metadata={
@@ -104,8 +144,7 @@ async def put_site_info(
                 "client_site_name": site_info.client_site_name,
             }.items()
             if v is not None
-        }
-        | site_info.metadata,
+        },
     )
     site = await db.put_location(
         location=loc,
@@ -116,11 +155,10 @@ async def put_site_info(
     out: SiteProperties = SiteProperties(
         latitude=site.latitude,
         longitude=site.longitude,
-        capacity_kW=site.capacity_kilowatts,
+        capacity_kw=site.capacity_kilowatts,
         orientation=site.metadata.get("orientation"),
         tilt=site.metadata.get("tilt"),
         client_site_name=site.name,
-        metadata=site.metadata,
     )
     return out
 
@@ -128,15 +166,22 @@ async def put_site_info(
 @router.get(
     "/sites/{site_uuid}/forecast",
     status_code=status.HTTP_200_OK,
+    response_model=list[SitePredictedPower],
 )
 async def get_forecast(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     tz: models.TZDependency,
-) -> list[PredictedPower]:
+) -> list[SitePredictedPower]:
     """Get forecast of a site (Solar or Wind, auto-detected)."""
     site = await _get_site_with_energy_type(db, site_uuid, auth)
+
+    try:
+        forecaster_name = _resolve_forecaster_name(site)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
     pgvs = await db.get_predicted_generation(
         location_uuid=site_uuid,
         window_start=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() - dt.timedelta(days=2),
@@ -144,16 +189,15 @@ async def get_forecast(
         energy_type=site.energy_type or models.EnergyType.SOLAR,
         location_type=models.LocationType.SITE,
         authdata=auth,
+        forecaster_name=forecaster_name,
     )
-    out: list[PredictedPower] = [
-        PredictedPower(
+    out: list[SitePredictedPower] = [
+        SitePredictedPower(
             PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
-            created_time=v.created_timestamp.astimezone(tz=tz),
-            initialization_timestamp_utc=v.init_timestamp.astimezone(tz=tz),
+            created_time=v.created_timestamp.astimezone(tz=tz) if v.created_timestamp else None,
             forecaster_name=v.forecaster_name,
             forecaster_version=v.forecaster_version,
-            plevel_kW=v.plevels_kilowatts,
         )
         for v in pgvs
     ]
@@ -164,13 +208,14 @@ async def get_forecast(
 @router.get(
     "/sites/{site_uuid}/generation",
     status_code=status.HTTP_200_OK,
+    response_model=list[SiteActualPower],
 )
 async def get_generation(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     tz: models.TZDependency,
-) -> list[ActualPower]:
+) -> list[SiteActualPower]:
     """Get generation of a site (Solar or Wind, auto-detected)."""
     observer_name = SITE_OBSERVER_NAME
     site = await _get_site_with_energy_type(db, site_uuid, auth)
@@ -183,11 +228,10 @@ async def get_generation(
         authdata=auth,
         observer_name=observer_name,
     )
-    out: list[ActualPower] = [
-        ActualPower(
+    out: list[SiteActualPower] = [
+        SiteActualPower(
             PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
-            location_uuid=str(v.location_uuid),
         )
         for v in agvs
     ]
@@ -200,7 +244,7 @@ async def get_generation(
 )
 async def post_generation(
     site_uuid: UUID,
-    generation: list[ActualPower],
+    generation: list[SiteActualPower],
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> None:
