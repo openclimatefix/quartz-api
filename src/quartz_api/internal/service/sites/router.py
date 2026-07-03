@@ -12,7 +12,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .endpoint_types import Site, SiteActualPower, SitePredictedPower, SiteProperties
+from .endpoint_types import ActualPower, PredictedPower, Site, SiteProperties
 
 log = logging.getLogger(__name__)
 
@@ -166,14 +166,14 @@ async def put_site_info(
 @router.get(
     "/sites/{site_uuid}/forecast",
     status_code=status.HTTP_200_OK,
-    response_model=list[SitePredictedPower],
+    response_model=list[PredictedPower],
 )
 async def get_forecast(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     tz: models.TZDependency,
-) -> list[SitePredictedPower]:
+) -> list[PredictedPower]:
     """Get forecast of a site (Solar or Wind, auto-detected)."""
     site = await _get_site_with_energy_type(db, site_uuid, auth)
 
@@ -191,8 +191,8 @@ async def get_forecast(
         authdata=auth,
         forecaster_name=forecaster_name,
     )
-    out: list[SitePredictedPower] = [
-        SitePredictedPower(
+    out: list[PredictedPower] = [
+        PredictedPower(
             PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
             created_time=v.created_timestamp.astimezone(tz=tz) if v.created_timestamp else None,
@@ -208,14 +208,14 @@ async def get_forecast(
 @router.get(
     "/sites/{site_uuid}/generation",
     status_code=status.HTTP_200_OK,
-    response_model=list[SiteActualPower],
+    response_model=list[ActualPower],
 )
 async def get_generation(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
     tz: models.TZDependency,
-) -> list[SiteActualPower]:
+) -> list[ActualPower]:
     """Get generation of a site (Solar or Wind, auto-detected)."""
     observer_name = SITE_OBSERVER_NAME
     site = await _get_site_with_energy_type(db, site_uuid, auth)
@@ -228,8 +228,8 @@ async def get_generation(
         authdata=auth,
         observer_name=observer_name,
     )
-    out: list[SiteActualPower] = [
-        SiteActualPower(
+    out: list[ActualPower] = [
+        ActualPower(
             PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
         )
@@ -244,7 +244,7 @@ async def get_generation(
 )
 async def post_generation(
     site_uuid: UUID,
-    generation: list[SiteActualPower],
+    generation: list[ActualPower],
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> None:

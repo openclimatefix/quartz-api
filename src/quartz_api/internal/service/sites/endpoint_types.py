@@ -89,10 +89,8 @@ class Site(SiteProperties):
     )
 
 
-class SitePredictedPower(BaseModel):
+class PredictedPower(BaseModel):
     """Defines the data structure for a predicted power value returned by the API."""
-
-    model_config = {"title": "PredictedPower"}
 
     PowerKW: float
     Time: AwareDatetime
@@ -101,10 +99,8 @@ class SitePredictedPower(BaseModel):
     forecaster_name: str = Field(exclude=True, default="not-set")
 
 
-class SiteActualPower(BaseModel):
+class ActualPower(BaseModel):
     """Defines the data structure for an actual power value returned by the API."""
-
-    model_config = {"title": "ActualPower"}
 
     PowerKW: float
     Time: AwareDatetime
