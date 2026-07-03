@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # Bounding box to crop to UK
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
-BACKFILL_HOURS = 4
+BACKFILL_HOURS = 48
 # config to remove artifacts during nighttime
 SOLAR_NOISE_CONFIG = {
     "VIS006": {"percentile": 99.0, "cliff_limit": 5.0},
@@ -118,7 +118,7 @@ def _run_ingest() -> tuple[str, str]:
     r0, r1 = max(0, int(row_min)), min(len(y), int(row_max))
     c0, c1 = max(0, int(col_min)), min(len(x), int(col_max))
 
-    # Filter to last 4 hours
+    # Filter to last 48 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
     all_times = ds.time.values
     window_times = [(i, t) for i, t in enumerate(all_times) if t >= cutoff]
