@@ -10,36 +10,32 @@ class SiteProperties(BaseModel):
 
     latitude: float | None = Field(
         None,
-        json_schema_extra={"description": "The location's latitude"},
+        description="The location's latitude",
         ge=-90,
         le=90,
     )
     longitude: float | None = Field(
         None,
-        json_schema_extra={"description": "The location's longitude"},
+        description="The location's longitude",
         ge=-180,
         le=180,
     )
     capacity_kw: float | None = Field(
         None,
-        json_schema_extra={"description": "The location's total capacity in kw"},
+        description="The location's total capacity in kw",
         ge=0,
     )
     client_site_name: str | None = Field(
         None,
-        json_schema_extra={"description": "The name of the site as given by the providing user."},
+        description="The name of the site as given by the providing user.",
     )
     orientation: float | None = Field(
         None,
-        json_schema_extra={
-            "description": "The rotation of the panel in degrees. 180° points south",
-        },
+        description="The rotation of the panel in degrees. 180° points south",
     )
     tilt: float | None = Field(
         None,
-        json_schema_extra={
-            "description": "The tile of the panel in degrees. 90° indicates the panel is vertical.",
-        },
+        description="The tile of the panel in degrees. 90° indicates the panel is vertical.",
     )
 
     @field_validator("latitude")
@@ -64,36 +60,32 @@ class Site(SiteProperties):
 
     site_uuid: UUID = Field(
         ...,
-        json_schema_extra={"description": "The site uuid assigned by ocf."},
+        description="The site uuid assigned by ocf.",
     )
     latitude: float = Field(
         ...,
-        json_schema_extra={"description": "The site's latitude"},
+        description="The site's latitude",
         ge=-90,
         le=90,
     )
     longitude: float = Field(
         ...,
-        json_schema_extra={"description": "The site's longitude"},
+        description="The site's longitude",
         ge=-180,
         le=180,
     )
     capacity_kw: float = Field(
         ...,
-        json_schema_extra={"description": "The site's total capacity in kw"},
+        description="The site's total capacity in kw",
         ge=0,
     )
     orientation: float | None = Field(
         180,
-        json_schema_extra={
-            "description": "The rotation of the panel in degrees. 180° points south",
-        },
+        description="The rotation of the panel in degrees. 180° points south",
     )
     tilt: float | None = Field(
         35,
-        json_schema_extra={
-            "description": "The tile of the panel in degrees. 90° indicates the panel is vertical.",
-        },
+        description="The tile of the panel in degrees. 90° indicates the panel is vertical.",
     )
 
 
