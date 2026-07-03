@@ -64,6 +64,11 @@ def _run_ingest() -> tuple[str, str]:
     region = get_region()
     s3_client = get_s3_client()
 
+    log.info(
+        "Ingest config: geotiff_bucket=%s icechunk_bucket=%s icechunk_prefix=%s region=%s",
+        s3_bucket, icechunk_bucket, icechunk_prefix, region,
+    )
+
     repo = icechunk.Repository.open(
         storage=icechunk.s3_storage(
             bucket=icechunk_bucket,
@@ -72,6 +77,11 @@ def _run_ingest() -> tuple[str, str]:
         ),
     )
     ds = xr.open_zarr(repo.readonly_session("main").store)
+    log.info(
+        "Opened zarr store: time_range=%s..%s channels=%s data_shape=%s",
+        ds.time.values.min(), ds.time.values.max(),
+        list(ds.channel.values), ds["data"].shape,
+    )
 
     proj = ds.attrs["area"]["msg_seviri_fes_3km"]["projection"]
     src_crs = CRS.from_proj4(
