@@ -62,31 +62,6 @@ class Site(SiteProperties):
         ...,
         description="The site uuid assigned by ocf.",
     )
-    latitude: float = Field(
-        ...,
-        description="The site's latitude",
-        ge=-90,
-        le=90,
-    )
-    longitude: float = Field(
-        ...,
-        description="The site's longitude",
-        ge=-180,
-        le=180,
-    )
-    capacity_kw: float = Field(
-        ...,
-        description="The site's total capacity in kw",
-        ge=0,
-    )
-    orientation: float | None = Field(
-        180,
-        description="The rotation of the panel in degrees. 180° points south",
-    )
-    tilt: float | None = Field(
-        35,
-        description="The tile of the panel in degrees. 90° indicates the panel is vertical.",
-    )
 
 
 class PredictedPower(BaseModel):
