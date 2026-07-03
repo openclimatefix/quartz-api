@@ -140,14 +140,6 @@ def _custom_openapi(
                     {"oauth2": []} if "HTTPBearer" in req else req
                     for req in operation.get("security", [])
                 ]
-
-    # Clean up ValidationError schema to match Pydantic v1 (remove input and ctx)
-    schemas = openapi_schema.get("components", {}).get("schemas", {})
-    if "ValidationError" in schemas:
-        ve_props = schemas["ValidationError"].get("properties", {})
-        ve_props.pop("input", None)
-        ve_props.pop("ctx", None)
-
     server.openapi_schema = openapi_schema
 
     return openapi_schema
