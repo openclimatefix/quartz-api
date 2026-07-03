@@ -8,19 +8,6 @@ from pydantic import AwareDatetime, BaseModel, Field, field_validator
 class SiteProperties(BaseModel):
     """Properties specific to a site."""
 
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "client_site_name": "string",
-                "orientation": 0,
-                "tilt": 0,
-                "latitude": -90,
-                "longitude": -180,
-                "capacity_kw": 0,
-            },
-        },
-    }
-
     latitude: float | None = Field(
         None,
         json_schema_extra={"description": "The location's latitude"},
@@ -74,20 +61,6 @@ class SiteProperties(BaseModel):
 
 class Site(SiteProperties):
     """Site information, including properties and unique identifier."""
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "site_uuid": "string",
-                "client_site_name": "string",
-                "orientation": 180,
-                "tilt": 35,
-                "latitude": -90,
-                "longitude": -180,
-                "capacity_kw": 0,
-            },
-        },
-    }
 
     site_uuid: UUID = Field(
         ...,
