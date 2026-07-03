@@ -195,7 +195,7 @@ async def get_forecast(
         PredictedPower(
             PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
-            created_time=v.created_timestamp.astimezone(tz=tz) if v.created_timestamp else None,
+            created_time=v.created_timestamp.astimezone(tz=tz),
             forecaster_name=v.forecaster_name,
             forecaster_version=v.forecaster_version,
         )
