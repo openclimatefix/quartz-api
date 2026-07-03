@@ -196,7 +196,7 @@ async def test_get_sites_has_required_fields(client: AsyncClient) -> None:
         assert "site_uuid" in site
         assert "latitude" in site
         assert "longitude" in site
-        assert "capacity_kW" in site
+        assert "capacity_kw" in site
         assert "client_site_name" in site
 
 
@@ -353,7 +353,7 @@ async def test_put_site_valid_uuid_returns_200(client: AsyncClient) -> None:
     payload = {
         "latitude": 23.25,
         "longitude": 69.25,
-        "capacity_kW": 300_000,
+        "capacity_kw": 300_000,
         "client_site_name": "ad_seci_5_updated",
         "metadata": {},
     }
@@ -367,7 +367,7 @@ async def test_put_site_unknown_uuid_returns_404(empty_client: AsyncClient) -> N
     payload = {
         "latitude": 0.0,
         "longitude": 0.0,
-        "capacity_kW": 1000,
+        "capacity_kw": 1000,
         "client_site_name": "ghost_site",
         "metadata": {},
     }
