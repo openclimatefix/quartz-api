@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from google.protobuf.struct_pb2 import Struct
+from google.protobuf.timestamp_pb2 import Timestamp
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 from timezonefinder import timezone_at
@@ -567,12 +568,15 @@ class StorageClient(models.StorageInterface):
         current.
         """
         merged_metadata = {**current.metadata, **location.metadata}
+        valid_from_utc = Timestamp()
+        valid_from_utc.GetCurrentTime()
 
         req = messages_pb2.UpdateLocationRequest(
             location_uuid=str(location.uuid),
             energy_source=energy_type_map[energy_type],
             new_effective_capacity_watts=int(location.capacity_kilowatts * 1000),
             new_metadata=dict_to_struct(merged_metadata),
+            valid_from_utc=valid_from_utc,
         )
         if location.name:
             req.new_location_name = location.name

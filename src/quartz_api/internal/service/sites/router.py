@@ -130,9 +130,10 @@ async def put_site_info(
         {"orientation": 170, "tilt": 35, "capacity_kw": 5}
     """
     existing = await _get_site_with_energy_type(db, site_uuid, auth)
+
     loc: models.Location = models.Location(
         uuid=site_uuid,
-        name=site_info.client_site_name,
+        name=existing.name,
         capacity_kilowatts=site_info.capacity_kw,
         latitude=site_info.latitude,
         longitude=site_info.longitude,
@@ -158,7 +159,7 @@ async def put_site_info(
         capacity_kw=site.capacity_kilowatts,
         orientation=site.metadata.get("orientation"),
         tilt=site.metadata.get("tilt"),
-        client_site_name=site.name,
+        client_site_name=site.metadata.get("client_site_name", site.name),
     )
     return out
 
