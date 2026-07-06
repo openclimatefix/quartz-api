@@ -36,6 +36,8 @@ LAYER_CONFIG = {
     "IR_108": {"invert": True},
     "IR_120": {"invert": True},
     "IR_134": {"invert": True},
+    "WV_062": {"invert": True},
+    "WV_073": {"invert": True},
 }
 
 _ingest_running: bool = False
