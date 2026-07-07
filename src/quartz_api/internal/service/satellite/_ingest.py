@@ -24,12 +24,20 @@ log = logging.getLogger(__name__)
 # Bounding box to crop to UK
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
-BACKFILL_HOURS = 4
-# config to remove artifacts during nighttime
-SOLAR_NOISE_CONFIG = {
+BACKFILL_HOURS = 48
+# config to remove artifacts during nighttime and invert channels
+LAYER_CONFIG = {
     "VIS006": {"percentile": 99.0, "cliff_limit": 5.0},
     "VIS008": {"percentile": 99.0, "cliff_limit": 10.0},
     "IR_016": {"percentile": 99.0, "cliff_limit": 12.0},
+    "IR_039": {"invert": True},
+    "IR_087": {"invert": True},
+    "IR_097": {"invert": True},
+    "IR_108": {"invert": True},
+    "IR_120": {"invert": True},
+    "IR_134": {"invert": True},
+    "WV_062": {"invert": True},
+    "WV_073": {"invert": True},
 }
 
 _ingest_running: bool = False
@@ -64,6 +72,11 @@ def _run_ingest() -> tuple[str, str]:
     region = get_region()
     s3_client = get_s3_client()
 
+    log.info(
+        "Ingest config: geotiff_bucket=%s icechunk_bucket=%s icechunk_prefix=%s region=%s",
+        s3_bucket, icechunk_bucket, icechunk_prefix, region,
+    )
+
     repo = icechunk.Repository.open(
         storage=icechunk.s3_storage(
             bucket=icechunk_bucket,
@@ -72,6 +85,11 @@ def _run_ingest() -> tuple[str, str]:
         ),
     )
     ds = xr.open_zarr(repo.readonly_session("main").store)
+    log.info(
+        "Opened zarr store: time_range=%s..%s channels=%s data_shape=%s",
+        ds.time.values.min(), ds.time.values.max(),
+        list(ds.channel.values), ds["data"].shape,
+    )
 
     proj = ds.attrs["area"]["msg_seviri_fes_3km"]["projection"]
     src_crs = CRS.from_proj4(
@@ -108,7 +126,7 @@ def _run_ingest() -> tuple[str, str]:
     r0, r1 = max(0, int(row_min)), min(len(y), int(row_max))
     c0, c1 = max(0, int(col_min)), min(len(x), int(col_max))
 
-    # Filter to last 4 hours
+    # Filter to last 48 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
     all_times = ds.time.values
     window_times = [(i, t) for i, t in enumerate(all_times) if t >= cutoff]
@@ -133,21 +151,25 @@ def _run_ingest() -> tuple[str, str]:
                 arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
                 arr = np.flipud(arr)
 
-                if channel in SOLAR_NOISE_CONFIG:
-                    config = SOLAR_NOISE_CONFIG[channel]
-                    uk_subwindow = arr[r0:r1, c0:c1]
-                    valid_local = uk_subwindow[~np.isnan(uk_subwindow)]
+                if channel in LAYER_CONFIG:
+                    config = LAYER_CONFIG[channel]
 
-                    if len(valid_local) > 0:
-                        p_val = float(np.percentile(valid_local, config["percentile"]))
+                    if "percentile" in config:
+                        uk_subwindow = arr[r0:r1, c0:c1]
+                        valid_local = uk_subwindow[~np.isnan(uk_subwindow)]
 
-                        # Cliff logic switch: if noise distribution crosses the limit,
-                        # true daylight is active -> Drop threshold to 0.0
-                        applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
+                        if len(valid_local) > 0:
+                            p_val = float(np.percentile(valid_local, config["percentile"]))
 
-                        # Flatten noise floor cleanly to uniform black
-                        if applied_threshold > 0.0:
-                            arr = np.where(arr < applied_threshold, 0.0, arr)
+                            # Cliff logic switch: if noise distribution crosses the limit,
+                            # true daylight is active -> Drop threshold to 0.0
+                            applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
+
+                            # Flatten noise floor cleanly to uniform black
+                            if applied_threshold > 0.0:
+                                arr = np.where(arr < applied_threshold, 0.0, arr)
+                    elif config.get("invert"):
+                        arr = 1.0 - arr
 
                 dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
                 reproject(

@@ -140,7 +140,6 @@ def _custom_openapi(
                     {"oauth2": []} if "HTTPBearer" in req else req
                     for req in operation.get("security", [])
                 ]
-
     server.openapi_schema = openapi_schema
 
     return openapi_schema
