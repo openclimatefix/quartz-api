@@ -91,7 +91,8 @@ def _run_ingest() -> tuple[str, str]:
         list(ds.channel.values), ds["data"].shape,
     )
 
-    proj = ds.attrs["area"]["msg_seviri_fes_3km"]["projection"]
+    area = ds.attrs["area"]
+    proj = area[next(iter(area))]["projection"]
     src_crs = CRS.from_proj4(
         f"+proj=geos +lon_0={proj['lon_0']} +h={proj['h']} "
         f"+x_0={proj['x_0']} +y_0={proj['y_0']} "
