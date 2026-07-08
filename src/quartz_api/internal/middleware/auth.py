@@ -119,8 +119,12 @@ def get_org_id_from_authdata(authdata: dict) -> str | None:
         return None
     app_metadata = authdata.get("app_metadata", {})
     if isinstance(app_metadata, dict):
-        return app_metadata.get("hubspot_company_id")
-    return None
+        company_id = app_metadata.get("hubspot_company_id")
+        if company_id:
+            return company_id
+    return "no-org-access"
+
+
 
 
 def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:

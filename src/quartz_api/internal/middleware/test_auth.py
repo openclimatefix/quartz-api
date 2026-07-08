@@ -23,4 +23,5 @@ def test_get_org_id_from_authdata_no_metadata() -> None:
     authdata = {
         "permissions": ["read:india"],
     }
-    assert get_org_id_from_authdata(authdata) is None
+    assert get_org_id_from_authdata(authdata) == "no-org-access"
+
