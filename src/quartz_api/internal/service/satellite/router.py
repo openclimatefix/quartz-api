@@ -71,14 +71,19 @@ def get_historic_satellite_data_url(
 )
 def trigger_ingest(
     background_tasks: BackgroundTasks,
-    # auth: AuthDependency,
+    auth: AuthDependency,
     sat_type: str = "rss",
 ) -> Response:
     """Trigger ingest of latest satellite data for all channels."""
-    # if "ocf:admin" not in auth.get("permissions", []):
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if "ocf:admin" not in auth.get("permissions", []):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     if _ingest_running:
         return Response(status_code=202, content="Ingest already in progress")
+    if sat_type not in ("rss", "0deg"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid sat_type. Must be either 'rss' or '0deg'",
+        )
     background_tasks.add_task(run_ingest, sat_type)
     return Response(
         status_code=202,
