@@ -42,7 +42,7 @@ LAYER_CONFIG = {
 _ingest_running: bool = False
 
 
-def run_ingest(sat_type: str = 'rss') -> tuple[str, str]:
+def run_ingest(sat_type: str = "rss") -> tuple[str, str]:
     """Run ingest of latest satellite data for all channels.
 
     Uploads any missing channel+timestamp combos from the last 4 hours,
@@ -50,6 +50,7 @@ def run_ingest(sat_type: str = 'rss') -> tuple[str, str]:
 
     Args:
         sat_type: Satellite type to ingest, either "rss" or "0deg". Defaults to "rss".
+
     Returns:
         Tuple of (latest timestamp, ts_str).
     """
