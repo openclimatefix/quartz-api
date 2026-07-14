@@ -103,21 +103,20 @@ def test_v1_app_rate_limiting() -> None:
     Uses a local Limiter instance (1/second) to avoid mutating the global
     singleton and keep the test fully isolated.
     """
-    conf = ConfigFactory.parse_string('auth0 { client_id = "test_client" }')
-    v1_app = _create_v1_app(conf, None)
-
-    # Override the auth dependency so it bypasses auth signature verification
-    auth_dep = typing.get_args(AuthDependency)[1].dependency
-    v1_app.dependency_overrides[auth_dep] = lambda: {"sub": "test_user_rate_limit"}
-
-    # Replace the app-level limiter with a local restrictive one (1/second)
-    # so we don't mutate the shared global singleton or rely on LimitGroup internals.
+    # Create a local restrictive limiter (1/second) so we don't mutate
+    # the shared global singleton or rely on LimitGroup internals.
     local_limiter = Limiter(
         key_func=get_user_key,
         default_limits=["1/second"],
         key_style="endpoint",
     )
-    v1_app.state.limiter = local_limiter
+
+    conf = ConfigFactory.parse_string('auth0 { client_id = "test_client" }')
+    v1_app = _create_v1_app(conf, None, limiter=local_limiter)
+
+    # Override the auth dependency so it bypasses auth signature verification
+    auth_dep = typing.get_args(AuthDependency)[1].dependency
+    v1_app.dependency_overrides[auth_dep] = lambda: {"sub": "test_user_rate_limit"}
 
     client = TestClient(v1_app, raise_server_exceptions=False)
 
