@@ -25,11 +25,12 @@ log = logging.getLogger(__name__)
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
 BACKFILL_HOURS = 48
-# config to remove artifacts during nighttime and invert channels
+# config to remove artifacts during nighttime, invert channels, and blackout
+# a channel at recurring daily "HH:MM" (UTC) times-of-day.
 LAYER_CONFIG = {
-    "VIS006": {"percentile": 99.0, "cliff_limit": 5.0},
-    "VIS008": {"percentile": 99.0, "cliff_limit": 10.0},
-    "IR_016": {"percentile": 99.0, "cliff_limit": 12.0},
+    "VIS006": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
+    "VIS008": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
+    "IR_016": {"blackout": ["23:45", "00:15", "00:45"]},
     "IR_039": {"invert": True},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
@@ -148,12 +149,14 @@ def _run_ingest() -> tuple[str, str]:
                 continue
 
             try:
-                chan_idx = list(ds.channel.values).index(channel)
-                arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
-                arr = np.flipud(arr)
+                config = LAYER_CONFIG.get(channel, {})
 
-                if channel in LAYER_CONFIG:
-                    config = LAYER_CONFIG[channel]
+                if ts_str[9:13] in {t.replace(":", "") for t in config.get("blackout", [])}:
+                    dst_arr = np.zeros((dst_h, dst_w), dtype=np.float32)
+                else:
+                    chan_idx = list(ds.channel.values).index(channel)
+                    arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
+                    arr = np.flipud(arr)
 
                     if "percentile" in config:
                         uk_subwindow = arr[r0:r1, c0:c1]
@@ -172,14 +175,14 @@ def _run_ingest() -> tuple[str, str]:
                     elif config.get("invert"):
                         arr = 1.0 - arr
 
-                dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
-                reproject(
-                    source=arr, destination=dst_arr,
-                    src_transform=src_tf, src_crs=src_crs,
-                    dst_transform=dst_tf, dst_crs=dst_crs,
-                    resampling=Resampling.bilinear,
-                    src_nodata=np.nan, dst_nodata=np.nan,
-                )
+                    dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
+                    reproject(
+                        source=arr, destination=dst_arr,
+                        src_transform=src_tf, src_crs=src_crs,
+                        dst_transform=dst_tf, dst_crs=dst_crs,
+                        resampling=Resampling.bilinear,
+                        src_nodata=np.nan, dst_nodata=np.nan,
+                    )
 
                 full_buf = io.BytesIO()
                 with rasterio.open(
