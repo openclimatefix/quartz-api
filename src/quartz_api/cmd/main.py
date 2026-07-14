@@ -171,6 +171,8 @@ def _create_v1_app(
     )
 
     v1_app.state.limiter = ratelimit.limiter
+    v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
 
