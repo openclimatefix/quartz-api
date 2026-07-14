@@ -25,8 +25,7 @@ log = logging.getLogger(__name__)
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
 BACKFILL_HOURS = 48
-# config to remove artifacts during nighttime, invert channels, and blackout
-# a channel at recurring daily "HH:MM" (UTC) times-of-day.
+# Per-channel nighttime cleanup, inversion, and recurring "HH:MM" (UTC) blackout times.
 LAYER_CONFIG = {
     "VIS006": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
     "VIS008": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
@@ -45,14 +44,7 @@ _ingest_running: bool = False
 
 
 def run_ingest() -> tuple[str, str]:
-    """Run ingest of latest satellite data for all channels.
-
-    Uploads any missing channel+timestamp combos from the last 4 hours,
-    skipping ones already present in S3.
-
-    Returns:
-        Tuple of (latest timestamp, ts_str).
-    """
+    """Upload missing channel+timestamp combos from the last 48h; returns (latest_t, ts_str)."""
     global _ingest_running
     if _ingest_running:
         log.info("Ingest already running, skipping")
@@ -165,11 +157,9 @@ def _run_ingest() -> tuple[str, str]:
                         if len(valid_local) > 0:
                             p_val = float(np.percentile(valid_local, config["percentile"]))
 
-                            # Cliff logic switch: if noise distribution crosses the limit,
-                            # true daylight is active -> Drop threshold to 0.0
+                            # Above cliff_limit, daylight is active -> drop threshold to 0.0
                             applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
 
-                            # Flatten noise floor cleanly to uniform black
                             if applied_threshold > 0.0:
                                 arr = np.where(arr < applied_threshold, 0.0, arr)
                     elif config.get("invert"):

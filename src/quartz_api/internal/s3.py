@@ -1,4 +1,6 @@
 """S3 client."""
+from datetime import UTC, datetime, timedelta
+
 import fsspec
 
 # Satellite S3 config, populated at startup via configure() from the parsed
@@ -81,6 +83,19 @@ class S3Client:
     def object_exists(self, bucket: str, key: str) -> bool:
         """Check if an object exists in S3."""
         return self.fs.exists(f"s3://{bucket}/{key}")
+
+    def get_latest_key(
+        self, bucket: str, prefix: str, lookback_minutes: int = 30,
+    ) -> str | None:
+        """Probe 5-min-cadence keys backward from now, return the first one that exists."""
+        ts = datetime.now(tz=UTC).replace(second=0, microsecond=0)
+        ts -= timedelta(minutes=ts.minute % 5)
+        for _ in range(lookback_minutes // 5 + 1):
+            key = f"{prefix}{ts:%Y%m%d_%H%M%S}.tif"
+            if self.object_exists(bucket, key):
+                return key
+            ts -= timedelta(minutes=5)
+        return None
 
     def upload_bytes(self, bucket: str, key: str, data: bytes) -> None:
         """Upload raw bytes to an S3 key."""

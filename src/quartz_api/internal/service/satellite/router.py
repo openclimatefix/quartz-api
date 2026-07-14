@@ -42,11 +42,12 @@ S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
 def get_historic_satellite_data_url(
     request: Request,  # noqa: ARG001
     channel: str,
-    timestamp: datetime,
     s3_client: S3ClientDep,
     _: AuthDependency,
+    timestamp: datetime | None = None,
+    latest: bool = False,
 ) -> HistoricSatelliteData:
-    """Get a pre-signed URL for a historic satellite data file."""
+    """Get a pre-signed URL for a satellite file; ``latest=true`` ignores ``timestamp``."""
     if channel not in VALID_CHANNELS:
         raise HTTPException(
             status_code=400,
@@ -54,6 +55,22 @@ def get_historic_satellite_data_url(
         )
 
     bucket = get_geotiff_bucket()
+
+    if latest:
+        key = s3_client.get_latest_key(bucket, f"layers/{channel}/")
+        if key is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No files found for the given channel in the last 30 minutes",
+            )
+        return HistoricSatelliteData(url=s3_client.get_presigned_url(bucket, key))
+
+    if timestamp is None:
+        raise HTTPException(
+            status_code=400,
+            detail="timestamp is required unless latest=true",
+        )
+
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
 
     if not s3_client.object_exists(bucket, key):
