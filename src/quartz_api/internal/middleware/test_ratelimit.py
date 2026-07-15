@@ -1,10 +1,15 @@
 """Tests for rate limiting utilities."""
+import typing
+
 import jwt
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from pyhocon import ConfigFactory
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from quartz_api.cmd.main import _create_v1_app
+from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import get_user_key
 
 
@@ -90,4 +95,36 @@ def test_get_user_key_falls_back_to_ip_on_invalid_jwt() -> None:
     response = client.get("/key", headers={"Authorization": "Bearer not.a.real.jwt"})
     assert response.status_code == 200
     assert response.json()["key"] == "testclient"
+
+
+def test_v1_app_rate_limiting() -> None:
+    """Test that rate limiting is applied to v1 sub-app routes.
+
+    Uses a local Limiter instance (1/second) to avoid mutating the global
+    singleton and keep the test fully isolated.
+    """
+    # Create a local restrictive limiter (1/second) so we don't mutate
+    # the shared global singleton or rely on LimitGroup internals.
+    local_limiter = Limiter(
+        key_func=get_user_key,
+        default_limits=["1/second"],
+        key_style="endpoint",
+    )
+
+    conf = ConfigFactory.parse_string('auth0 { client_id = "test_client" }')
+    v1_app = _create_v1_app(conf, None, limiter=local_limiter)
+
+    # Override the auth dependency so it bypasses auth signature verification
+    auth_dep = typing.get_args(AuthDependency)[1].dependency
+    v1_app.dependency_overrides[auth_dep] = lambda: {"sub": "test_user_rate_limit"}
+
+    client = TestClient(v1_app, raise_server_exceptions=False)
+
+    # First request should succeed
+    r1 = client.get("/sources")
+    assert r1.status_code == 200
+
+    # Second request within the same second should trigger 429
+    r2 = client.get("/sources")
+    assert r2.status_code == 429
 
