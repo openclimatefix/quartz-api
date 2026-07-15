@@ -14,7 +14,6 @@ from rasterio.windows import from_bounds as window_from_bounds
 from quartz_api.internal.s3 import (
     get_geotiff_bucket,
     get_icechunk_bucket,
-    get_icechunk_prefix,
     get_region,
     get_s3_client,
 )
@@ -43,11 +42,14 @@ LAYER_CONFIG = {
 _ingest_running: bool = False
 
 
-def run_ingest() -> tuple[str, str]:
+def run_ingest(sat_type: str = "rss") -> tuple[str, str]:
     """Run ingest of latest satellite data for all channels.
 
     Uploads any missing channel+timestamp combos from the last 4 hours,
     skipping ones already present in S3.
+
+    Args:
+        sat_type: Satellite type to ingest, either "rss" or "0deg". Defaults to "rss".
 
     Returns:
         Tuple of (latest timestamp, ts_str).
@@ -58,17 +60,20 @@ def run_ingest() -> tuple[str, str]:
         return "", ""
     _ingest_running = True
     try:
-        return _run_ingest()
+        return _run_ingest(sat_type)
     finally:
         _ingest_running = False
 
 
-def _run_ingest() -> tuple[str, str]:
-    log.info("Ingest started")
+def _run_ingest(sat_type: str) -> tuple[str, str]:
+    log.info("Ingest started for sat_type=%s", sat_type)
 
     s3_bucket = get_geotiff_bucket()
     icechunk_bucket = get_icechunk_bucket()
-    icechunk_prefix = get_icechunk_prefix()
+    if sat_type == "0deg":
+        icechunk_prefix = "odegree_v1/data/odegree_uk3000m.icechunk"
+    else: #default to rss
+        icechunk_prefix = "rss_v1/data/rss_uk3000m.icechunk"
     region = get_region()
     s3_client = get_s3_client()
 
