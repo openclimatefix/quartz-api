@@ -45,7 +45,3 @@ default_limits = ["3600/hour", "2/second"]
 
 limiter = Limiter(key_func=get_user_key, default_limits=default_limits, key_style="endpoint")
 
-import sys
-if "pytest" in sys.modules:
-    limiter.enabled = False
-

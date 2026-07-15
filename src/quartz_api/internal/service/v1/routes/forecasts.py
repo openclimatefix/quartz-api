@@ -12,10 +12,9 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
-from quartz_api.internal.middleware.ratelimit import limiter
-
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from ..cache import (
     forecast_cache_warming,

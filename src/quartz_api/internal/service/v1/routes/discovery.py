@@ -6,10 +6,9 @@ from fastapi import APIRouter, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
-from quartz_api.internal.middleware.ratelimit import limiter
-
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from ..cache import key_builder
 from ..country_config import COUNTRIES
