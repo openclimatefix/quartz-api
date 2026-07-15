@@ -6,6 +6,8 @@ from fastapi import APIRouter, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.internal.middleware.ratelimit import limiter
+
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -26,6 +28,7 @@ router = APIRouter(tags=["Discovery"])
 
 
 @router.get("/sources", status_code=status.HTTP_200_OK, response_model=list[Source])
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_sources(
     request: Request,
@@ -46,6 +49,7 @@ async def get_sources(
     status_code=status.HTTP_200_OK,
     response_model=list[CountryDetail],
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_countries(
     request: Request,
@@ -111,6 +115,7 @@ async def get_countries(
     status_code=status.HTTP_200_OK,
     response_model=list[RegionType],
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_region_types(
     request: Request,
@@ -151,6 +156,7 @@ async def get_region_types(
     status_code=status.HTTP_200_OK,
     response_model=list[GenerationSource],
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_generation_sources(
     request: Request,

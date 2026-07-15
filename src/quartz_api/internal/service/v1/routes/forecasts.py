@@ -12,6 +12,8 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.internal.middleware.ratelimit import limiter
+
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -59,6 +61,7 @@ router = APIRouter(tags=["Forecasts"])
     response_model=ForecastResponse,
     response_model_exclude_none=True,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_forecast(
     request: Request,
@@ -161,6 +164,7 @@ async def get_forecast(
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=10)
 async def get_forecast_last_updated_timestamp(
     request: Request,
@@ -220,6 +224,7 @@ async def get_forecast_last_updated_timestamp(
     response_model=ForecastSnapshot,
     response_model_exclude_none=True,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=120)
 async def get_forecasts_at_time(
     request: Request,
@@ -308,7 +313,9 @@ async def get_forecasts_at_time(
     status_code=status.HTTP_200_OK,
     summary="Get Forecasts for Period",
 )
+@limiter.limit("2/second;3600/hour")
 async def get_forecasts_period(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     db: models.StorageClientDependency,
@@ -449,6 +456,7 @@ async def get_forecasts_period(
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("2/second;3600/hour")
 async def refresh_forecasts_cache(
     source: ValidSource,
     country: CountryParam,

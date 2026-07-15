@@ -12,6 +12,8 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.internal.middleware.ratelimit import limiter
+
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -55,6 +57,7 @@ router = APIRouter(tags=["Generation"])
     status_code=status.HTTP_200_OK,
     response_model=GenerationResponse,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_generation(
     request: Request,
@@ -141,6 +144,7 @@ async def get_generation(
     summary="Get Generation at Timestamp",
     response_model=GenerationSnapshot,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=120)
 async def get_generation_at_timestamp(
     request: Request,
@@ -253,7 +257,9 @@ async def get_generation_at_timestamp(
     status_code=status.HTTP_200_OK,
     summary="Get Generation for Period",
 )
+@limiter.limit("2/second;3600/hour")
 async def get_generation_period(
+    request: Request,
     source: ValidSource,
     country: CountryParam,
     db: models.StorageClientDependency,
@@ -401,6 +407,7 @@ async def get_generation_period(
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("2/second;3600/hour")
 async def refresh_generation_cache(
     source: ValidSource,
     country: CountryParam,

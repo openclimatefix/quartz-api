@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.internal.middleware.ratelimit import limiter
+
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -34,6 +36,7 @@ router = APIRouter(tags=["Discovery"])
     status_code=status.HTTP_200_OK,
     response_model=list[RegionDetail],
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_country_regions(
     request: Request,  # noqa: ARG001
@@ -144,6 +147,7 @@ def _apply_name_filter(
     status_code=status.HTTP_200_OK,
     response_model=RegionDetail,
 )
+@limiter.limit("2/second;3600/hour")
 @cache(key_builder=key_builder, expire=60)
 async def get_region(
     request: Request,  # noqa: ARG001
