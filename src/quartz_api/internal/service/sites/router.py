@@ -6,11 +6,12 @@ import pathlib
 from uuid import UUID
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from .endpoint_types import ActualPower, PredictedPower, Site, SiteProperties
 
@@ -89,7 +90,9 @@ async def _get_site_with_energy_type(
     "/sites",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_sites(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency,
 ) -> list[Site]:
@@ -115,7 +118,9 @@ async def get_sites(
 
 
 @router.put("/sites/{site_uuid}", response_model=SiteProperties, status_code=status.HTTP_200_OK)
+@limiter.limit("20/second;3600/hour")
 async def put_site_info(
+    request: Request,  # noqa: ARG001
     site_uuid: UUID,
     site_info: SiteProperties,
     db: models.StorageClientDependency,
@@ -169,7 +174,9 @@ async def put_site_info(
     status_code=status.HTTP_200_OK,
     response_model=list[PredictedPower],
 )
+@limiter.limit("20/second;3600/hour")
 async def get_forecast(
+    request: Request,  # noqa: ARG001
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
@@ -211,7 +218,9 @@ async def get_forecast(
     status_code=status.HTTP_200_OK,
     response_model=list[ActualPower],
 )
+@limiter.limit("20/second;3600/hour")
 async def get_generation(
+    request: Request,  # noqa: ARG001
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
@@ -243,7 +252,9 @@ async def get_generation(
     "/sites/{site_uuid}/generation",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def post_generation(
+    request: Request,  # noqa: ARG001
     site_uuid: UUID,
     generation: list[ActualPower],
     db: models.StorageClientDependency,

@@ -5,12 +5,13 @@ import datetime as dt
 import pathlib
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from ._csv import format_csv_and_created_time
 from ._resample import resample_generation, smooth_forecast
@@ -53,7 +54,9 @@ async def _resolve_region_location(
     "/sources",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_sources_route(
+    request: Request,
     auth: AuthDependency,
 ) -> GetSourcesResponse:
     """Get available generation sources."""
@@ -69,7 +72,9 @@ async def get_sources_route(
     "/{source}/regions",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_regions_route(
+    request: Request,
     source: ValidSource,
     db: models.StorageClientDependency,
     auth: AuthDependency,
@@ -101,7 +106,9 @@ async def get_regions_route(
     "/{source}/{region}/generation",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_historic_timeseries_route(
+    request: Request,
     source: ValidSource,
     region: str,
     db: models.StorageClientDependency,
@@ -153,7 +160,9 @@ async def get_historic_timeseries_route(
     "/{source}/{region}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_forecast_timeseries_route(
+    request: Request,
     source: ValidSource,
     region: str,
     db: models.StorageClientDependency,
@@ -233,7 +242,9 @@ async def get_forecast_timeseries_route(
     "/{source}/{region}/forecast/csv",
     response_class=FileResponse,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_forecast_csv(
+    request: Request,
     source: ValidSource,
     region: str,
     db: models.StorageClientDependency,

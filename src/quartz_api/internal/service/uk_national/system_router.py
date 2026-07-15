@@ -8,6 +8,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.models import (
     StorageClientDependency,
 )
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
     response_model=list[Location],
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 @cache(key_builder=key_builder, expire=3600)
 async def get_system_details(
     request: Request,  # noqa: ARG001

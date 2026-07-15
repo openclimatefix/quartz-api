@@ -26,6 +26,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from ...models.endpoint_types import default_now_window_start, default_window_end
@@ -69,6 +70,7 @@ _cache_warming: bool = False
     response_model=list[ForecastValue],
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 @cache(key_builder=key_builder)
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -143,6 +145,7 @@ async def get_forecasts_for_a_specific_gsp(
     response_model=list[GSPYield],
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 @cache(key_builder=key_builder)
 async def get_truths_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
@@ -293,6 +296,7 @@ def _build_forecast_response(
     response_model=list[OneDatetimeManyForecastValuesMW] | ListForecasts,
     include_in_schema=False,
 )
+@limiter.limit("20/second;3600/hour")
 @cache(key_builder=key_builder, expire=GSP_FORECAST_ALL_CACHE_LENGTH_SECS_ROUTE) # 10 minutes
 async def get_all_available_forecasts(
     request: Request,
@@ -486,6 +490,7 @@ async def _warm_forecast_all_cache(app: FastAPI) -> None:
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("20/second;3600/hour")
 def refresh_forecast_all_cache(
     background_tasks: BackgroundTasks,
     request: Request,
@@ -529,6 +534,7 @@ def refresh_forecast_all_cache(
     response_model=list[GSPYieldGroupByDatetime],
     include_in_schema=False,
 )
+@limiter.limit("20/second;3600/hour")
 @cache(key_builder=key_builder, expire=60 * 30)
 async def get_truths_for_all_gsps(
     request: Request,  # noqa: ARG001

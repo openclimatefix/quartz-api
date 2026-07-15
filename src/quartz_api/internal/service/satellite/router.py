@@ -69,7 +69,9 @@ def get_historic_satellite_data_url(
     "/ingest",
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("20/second;3600/hour")
 def trigger_ingest(
+    request: Request,  # noqa: ARG001
     background_tasks: BackgroundTasks,
     auth: AuthDependency,
     sat_type: str = "rss",

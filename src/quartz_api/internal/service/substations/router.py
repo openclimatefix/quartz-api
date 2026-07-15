@@ -6,10 +6,11 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from .endpoint_types import (
     OneDatetimeManyForecastValues,
@@ -25,7 +26,9 @@ router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
     "/substations",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_substations(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     auth: AuthDependency, # noqa: ARG001
     substation_type: Literal["primary"] = "primary",
@@ -58,7 +61,9 @@ async def get_substations(
     "/substations/{substation_uuid:uuid}",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_substation(
+    request: Request,  # noqa: ARG001
     substation_uuid: UUID,
     db: models.StorageClientDependency,
     _: AuthDependency,
@@ -90,7 +95,9 @@ async def get_substation(
     "/substations/{substation_uuid:uuid}/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_substation_forecast(
+    request: Request,  # noqa: ARG001
     substation_uuid: UUID,
     db: models.StorageClientDependency,
     _: AuthDependency,
@@ -127,7 +134,9 @@ async def get_substation_forecast(
     "/substations/forecast",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/second;3600/hour")
 async def get_all_substation_forecast_at_one_timestamp(
+    request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
     _: AuthDependency,
     datetime_utc: Annotated[
