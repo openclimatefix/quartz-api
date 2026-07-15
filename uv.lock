@@ -701,20 +701,22 @@ wheels = [
 
 [[package]]
 name = "dp-sdk"
-version = "0.29.0"
-source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.29.0/dp_sdk-0.29.0-py3-none-any.whl" }
+version = "0.32.0"
+source = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.32.0/dp_sdk-0.32.0-py3-none-any.whl" }
 dependencies = [
     { name = "betterproto" },
     { name = "grpcio" },
+    { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.29.0/dp_sdk-0.29.0-py3-none-any.whl", hash = "sha256:51ab001b58f8942f311577b4a85b93fccb53f3534256d56fa60396553b59be8a" },
+    { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.32.0/dp_sdk-0.32.0-py3-none-any.whl", hash = "sha256:db08f2cd76cae4489e3f43f6987bcbf60bc0d7d00e701d1bcb9645f941b0026e" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "betterproto", specifier = "==2.0.0b7" },
-    { name = "grpcio" },
+    { name = "grpcio", specifier = "==1.80.0" },
+    { name = "protobuf", specifier = "==7.34.1" },
 ]
 
 [[package]]
@@ -2413,7 +2415,7 @@ requires-dist = [
     { name = "apitally", extras = ["fastapi"], specifier = ">=0.22.3" },
     { name = "auth0-fastapi-api", specifier = ">=1.0.0b5" },
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.29.0/dp_sdk-0.29.0-py3-none-any.whl" },
+    { name = "dp-sdk", url = "https://github.com/openclimatefix/data-platform/releases/download/v0.32.0/dp_sdk-0.32.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.105.0" },
     { name = "fastapi-cache2", extras = ["memcache"], specifier = ">=0.2.2" },
     { name = "fsspec", specifier = ">=2026.4.0" },
