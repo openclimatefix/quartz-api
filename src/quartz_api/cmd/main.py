@@ -358,6 +358,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         """Health endpoint for the API."""
         return GetHealthResponse(status=status.HTTP_200_OK)
 
+    @server.get("/debug")
+    def get_debug() -> dict:
+        import sys
+        v1_routes = []
+        v1_limiter_enabled = None
+        if hasattr(server.state, "v1_app"):
+            v1_routes = [getattr(r, "path", str(r)) for r in server.state.v1_app.routes]
+            v1_limiter_enabled = server.state.v1_app.state.limiter.enabled
+        return {
+            "pytest": "pytest" in sys.modules,
+            "limiter_enabled": server.state.limiter.enabled,
+            "v1_limiter_enabled": v1_limiter_enabled,
+            "v1_routes": v1_routes,
+            "server_routes": [getattr(r, "path", str(r)) for r in server.routes],
+        }
+
     @server.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
         """Serve the favicon."""
