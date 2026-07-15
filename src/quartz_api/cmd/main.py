@@ -26,7 +26,7 @@ from pyhocon import ConfigFactory, ConfigTree
 from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIASGIMiddleware
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
@@ -173,7 +173,7 @@ def _create_v1_app(
 
     v1_app.state.limiter = limiter or ratelimit.limiter
     v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    v1_app.add_middleware(SlowAPIASGIMiddleware)
+    v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
 
@@ -458,7 +458,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Add middlewares
     server.state.limiter = ratelimit.limiter
     server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    server.add_middleware(SlowAPIASGIMiddleware)
+    server.add_middleware(SlowAPIMiddleware)
     server.add_middleware(
         CORSMiddleware,
         allow_origins=conf.get_string("api.origins").split(","),
