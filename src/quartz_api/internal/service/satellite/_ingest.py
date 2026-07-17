@@ -123,14 +123,6 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
         "EPSG:4326", "EPSG:3857", LEFT, BOTTOM, RIGHT, TOP,
     )
     wgs84_bounds_tag = f"{LEFT},{BOTTOM},{RIGHT},{TOP}"
-    geos_left, geos_bottom, geos_right, geos_top = transform_bounds(
-        "EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP,
-    )
-    inv_tf = ~src_tf
-    col_min, row_max = inv_tf * (geos_left, geos_bottom)
-    col_max, row_min = inv_tf * (geos_right, geos_top)
-    r0, r1 = max(0, int(row_min)), min(len(y), int(row_max))
-    c0, c1 = max(0, int(col_min)), min(len(x), int(col_max))
 
     # Filter to last 48 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
@@ -162,19 +154,7 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                     arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
                     arr = np.flipud(arr)
 
-                    if "percentile" in config:
-                        uk_subwindow = arr[r0:r1, c0:c1]
-                        valid_local = uk_subwindow[~np.isnan(uk_subwindow)]
-
-                        if len(valid_local) > 0:
-                            p_val = float(np.percentile(valid_local, config["percentile"]))
-
-                            # Above cliff_limit, daylight is active -> drop threshold to 0.0
-                            applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
-
-                            if applied_threshold > 0.0:
-                                arr = np.where(arr < applied_threshold, 0.0, arr)
-                    elif config.get("invert"):
+                    if config.get("invert"):
                         arr = 1.0 - arr
 
                     dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
