@@ -20,7 +20,7 @@ classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
     "dp-sdk >= 0.32.0,<1.0.0",
-    "fastapi>=0.105.0",
+    "fastapi==0.136.3", # 0.137.0 currently has a bug with ratelimits
     "pvsite-datamodel == 1.2.3",
     "pyjwt >= 2.8.0",
     "pyproj >= 3.3.0",

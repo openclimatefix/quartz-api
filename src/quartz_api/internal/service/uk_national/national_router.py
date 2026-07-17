@@ -194,12 +194,11 @@ async def get_national_forecast(
             target_time=v.valid_timestamp,
             expected_power_generation_megawatts=v.power_kilowatts / 1000,
             plevels={
-                "plevel_10": v.plevels_kilowatts.get("p10") / 1000
-                if v.plevels_kilowatts.get("p10") is not None
-                else None,
-                "plevel_90": v.plevels_kilowatts.get("p90") / 1000
-                if v.plevels_kilowatts.get("p90") is not None
-                else None,
+                f"plevel_{p[1:]}": kw / 1000
+                for p, kw in sorted(
+                    v.plevels_kilowatts.items(),
+                    key=lambda item: int(item[0][1:]),
+                )
             },
         )
         for v in all_pgvs
