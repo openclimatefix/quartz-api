@@ -215,14 +215,10 @@ class StorageClient(models.StorageInterface):
                 -> list[models.PredictedGenerationValue]:
             out: list[models.PredictedGenerationValue] = []
             for v in values:
-                plevels: dict[str, int | float] = {}
-                stats = v.other_statistics_fractions
-                for plevel in ["p10", "p90"]:
-                    val = int(
-                        v.effective_capacity_watts * stats[plevel] / 1000.0,
-                    ) if plevel in stats else None
-                    if val is not None:
-                        plevels[plevel] = val
+                plevels: dict[str, int | float] = {
+                    f"p{int(plevel[1:])}": int(v.effective_capacity_watts * frac / 1000.0)
+                    for plevel, frac in v.other_statistics_fractions.items()
+                }
 
                 out.append(models.PredictedGenerationValue(
                     power_kilowatts=int(
