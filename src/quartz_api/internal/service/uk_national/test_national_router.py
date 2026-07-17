@@ -41,7 +41,14 @@ async def test_national_forecast_default(api_client, mock_storage: AsyncMock):
             forecaster_version="1.3.0",
             created_timestamp=frozen_time,
             init_timestamp=frozen_time,
-            plevels_kilowatts={"p10": 3800.0, "p90": 4600.0},
+            plevels_kilowatts={
+                "p90": 4600.0,
+                "p2": 3500.0,
+                "p98": 4900.0,
+                "p25": 4000.0,
+                "p75": 4400.0,
+                "p10": 3800.0,
+            },
             metadata={},
         ),
     ]
@@ -56,7 +63,19 @@ async def test_national_forecast_default(api_client, mock_storage: AsyncMock):
 
     # Check kW -> MW formatting
     assert data[0]["expectedPowerGenerationMegawatts"] == 4.2
-    assert data[0]["plevels"]["plevel_10"] == 3.8
+
+    # check the p-level sorting
+    assert list(data[0]["plevels"].keys()) == [
+        "plevel_2", "plevel_10", "plevel_25", "plevel_75", "plevel_90", "plevel_98",
+    ]
+    assert data[0]["plevels"] == {
+        "plevel_2": 3.5,
+        "plevel_10": 3.8,
+        "plevel_25": 4.0,
+        "plevel_75": 4.4,
+        "plevel_90": 4.6,
+        "plevel_98": 4.9,
+    }
 
     # Verify the database was called with the correct defaults
     mock_storage.get_predicted_generation.assert_called()
