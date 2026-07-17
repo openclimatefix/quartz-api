@@ -87,7 +87,11 @@ class S3Client:
     def get_latest_key(
         self, bucket: str, prefix: str, lookback_minutes: int = 30,
     ) -> str | None:
-        """Probe 5-min-cadence keys backward from now, return the first one that exists."""
+        """Search backwards in 5-minute intervals and return the first available key.
+
+        Used to show the LIVE cloud image in the UI. The default 30-minute lookback
+        keeps the image recent while remaining visually distinct.
+        """
         ts = datetime.now(tz=UTC).replace(second=0, microsecond=0)
         ts -= timedelta(minutes=ts.minute % 5)
         for _ in range(lookback_minutes // 5 + 1):
