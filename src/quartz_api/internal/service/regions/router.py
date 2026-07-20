@@ -26,6 +26,16 @@ from .endpoint_types import (
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
+# Backwards-compatibility aliases. The old API exposed a single "ruvnl" region;
+# it has since been split into source-specific regions, so map the legacy name
+# onto the new one per source before resolving.
+_REGION_ALIASES: dict[str, dict[str, str]] = {
+    "solar": {"ruvnl": "ruvnl_solar"},
+    "wind": {"ruvnl": "ruvnl_wind"},
+}
+
+_REGION_OBSERVER_NAME = "ruvnl"
+
 
 async def _resolve_region_location(
     db: models.StorageInterface,
@@ -33,6 +43,7 @@ async def _resolve_region_location(
     region: str,
 ) -> models.Location:
     """Resolve a region name to its Location, raising 404 if it doesn't exist."""
+    region = _REGION_ALIASES.get(source, {}).get(region, region)
     locations = await db.get_locations(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
@@ -59,8 +70,8 @@ async def get_sources_route(
     """Get available generation sources."""
     return GetSourcesResponse(
         sources=[
-            "solar",
             "wind",
+            "solar",
         ],
     )
 
@@ -93,7 +104,10 @@ async def get_regions_route(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid source {source}. Available sources: 'solar'.",
         )
-    region_names = [r.name for r in regions]
+    legacy_by_new = {new: legacy for legacy, new in _REGION_ALIASES.get(source, {}).items()}
+    region_names = list(
+        dict.fromkeys(legacy_by_new.get(r.name, r.name) for r in regions),
+    )
     return GetRegionsResponse(regions=region_names)
 
 
@@ -126,7 +140,7 @@ async def get_historic_timeseries_route(
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow(),
             authdata=auth,
-            observer_name="site_api",
+            observer_name=_REGION_OBSERVER_NAME,
         )
     except Exception as e:
         raise HTTPException(
@@ -286,10 +300,17 @@ async def get_forecast_csv(
 
     # Make file format
     now = dt.datetime.now(tz=tz)
-    tomorrow = dt.datetime.now(tz=tz) + dt.timedelta(days=1)
-    csv_file_path = f"{region}_{source}_{forecast_type}_{tomorrow.date()}.csv"
+    # Name the file after the first forecast date in the CSV, as the old API did
+    # (today for intraday, tomorrow for day-ahead); fall back to tomorrow when
+    # there is no data.
+    file_date = (
+        df["Date [IST]"].iloc[0]
+        if len(df) > 0
+        else (now + dt.timedelta(days=1)).date()
+    )
+    csv_file_path = f"{region}_{source}_{forecast_type}_{file_date}.csv"
     description = (
-        f"Forecast for {region} for {source}, {forecast_type}, for {tomorrow.date()}. "
+        f"Forecast for {region} for {source}, {forecast_type}, for {file_date}. "
         f"The Forecast was created at {created_time} and downloaded at {now}"
     )
 

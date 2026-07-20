@@ -1,4 +1,5 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
+import asyncio
 import datetime as dt
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -184,24 +185,27 @@ class StorageClient(models.StorageInterface):
                                              day_ahead_closure_time_local=day_ahead_closure_time_local,
                                              created_cutoff=created_cutoff)
 
+        reqs = [
+            messages_pb2.GetForecastAsTimeseriesRequest(
+                location_uuid=str(location_uuid),
+                energy_source=energy_type_map[energy_type],
+                horizon_mins=forecast_horizon_minutes,
+                time_window=messages_pb2.TimeWindow(
+                    start_timestamp_utc=window["start"],
+                    end_timestamp_utc=window["end"],
+                ),
+                forecaster=forecaster,
+                pivot_timestamp_utc=window["pivot_timestamp_utc"],
+            )
+            for window in windows
+        ]
+
+        resps = await asyncio.gather(
+            *(self.dpc.GetForecastAsTimeseries(req) for req in reqs),
+        )
+
         values = []
-        for window in windows:
-
-            req = messages_pb2.GetForecastAsTimeseriesRequest(
-                    location_uuid=str(location_uuid),
-                    energy_source=energy_type_map[energy_type],
-                    horizon_mins=forecast_horizon_minutes,
-                    time_window=messages_pb2.TimeWindow(
-                        start_timestamp_utc=window["start"],
-                        end_timestamp_utc=window["end"],
-                    ),
-                    forecaster=forecaster,
-                    pivot_timestamp_utc=window["pivot_timestamp_utc"],
-                )
-
-            resp = await self.dpc.GetForecastAsTimeseries(req)
-
-
+        for resp in resps:
             if location_type == models.LocationType.SUBSTATION:
                 # Spoof the forecast values so that the capacity
                 # and id corresponds to the substation
