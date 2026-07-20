@@ -24,11 +24,11 @@ log = logging.getLogger(__name__)
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
 BACKFILL_HOURS = 48
-# config to remove artifacts during nighttime and invert channels
+# Per-channel nighttime cleanup, inversion, and recurring "HH:MM" (UTC) blackout times.
 LAYER_CONFIG = {
-    "VIS006": {"percentile": 99.0, "cliff_limit": 5.0},
-    "VIS008": {"percentile": 99.0, "cliff_limit": 10.0},
-    "IR_016": {"percentile": 99.0, "cliff_limit": 12.0},
+    "VIS006": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
+    "VIS008": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
+    "IR_016": {"blackout": ["23:45", "00:15", "00:45"]},
     "IR_039": {"invert": True},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
@@ -123,14 +123,6 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
         "EPSG:4326", "EPSG:3857", LEFT, BOTTOM, RIGHT, TOP,
     )
     wgs84_bounds_tag = f"{LEFT},{BOTTOM},{RIGHT},{TOP}"
-    geos_left, geos_bottom, geos_right, geos_top = transform_bounds(
-        "EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP,
-    )
-    inv_tf = ~src_tf
-    col_min, row_max = inv_tf * (geos_left, geos_bottom)
-    col_max, row_min = inv_tf * (geos_right, geos_top)
-    r0, r1 = max(0, int(row_min)), min(len(y), int(row_max))
-    c0, c1 = max(0, int(col_min)), min(len(x), int(col_max))
 
     # Filter to last 48 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
@@ -153,38 +145,26 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                 continue
 
             try:
-                chan_idx = list(ds.channel.values).index(channel)
-                arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
-                arr = np.flipud(arr)
+                config = LAYER_CONFIG.get(channel, {})
 
-                if channel in LAYER_CONFIG:
-                    config = LAYER_CONFIG[channel]
+                if ts_str[9:13] in {t.replace(":", "") for t in config.get("blackout", [])}:
+                    dst_arr = np.zeros((dst_h, dst_w), dtype=np.float32)
+                else:
+                    chan_idx = list(ds.channel.values).index(channel)
+                    arr = ds["data"].isel(time=t_idx, channel=chan_idx).values.astype(np.float32)
+                    arr = np.flipud(arr)
 
-                    if "percentile" in config:
-                        uk_subwindow = arr[r0:r1, c0:c1]
-                        valid_local = uk_subwindow[~np.isnan(uk_subwindow)]
-
-                        if len(valid_local) > 0:
-                            p_val = float(np.percentile(valid_local, config["percentile"]))
-
-                            # Cliff logic switch: if noise distribution crosses the limit,
-                            # true daylight is active -> Drop threshold to 0.0
-                            applied_threshold = 0.0 if p_val > config["cliff_limit"] else p_val
-
-                            # Flatten noise floor cleanly to uniform black
-                            if applied_threshold > 0.0:
-                                arr = np.where(arr < applied_threshold, 0.0, arr)
-                    elif config.get("invert"):
+                    if config.get("invert"):
                         arr = 1.0 - arr
 
-                dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
-                reproject(
-                    source=arr, destination=dst_arr,
-                    src_transform=src_tf, src_crs=src_crs,
-                    dst_transform=dst_tf, dst_crs=dst_crs,
-                    resampling=Resampling.bilinear,
-                    src_nodata=np.nan, dst_nodata=np.nan,
-                )
+                    dst_arr = np.full((dst_h, dst_w), np.nan, dtype=np.float32)
+                    reproject(
+                        source=arr, destination=dst_arr,
+                        src_transform=src_tf, src_crs=src_crs,
+                        dst_transform=dst_tf, dst_crs=dst_crs,
+                        resampling=Resampling.bilinear,
+                        src_nodata=np.nan, dst_nodata=np.nan,
+                    )
 
                 full_buf = io.BytesIO()
                 with rasterio.open(
