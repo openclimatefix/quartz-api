@@ -61,10 +61,8 @@ def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
     # convert to ints
     df["PowerKW"] = df["PowerKW"].astype(int)
     df["created_time"] = [value.created_time for value in values]
-    df["initialization_timestamp_utc"] = [value.initialization_timestamp_utc for value in values]
     df["forecaster_name"] = [value.forecaster_name for value in values]
     df["forecaster_version"] = [value.forecaster_version for value in values]
-    df["plevel_kW"] = [value.plevel_kW for value in values]
 
     # convert back to list of PredictedPower
     return [
@@ -72,10 +70,8 @@ def smooth_forecast(values: list[PredictedPower]) -> list[PredictedPower]:
             Time=index,
             PowerKW=row.PowerKW,
             created_time=row.created_time,
-            initialization_timestamp_utc=row.initialization_timestamp_utc,
             forecaster_name=row.forecaster_name,
             forecaster_version=row.forecaster_version,
-            plevel_kW=row.plevel_kW,
         )
         for index, row in df.iterrows()
     ]

@@ -139,7 +139,7 @@ async def get_historic_timeseries_route(
             window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
             - dt.timedelta(days=2),
             window_end=pd.Timestamp.utcnow(),
-            authdata=auth,
+            authdata={},
             observer_name=_REGION_OBSERVER_NAME,
         )
     except Exception as e:
@@ -230,7 +230,6 @@ async def get_forecast_timeseries_route(
             PowerKW=pgv.power_kilowatts,
             Time=pgv.valid_timestamp.astimezone(tz=tz),
             created_time=pgv.created_timestamp.astimezone(tz=tz),
-            initialization_timestamp_utc=pgv.init_timestamp.astimezone(tz=tz),
             forecaster_version=pgv.forecaster_version,
             forecaster_name=pgv.forecaster_name,
         )
@@ -288,7 +287,7 @@ async def get_forecast_csv(
         ),
         location_type=models.LocationType.REGION,
         forecast_horizon_minutes=horizon_mins,
-        authdata=auth,
+        authdata={},
     )
 
     # Format to dataframe
