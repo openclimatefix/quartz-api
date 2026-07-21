@@ -230,7 +230,6 @@ async def get_forecast_timeseries_route(
             PowerKW=pgv.power_kilowatts,
             Time=pgv.valid_timestamp.astimezone(tz=tz),
             created_time=pgv.created_timestamp.astimezone(tz=tz),
-            initialization_timestamp_utc=pgv.init_timestamp.astimezone(tz=tz),
             forecaster_version=pgv.forecaster_version,
             forecaster_name=pgv.forecaster_name,
         )
