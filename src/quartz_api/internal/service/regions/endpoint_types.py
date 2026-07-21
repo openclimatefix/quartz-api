@@ -25,12 +25,14 @@ class PredictedPower(BaseModel):
     created_time: dt.datetime | None = Field(None, exclude=True)
     initialization_timestamp_utc: dt.datetime | None = Field(
         None,
+        exclude=True,
         description="The timestamp (UTC) when the forecast was initialized.",
     )
     forecaster_version: str = Field(exclude=True, default="not-set")
     forecaster_name: str = Field(exclude=True, default="not-set")
     plevel_kW: dict[str, float] = Field(
         {},
+        exclude=True,
         description="A dictionary of probabilistic levels for the forecast. "
         "Keys are the level names (e.g., 'p10', 'p50', 'p90'), "
         "and values are the corresponding power values in kW.",
