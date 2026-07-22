@@ -115,10 +115,16 @@ def get_org_id_from_authdata(authdata: dict) -> str | None:
     The JWT contains app_metadata with hubspot_company_id which maps
     to organisation_id_filter in the Data Platform.
     """
+    if "ocf:admin" in authdata.get("permissions", []):
+        return None
     app_metadata = authdata.get("app_metadata", {})
     if isinstance(app_metadata, dict):
-        return app_metadata.get("hubspot_company_id")
-    return None
+        company_id = app_metadata.get("hubspot_company_id")
+        if company_id:
+            return company_id
+    return "no-org-access"
+
+
 
 
 def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:

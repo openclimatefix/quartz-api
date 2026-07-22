@@ -99,6 +99,14 @@ class StorageClient(models.StorageInterface):
             )
 
         organisation_id: str | None = get_org_id_from_authdata(authdata) if authdata != {} else None
+        if organisation_id == "no-org-access":
+            if location_type == models.LocationType.SITE:
+                raise HTTPException(
+                    status_code=403,
+                    detail="User is not associated with any organization.",
+                )
+            else:
+                organisation_id = None
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_type_map[energy_type],
@@ -486,6 +494,17 @@ class StorageClient(models.StorageInterface):
                     get_org_id_from_authdata(authdata) if authdata != {} else None
                 )
 
+        if organisation_id == "no-org-access":
+            if location_type == models.LocationType.SITE:
+                if location_uuid is not None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No site found for UUID '{location_uuid}'.",
+                    )
+                return []
+            else:
+                organisation_id = None
+
         req = messages_pb2.ListLocationsRequest(
             energy_source_filter=(
                 energy_type_map[energy_type] if energy_type is not None else None
@@ -609,6 +628,14 @@ class StorageClient(models.StorageInterface):
         org_id: str | None,
     ) -> models.Location:
         """Check if an organisation has access to a given location."""
+        if org_id == "no-org-access":
+            if location_type == common_pb2.LocationType.LOCATION_TYPE_SITE:
+                raise HTTPException(
+                    status_code=403,
+                    detail="User is not associated with any organization.",
+                )
+            else:
+                org_id = None
         req = messages_pb2.ListLocationsRequest(
             location_uuids_filter=[str(location_uuid)],
             energy_source_filter=energy_source,

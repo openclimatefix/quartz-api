@@ -2,7 +2,7 @@ import dataclasses
 import datetime as dt
 import unittest
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 from google.protobuf.struct_pb2 import Struct
@@ -658,6 +658,50 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent_create.effective_capacity_watts, 5000)
         self.assertEqual(sent_create.geometry_wkt, "POINT (0.0 0.0)")
         self.assertEqual(dict(sent_create.metadata)["tilt"], 35.0)
+
+    async def test_no_org_access_fast_return(self) -> None:
+        client_mock = MagicMock(spec=service_pb2_grpc.DataPlatformDataServiceStub)
+        client = StorageClient.from_dp(client_mock)
+
+        # Test get_locations listing SITEs (returns empty list)
+        locs = await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.SITE,
+            authdata={"permissions": ["read:india"]},  # no company ID, no admin -> no-org-access
+        )
+        self.assertEqual(locs, [])
+
+        # Test get_locations for specific SITE UUID (raises 404)
+        with self.assertRaises(HTTPException) as ctx:
+            await client.get_locations(
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.SITE,
+                authdata={"permissions": ["read:india"]},
+                location_uuid=uuid.uuid4(),
+            )
+        self.assertEqual(ctx.exception.status_code, 404)
+
+        # Test get_predicted_generation (raises 403)
+        with self.assertRaises(HTTPException) as ctx:
+            await client.get_predicted_generation(
+                location_uuid=uuid.uuid4(),
+                window_start=dt.datetime.now(tz=dt.UTC),
+                window_end=dt.datetime.now(tz=dt.UTC),
+                energy_type=models.EnergyType.SOLAR,
+                location_type=models.LocationType.SITE,
+                authdata={"permissions": ["read:india"]},
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+
+        # Test _check_user_access (raises 403)
+        with self.assertRaises(HTTPException) as ctx:
+            await client._check_user_access(
+                location_uuid=uuid.uuid4(),
+                energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
+                location_type=common_pb2.LocationType.LOCATION_TYPE_SITE,
+                org_id="no-org-access",
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
 
 
 class TestDayAheadWindows(unittest.IsolatedAsyncioTestCase):
