@@ -92,3 +92,43 @@ class TestCsvExport:
         assert result[0]["Date [IST]"].dtype == "object"
         assert result[0]["Time"].dtype == "object"
         assert result[0]["PowerMW"].dtype == "float64"
+
+    def test_format_csv_and_created_time_empty(self) -> None:
+        """With no forecast values a header-only DataFrame is returned, not an error."""
+        df, created_time = format_csv_and_created_time(
+            values=[],
+            forecast_horizon=models.ForecastHorizon.latest,
+            tz=ZoneInfo("Asia/Kolkata"),
+            now=dt.datetime(2021, 10, 1, 5, 30, 0, tzinfo=dt.UTC),
+        )
+        assert isinstance(df, pd.DataFrame)
+        assert list(df.columns) == ["Date [IST]", "Time", "PowerMW"]
+        assert df.shape[0] == 0
+        assert created_time is None
+
+    def test_format_csv_and_created_time_day_ahead_no_matching_values(self) -> None:
+        """Day-ahead with no values for tomorrow also returns a header-only DataFrame."""
+        location_uuid = uuid4()
+        now = dt.datetime(2021, 10, 1, 5, 30, 0, tzinfo=dt.UTC)
+        # All values are for today, so none match the day-ahead (tomorrow) filter.
+        pgvs = [
+            models.PredictedGenerationValue(
+                location_uuid=location_uuid,
+                valid_timestamp=now,
+                power_kilowatts=10.0,
+                created_timestamp=now - dt.timedelta(hours=1),
+                init_timestamp=now - dt.timedelta(hours=1),
+                capacity_kilowatts=1000.0,
+                forecaster_name="TestForecaster",
+                forecaster_version="1.0",
+            ),
+        ]
+        df, created_time = format_csv_and_created_time(
+            values=pgvs,
+            forecast_horizon=models.ForecastHorizon.day_ahead,
+            tz=ZoneInfo("Asia/Kolkata"),
+            now=now,
+        )
+        assert list(df.columns) == ["Date [IST]", "Time", "PowerMW"]
+        assert df.shape[0] == 0
+        assert created_time is None

@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git
 
 WORKDIR /opt/app
-COPY pyproject.toml /opt/app/pyproject.toml
+COPY pyproject.toml uv.lock /opt/app/
 
 # * Compile bytecode to reduce startup time
 # * Disable cache to reduce image size
@@ -18,7 +18,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
 RUN mkdir src && \
-    uv sync --no-dev --no-install-project --no-editable
+    uv sync --locked --no-dev --no-install-project --no-editable
 
 RUN rm -rf /opt/app/.venv/lib/python3.12/site-packages/**/tests
 
@@ -30,7 +30,7 @@ FROM build-deps AS build-app
 COPY src /opt/app/src
 COPY .git /opt/app/.git
 COPY README.md /opt/app/README.md
-RUN uv sync --no-dev --no-editable
+RUN uv sync --locked --no-dev --no-editable
 
 # Delete package tests
 RUN rm -rf /opt/app/.venv/lib/python3.12/site-packages/**/test_*

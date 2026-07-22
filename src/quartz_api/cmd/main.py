@@ -24,7 +24,7 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
-from slowapi import _rate_limit_exceeded_handler
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -148,6 +148,7 @@ def _custom_openapi(
 def _create_v1_app(
     conf: ConfigTree,
     auth_openapi_config: dict[str, str] | None,
+    limiter: Limiter | None = None,
 ) -> FastAPI:
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
@@ -170,7 +171,9 @@ def _create_v1_app(
         redoc_url=None,
     )
 
-    v1_app.state.limiter = ratelimit.limiter
+    v1_app.state.limiter = limiter or ratelimit.limiter
+    v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
 

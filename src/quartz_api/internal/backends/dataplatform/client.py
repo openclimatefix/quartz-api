@@ -1,4 +1,5 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
+import asyncio
 import datetime as dt
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -192,24 +193,27 @@ class StorageClient(models.StorageInterface):
                                              day_ahead_closure_time_local=day_ahead_closure_time_local,
                                              created_cutoff=created_cutoff)
 
+        reqs = [
+            messages_pb2.GetForecastAsTimeseriesRequest(
+                location_uuid=str(location_uuid),
+                energy_source=energy_type_map[energy_type],
+                horizon_mins=forecast_horizon_minutes,
+                time_window=messages_pb2.TimeWindow(
+                    start_timestamp_utc=window["start"],
+                    end_timestamp_utc=window["end"],
+                ),
+                forecaster=forecaster,
+                pivot_timestamp_utc=window["pivot_timestamp_utc"],
+            )
+            for window in windows
+        ]
+
+        resps = await asyncio.gather(
+            *(self.dpc.GetForecastAsTimeseries(req) for req in reqs),
+        )
+
         values = []
-        for window in windows:
-
-            req = messages_pb2.GetForecastAsTimeseriesRequest(
-                    location_uuid=str(location_uuid),
-                    energy_source=energy_type_map[energy_type],
-                    horizon_mins=forecast_horizon_minutes,
-                    time_window=messages_pb2.TimeWindow(
-                        start_timestamp_utc=window["start"],
-                        end_timestamp_utc=window["end"],
-                    ),
-                    forecaster=forecaster,
-                    pivot_timestamp_utc=window["pivot_timestamp_utc"],
-                )
-
-            resp = await self.dpc.GetForecastAsTimeseries(req)
-
-
+        for resp in resps:
             if location_type == models.LocationType.SUBSTATION:
                 # Spoof the forecast values so that the capacity
                 # and id corresponds to the substation
@@ -223,14 +227,10 @@ class StorageClient(models.StorageInterface):
                 -> list[models.PredictedGenerationValue]:
             out: list[models.PredictedGenerationValue] = []
             for v in values:
-                plevels: dict[str, int | float] = {}
-                stats = v.other_statistics_fractions
-                for plevel in ["p10", "p90"]:
-                    val = int(
-                        v.effective_capacity_watts * stats[plevel] / 1000.0,
-                    ) if plevel in stats else None
-                    if val is not None:
-                        plevels[plevel] = val
+                plevels: dict[str, int | float] = {
+                    f"p{int(plevel[1:])}": int(v.effective_capacity_watts * frac / 1000.0)
+                    for plevel, frac in v.other_statistics_fractions.items()
+                }
 
                 out.append(models.PredictedGenerationValue(
                     power_kilowatts=int(

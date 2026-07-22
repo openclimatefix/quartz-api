@@ -12,7 +12,7 @@ def format_csv_and_created_time(
     forecast_horizon: models.ForecastHorizon,
     tz: models.TZDependency,
     now: dt.datetime | None = None,
-) -> tuple[pd.DataFrame, dt.datetime]:
+) -> tuple[pd.DataFrame, dt.datetime | None]:
     """Format the predicted power values into a pandas dataframe ready for CSV export.
 
     We also get the maximum created time of these forecasts
@@ -39,6 +39,12 @@ def format_csv_and_created_time(
         wanted_values = [v for v in values if v.valid_timestamp.astimezone(tz=tz) >= now]
     else:
         wanted_values = values
+
+    # With no forecast values, an empty DataFrame has no columns, so return a
+    # header-only frame (and no created time) rather than raising a KeyError.
+    if not wanted_values:
+        df = pd.DataFrame(columns=["Date [IST]", "Time", "PowerMW"])
+        return df, None
 
     # NOTE: Now this takes a timezone arg, [IST] here is potentially incorrect!
     df = pd.DataFrame.from_records(

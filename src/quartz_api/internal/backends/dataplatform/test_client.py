@@ -72,7 +72,14 @@ def mock_get_forecast(
                 - dt.timedelta(minutes=req.horizon_mins),
                 created_timestamp_utc=TEST_TIMESTAMP_UTC
                 - dt.timedelta(hours=1, minutes=req.horizon_mins),
-                other_statistics_fractions={"p90": 0.9, "p10": 0.1},
+                other_statistics_fractions={
+                    "p90": 0.9,
+                    "p02": 0.02,
+                    "p98": 0.98,
+                    "p10": 0.1,
+                    "p75": 0.75,
+                    "p25": 0.25,
+                },
                 metadata=Struct(fields={}),
             )
             for i in range(5)
@@ -243,6 +250,10 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                         energy_type=models.EnergyType.SOLAR,
                     )
                     self.assertEqual(len(resp), 5)
+                    self.assertEqual(
+                        resp[0].plevels_kilowatts,
+                        {"p90": 899, "p2": 19, "p98": 980, "p10": 100, "p75": 750, "p25": 250},
+                    )
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     async def test_get_site_generation(
