@@ -322,8 +322,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         level=logging.getLevelName(conf.get_string("api.loglevel").upper()),
     )
     description = "API providing access to OCF's Quartz Forecasts."
+    debug = conf.get_string("api.environment") != "production"
     server = FastAPI(
-        debug=True,
+        debug=debug,
         version=importlib.metadata.version("quartz_api"),
         lifespan=functools.partial(_lifespan, conf=conf),
         title="Quartz API",
