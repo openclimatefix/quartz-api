@@ -26,9 +26,9 @@ LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 BACKFILL_HOURS = 48
 # Per-channel nighttime cleanup, inversion, and recurring "HH:MM" (UTC) blackout times.
 LAYER_CONFIG = {
-    "VIS006": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
-    "VIS008": {"blackout": ["23:45", "00:15", "00:45", "01:15"]},
-    "IR_016": {"blackout": ["23:45", "00:15", "00:45"]},
+    "VIS006": {"blackout": ["23:00", "02:00"]},
+    "VIS008": {"blackout": ["23:00", "02:00"]},
+    "IR_016": {"blackout": ["23:00", "02:00"]},
     "IR_039": {"invert": True},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
@@ -38,6 +38,12 @@ LAYER_CONFIG = {
     "WV_062": {"invert": True},
     "WV_073": {"invert": True},
 }
+
+
+def _in_blackout(hhmm: str, window: list[str]) -> bool:
+    """True if "HHMM" falls within the ["HH:MM", "HH:MM"] window (wraps past midnight)."""
+    x, a, b = int(hhmm), int(window[0].replace(":", "")), int(window[1].replace(":", ""))
+    return a <= x <= b if a <= b else x >= a or x <= b
 
 _ingest_running: bool = False
 
@@ -147,7 +153,7 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
             try:
                 config = LAYER_CONFIG.get(channel, {})
 
-                if ts_str[9:13] in {t.replace(":", "") for t in config.get("blackout", [])}:
+                if "blackout" in config and _in_blackout(ts_str[9:13], config["blackout"]):
                     dst_arr = np.zeros((dst_h, dst_w), dtype=np.float32)
                 else:
                     chan_idx = list(ds.channel.values).index(channel)
