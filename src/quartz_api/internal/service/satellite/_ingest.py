@@ -26,9 +26,9 @@ LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 BACKFILL_HOURS = 48
 # Per-channel nighttime cleanup, inversion, and recurring "HH:MM" (UTC) blackout times.
 LAYER_CONFIG = {
-    "VIS006": {"blackout": ["23:00", "02:00"]},
-    "VIS008": {"blackout": ["23:00", "02:00"]},
-    "IR_016": {"blackout": ["23:00", "02:00"]},
+    "VIS006": {"blackout": ["22:00", "02:00"]},
+    "VIS008": {"blackout": ["22:00", "02:00"]},
+    "IR_016": {"blackout": ["22:00", "02:00"]},
     "IR_039": {"invert": True},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
