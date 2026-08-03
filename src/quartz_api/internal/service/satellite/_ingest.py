@@ -29,6 +29,7 @@ LAYER_CONFIG = {
     "VIS006": {"blackout": ["22:00", "02:00"]},
     "VIS008": {"blackout": ["22:00", "02:00"]},
     "IR_016": {"blackout": ["22:00", "02:00"]},
+    "IR_039": {},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
     "IR_108": {"invert": True},
