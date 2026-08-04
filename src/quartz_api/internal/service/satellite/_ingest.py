@@ -1,4 +1,5 @@
 """Ingest latest satellite data for all channels into S3."""
+import datetime as dt
 import io
 import logging
 
@@ -18,17 +19,19 @@ from quartz_api.internal.s3 import (
     get_s3_client,
 )
 
+from ._blackout import apply_buffer, sun_times
+
 log = logging.getLogger(__name__)
 
 # Bounding box to crop to UK
 LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
 # How far back to backfill missing data (in hours)
 BACKFILL_HOURS = 48
-# Per-channel nighttime cleanup, inversion, and recurring "HH:MM" (UTC) blackout times.
+# Per-channel inversion, and whether to black the channel out while the region is dark.
 LAYER_CONFIG = {
-    "VIS006": {"blackout": ["22:00", "02:00"]},
-    "VIS008": {"blackout": ["22:00", "02:00"]},
-    "IR_016": {"blackout": ["22:00", "02:00"]},
+    "VIS006": {"blackout": True},
+    "VIS008": {"blackout": True},
+    "IR_016": {"blackout": True},
     "IR_039": {},
     "IR_087": {"invert": True},
     "IR_097": {"invert": True},
@@ -39,11 +42,6 @@ LAYER_CONFIG = {
     "WV_073": {"invert": True},
 }
 
-
-def _in_blackout(hhmm: str, window: list[str]) -> bool:
-    """True if "HHMM" falls within the ["HH:MM", "HH:MM"] window (wraps past midnight)."""
-    x, a, b = int(hhmm), int(window[0].replace(":", "")), int(window[1].replace(":", ""))
-    return a <= x <= b if a <= b else x >= a or x <= b
 
 _ingest_running: bool = False
 
@@ -142,6 +140,11 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
 
     for t_idx, t in window_times:
         ts_str = str(t)[:19].replace("-", "").replace("T", "_").replace(":", "")
+        ts_dt = dt.datetime.fromisoformat(str(t)[:19]).replace(tzinfo=dt.UTC)
+        sunrise, sunset = apply_buffer(
+            *sun_times(ts_dt.date(), (LEFT + RIGHT) / 2, (BOTTOM + TOP) / 2),
+        )
+        is_dark = not sunrise <= ts_dt < sunset
 
         for channel in channels:
             key = f"layers/{channel}/{ts_str}.tif"
@@ -153,7 +156,7 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
             try:
                 config = LAYER_CONFIG.get(channel, {})
 
-                if "blackout" in config and _in_blackout(ts_str[9:13], config["blackout"]):
+                if config.get("blackout") and is_dark:
                     dst_arr = np.zeros((dst_h, dst_w), dtype=np.float32)
                 else:
                     chan_idx = list(ds.channel.values).index(channel)
