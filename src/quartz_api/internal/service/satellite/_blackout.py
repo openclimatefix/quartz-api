@@ -20,7 +20,7 @@ import datetime as dt
 from astral import Observer
 from astral.sun import sunrise, sunset
 
-# buffer window around sunrise and sunset, so the blackout window is a bit longer than the day length.
+# buffer window around sunrise and sunset, so the blackout window is longer than day.
 # This is a bit arbitrary, but it should be long enough to cover the
 BLACKOUT_BUFFER = dt.timedelta(hours=1)
 
