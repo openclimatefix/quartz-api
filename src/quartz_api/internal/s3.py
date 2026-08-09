@@ -14,9 +14,7 @@ def configure(
     *,
     region: str,
     geotiff_bucket: str,
-    source_bucket: str,
     icechunk_bucket: str,
-    icechunk_prefix: str,
 ) -> None:
     """Set satellite S3 config from the parsed application config.
 
@@ -26,9 +24,7 @@ def configure(
     _config = {
         "region": region,
         "geotiff_bucket": geotiff_bucket,
-        "source_bucket": source_bucket,
         "icechunk_bucket": icechunk_bucket,
-        "icechunk_prefix": icechunk_prefix,
     }
     # Reset the cached client so it picks up the new region.
     _s3_client = None
@@ -45,19 +41,9 @@ def get_geotiff_bucket() -> str:
     return _require_config()["geotiff_bucket"]
 
 
-def get_source_bucket() -> str:
-    """Bucket holding the raw satellite source data for ingest."""
-    return _require_config()["source_bucket"]
-
-
 def get_icechunk_bucket() -> str:
     """Bucket holding the Icechunk store."""
     return _require_config()["icechunk_bucket"]
-
-
-def get_icechunk_prefix() -> str:
-    """Key prefix for the Icechunk store."""
-    return _require_config()["icechunk_prefix"]
 
 
 def get_region() -> str:
