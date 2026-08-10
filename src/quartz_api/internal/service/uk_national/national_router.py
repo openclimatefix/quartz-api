@@ -10,7 +10,7 @@ from fastapi_cache.decorator import cache
 from pydantic import AfterValidator
 from starlette import status
 
-from quartz_api.internal import models
+from quartz_api.internal import eclipse, models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
@@ -187,6 +187,7 @@ async def get_national_forecast(
         log.info(f"Fetched {len(pgvs)} predicted generation values")
 
     all_pgvs = sorted(all_pgvs, key=lambda x: x.valid_timestamp, reverse=False)
+    all_pgvs = eclipse.adjust_predicted_generation(all_pgvs, "GB")
     out: list[NationalForecastValue] = [
         NationalForecastValue(
             target_time=v.valid_timestamp,
