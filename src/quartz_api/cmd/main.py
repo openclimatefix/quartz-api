@@ -407,6 +407,12 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Override dependencies according to configuration
     match (conf.get_string("auth0.domain"), conf.get_string("auth0.audience")):
         case (_, "") | ("", _) | ("", ""):
+            # Never fall back to unauthenticated access in production
+            if conf.get_string("api.environment") == "production":
+                raise ValueError(
+                    "Auth0 is not configured: AUTH0_DOMAIN and AUTH0_AUDIENCE are required "
+                    "in production",
+                )
             auth.auth_instance.instantiate_dummy()
             log.warning("disabled authentication. NOT recommended for production")
 
