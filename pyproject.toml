@@ -44,6 +44,7 @@ dependencies = [
     "rasterio>=1.4.4",
     "xarray>=2026.4.0",
     "timezonefinder>=8.2.4",
+    "astral>=3.2",
 ]
 
 [dependency-groups]
