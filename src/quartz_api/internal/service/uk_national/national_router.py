@@ -25,7 +25,7 @@ from .endpoint_types import (
     gsp_id_map,
     model_names_external_to_internal,
 )
-from .time_utils import limit_end_datetime_by_permissions
+from .time_utils import limit_end_datetime_by_permissions, trial_expired
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,  # noqa: ARG001
+    auth: AuthDependency,
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEndNonAware,
         Depends(limit_end_datetime_by_permissions),
@@ -142,6 +142,11 @@ async def get_national_forecast(
             start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(
                 days=3,
             )
+
+    # end_datetime_utc is already clamped to "now" for expired trials. Clamp
+    # start_datetime_utc too, so it can't end up later than end_datetime_utc.
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        start_datetime_utc = min(start_datetime_utc, end_datetime_utc)
 
     windows: list[tuple[dt.datetime, dt.datetime]] = [(start_datetime_utc, end_datetime_utc)]
     if end_datetime_utc - start_datetime_utc > dt.timedelta(days=7):

@@ -53,7 +53,7 @@ def limit_end_datetime_by_permissions(
 
     intraday_max_allowed = dt.datetime.now(dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
     if trial_expired(auth, dt.datetime.now(dt.UTC)):
-        return dt.datetime.now(dt.UTC)
+        return min(end_datetime_utc, dt.datetime.now(dt.UTC))
     if "read:uk-intraday" in permissions:
         return min(end_datetime_utc, intraday_max_allowed)
 
