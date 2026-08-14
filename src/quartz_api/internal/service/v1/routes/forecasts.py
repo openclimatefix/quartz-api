@@ -45,6 +45,7 @@ from ..helpers import (
     resolve_region_id,
     timeseries_window,
     to_uuid,
+    trial_expired,
     validate_model,
     validate_window,
     window_chunks,
@@ -119,6 +120,11 @@ async def get_forecast(
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        if win_end.tzinfo is None:
+            win_end = win_end.replace(tzinfo=dt.UTC)
+        win_end = min(win_end, dt.datetime.now(dt.UTC))
+        win_start = min(win_start, win_end)
     validate_window(win_start, win_end)
     pgvs: list = []
     for chunk_start, chunk_end in window_chunks(win_start, win_end):
@@ -276,6 +282,8 @@ async def get_forecasts_at_time(
     snapshot_time = time_utc or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        snapshot_time = min(snapshot_time, dt.datetime.now(dt.UTC))
 
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[to_uuid(r.uuid) for r in regions],
@@ -380,6 +388,9 @@ async def get_forecasts_period(
         )
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        win_end = min(win_end, dt.datetime.now(dt.UTC))
+        win_start = min(win_start, win_end)
     validate_window(win_start, win_end)
 
     backend = FastAPICache.get_backend()
