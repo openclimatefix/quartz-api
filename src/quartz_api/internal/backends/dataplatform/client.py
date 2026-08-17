@@ -141,13 +141,10 @@ class StorageClient(models.StorageInterface):
         if forecaster_name is None:
             # Use the forecaster that produced the most recent forecast for the location by default,
             # taking into account the desired horizon.
-            # NOTE: This is a pretty rough-and-ready way of getting the forecaster and should be
-            # changed.
             req = messages_pb2.GetLatestForecastsRequest(
                 location_uuid=str(location_uuid),
                 energy_source=energy_type_map[energy_type],
-                pivot_timestamp_utc=window_start
-                - dt.timedelta(minutes=forecast_horizon_minutes),
+                pivot_timestamp_utc=created_cutoff,
             )
             resp = await self.dpc.GetLatestForecasts(req)
             if len(resp.forecasts) == 0:
