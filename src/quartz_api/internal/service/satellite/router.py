@@ -10,7 +10,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
-from ._ingest import _ingest_running, run_ingest
+from ._ingest import COMPOSITE_CONFIG, _ingest_running, run_ingest
 from .endpoint_types import HistoricSatelliteData
 
 router = APIRouter(
@@ -32,7 +32,7 @@ VALID_CHANNELS = frozenset(
         "WV_062",
         "WV_073",
     },
-)
+) | frozenset(COMPOSITE_CONFIG)
 
 S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
 

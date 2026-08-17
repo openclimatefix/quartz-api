@@ -92,6 +92,11 @@ class S3Client:
         with self.fs.open(f"s3://{bucket}/{key}", "wb") as f:
             f.write(data)
 
+    def download_bytes(self, bucket: str, key: str) -> bytes:
+        """Download raw bytes from an S3 key."""
+        with self.fs.open(f"s3://{bucket}/{key}", "rb") as f:
+            return f.read()
+
 
 def get_s3_client() -> S3Client:
     """Get the cached S3 client singleton."""
