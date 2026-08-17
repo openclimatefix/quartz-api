@@ -8,6 +8,7 @@ import numpy as np
 import rasterio
 import sentry_sdk
 import xarray as xr
+from affine import Affine
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from rasterio.windows import from_bounds as window_from_bounds
@@ -68,7 +69,9 @@ def composite_channels(channel_arrays: list[np.ndarray]) -> np.ndarray:
         if finite.any():
             mn, mx = np.nanmin(arr), np.nanmax(arr)
             if mx > mn:
-                grey = np.where(finite, np.clip((arr - mn) / (mx - mn), 0, 1), 0.0).astype(np.float32)
+                grey = np.where(
+                    finite, np.clip((arr - mn) / (mx - mn), 0, 1), 0.0,
+                ).astype(np.float32)
         alpha = (grey * (SAT_MAX_ALPHA / 255.0) * SAT_OPACITY).astype(np.float32)
 
         new_alpha = alpha + out_alpha * (1 - alpha)
@@ -86,10 +89,11 @@ def composite_channels(channel_arrays: list[np.ndarray]) -> np.ndarray:
 def _write_tif(
     bands: list[np.ndarray],
     dtype: str,
-    transform,
+    transform: Affine,
     tags: dict[str, str],
 ) -> bytes:
-    """Encode one or more same-shape bands as an in-memory, tagged GeoTIFF
+    """Encode one or more same-shape bands as an in-memory, tagged GeoTIFF.
+
     (EPSG:3857). Shared by the leaf-channel and composite upload paths below —
     both write a single float32 band, so they're the same format end to end.
     """
@@ -258,7 +262,11 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
 
                 tif_bytes = _write_tif(
                     [cropped], "float32", crop_transform,
-                    tags={"channel": channel, "timestamp": ts_str, "bounds_wgs84": wgs84_bounds_tag},
+                    tags={
+                        "channel": channel,
+                        "timestamp": ts_str,
+                        "bounds_wgs84": wgs84_bounds_tag,
+                    },
                 )
                 s3_client.upload_bytes(s3_bucket, key, tif_bytes)
                 uploaded += 1
@@ -269,7 +277,7 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                 log.exception("Failed %s @ %s: %s", channel, ts_str, e)
                 sentry_sdk.capture_exception(e)
 
-        # Second loop to process composites 
+        # Second loop to process composites
         for name, members in COMPOSITE_CONFIG.items():
             composite_key = f"layers/{name}/{ts_str}.tif"
             if s3_client.object_exists(s3_bucket, composite_key):
