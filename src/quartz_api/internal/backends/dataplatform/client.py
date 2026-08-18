@@ -142,7 +142,7 @@ class StorageClient(models.StorageInterface):
 
         if forecaster_name is None:
             # Pick whichever forecaster wrote most recently, as of now rather than the
-            # horizon cutoff, ties settled by name — so changing horizon can't change model.
+            # horizon cutoff, so that changing horizon can't change the model.
             req = messages_pb2.GetLatestForecastsRequest(
                 location_uuid=str(location_uuid),
                 energy_source=energy_type_map[energy_type],
@@ -151,9 +151,13 @@ class StorageClient(models.StorageInterface):
             resp = await self.dpc.GetLatestForecasts(req)
             if len(resp.forecasts) == 0:
                 return []
+            # Sort newest first by write time, then by init time, then by name.
+            # Two models can write at the same moment, and the data platform does not
+            # guarantee an order, so the extra keys keep the choice stable between requests.
             resp.forecasts.sort(
                 key=lambda f: (
                     -f.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC).timestamp(),
+                    -f.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC).timestamp(),
                     f.forecaster.forecaster_name,
                 ),
             )

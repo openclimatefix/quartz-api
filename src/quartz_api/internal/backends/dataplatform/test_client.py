@@ -703,6 +703,93 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(ctx.exception.status_code, 403)
 
+    @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
+    async def test_forecaster_auto_selection(
+        self,
+        client_mock: service_pb2_grpc.DataPlatformDataServiceStub,
+    ) -> None:
+        """Auto-selection must not depend on the order the data platform returns."""
+
+        @dataclasses.dataclass
+        class Candidate:
+            name: str
+            created_mins_ago: int
+            init_mins_ago: int
+
+        @dataclasses.dataclass
+        class TestCase:
+            name: str
+            candidates: list[Candidate]
+            expected_forecaster: str
+
+        testcases: list[TestCase] = [
+            TestCase(
+                name="Should pick the model that wrote most recently",
+                candidates=[
+                    Candidate(name="a_model", created_mins_ago=60, init_mins_ago=60),
+                    Candidate(name="z_model", created_mins_ago=5, init_mins_ago=60),
+                ],
+                expected_forecaster="z_model",
+            ),
+            TestCase(
+                name="Should prefer the fresher init time when write times are equal",
+                candidates=[
+                    Candidate(name="a_model", created_mins_ago=5, init_mins_ago=120),
+                    Candidate(name="z_model", created_mins_ago=5, init_mins_ago=30),
+                ],
+                expected_forecaster="z_model",
+            ),
+            TestCase(
+                name="Should fall back to the name when write and init times are equal",
+                candidates=[
+                    Candidate(name="z_model", created_mins_ago=5, init_mins_ago=30),
+                    Candidate(name="a_model", created_mins_ago=5, init_mins_ago=30),
+                ],
+                expected_forecaster="a_model",
+            ),
+        ]
+
+        client = StorageClient.from_dp(client_mock)
+        for tc in testcases:
+            def latest_forecasts(
+                req: messages_pb2.GetLatestForecastsRequest,
+                metadata: object | None = None,  # noqa: ARG001
+                candidates: list[Candidate] = tc.candidates,
+            ) -> messages_pb2.GetLatestForecastsResponse:
+                t = req.pivot_timestamp_utc
+                return messages_pb2.GetLatestForecastsResponse(
+                    forecasts=[
+                        messages_pb2.GetLatestForecastsResponse.Forecast(
+                            initialization_timestamp_utc=t - dt.timedelta(minutes=c.init_mins_ago),
+                            created_timestamp_utc=t - dt.timedelta(minutes=c.created_mins_ago),
+                            forecaster=messages_pb2.Forecaster(
+                                forecaster_name=c.name,
+                                forecaster_version="1.0",
+                            ),
+                            location_uuid=req.location_uuid,
+                        )
+                        for c in candidates
+                    ],
+                )
+
+            client_mock.ListLocations = AsyncMock(side_effect=mock_list_locations)
+            client_mock.GetForecastAsTimeseries = AsyncMock(side_effect=mock_get_forecast)
+            client_mock.GetLatestForecasts = AsyncMock(side_effect=latest_forecasts)
+
+            with self.subTest(tc.name):
+                await client.get_predicted_generation(
+                    location_uuid=uuid.uuid4(),
+                    authdata={"app_metadata": {"hubspot_company_id": "access_org"}},
+                    window_start=TEST_TIMESTAMP_UTC,
+                    window_end=TEST_TIMESTAMP_UTC + dt.timedelta(days=1),
+                    created_cutoff=TEST_TIMESTAMP_UTC,
+                    energy_type=models.EnergyType.SOLAR,
+                    location_type=models.LocationType.SITE,
+                )
+
+                sent = client_mock.GetForecastAsTimeseries.call_args.args[0]
+                self.assertEqual(sent.forecaster.forecaster_name, tc.expected_forecaster)
+
 
 class TestDayAheadWindows(unittest.IsolatedAsyncioTestCase):
     """Test the creation of day-ahead windows.
