@@ -36,6 +36,12 @@ _REGION_ALIASES: dict[str, dict[str, str]] = {
 
 _REGION_OBSERVER_NAME = "ruvnl"
 
+# Pinned per source, so every horizon of a chart is served by the same model.
+_REGION_FORECASTER_NAMES: dict[str, str] = {
+    "solar": "pvnet_india",
+    "wind": "windnet_india_mo_v2",
+}
+
 
 async def _resolve_region_location(
     db: models.StorageInterface,
@@ -136,8 +142,9 @@ async def get_historic_timeseries_route(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
             ),
             location_type=models.LocationType.REGION,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
-            - dt.timedelta(days=2),
+            window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+            .floor("D")
+            .to_pydatetime(),
             window_end=pd.Timestamp.utcnow(),
             authdata={},
             observer_name=_REGION_OBSERVER_NAME,
@@ -205,9 +212,10 @@ async def get_forecast_timeseries_route(
     try:
         pgvs = await db.get_predicted_generation(
             location_uuid=location.uuid,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
-            - dt.timedelta(days=2),
-            window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime()
+            window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+            .floor("D")
+            .to_pydatetime(),
+            window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
             + dt.timedelta(days=2),
             energy_type=(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
@@ -215,6 +223,7 @@ async def get_forecast_timeseries_route(
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
             authdata={},
+            forecaster_name=_REGION_FORECASTER_NAMES[source],
             day_ahead=day_ahead_forecast,
             day_ahead_closure_time_local=day_ahead_closure_time_local,
         )
@@ -278,8 +287,9 @@ async def get_forecast_csv(
 
     pgvs = await db.get_predicted_generation(
         location_uuid=location.uuid,
-        window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime()
-        - dt.timedelta(days=2),
+        window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+        .floor("D")
+        .to_pydatetime(),
         window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
         + dt.timedelta(days=2),
         energy_type=(
@@ -288,6 +298,7 @@ async def get_forecast_csv(
         location_type=models.LocationType.REGION,
         forecast_horizon_minutes=horizon_mins,
         authdata={},
+        forecaster_name=_REGION_FORECASTER_NAMES[source],
     )
 
     # Format to dataframe
