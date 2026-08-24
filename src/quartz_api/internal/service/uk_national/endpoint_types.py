@@ -296,8 +296,18 @@ class NationalForecast(Forecast):
 class Status(EnhancedBaseModel):
     """Status Model for a single message."""
 
-    status: str = Field(..., description="Status description")
-    message: str = Field(..., description="Status Message")
+    status: str = Field(
+        ...,
+        description=(
+            "Status value: one of `ok`, `info`, `warning`, `error`, `unknown`. "
+            "Sourced from the Quartz Status API. Note `info` (a deliberate, "
+            "non-degraded notice such as planned maintenance) and `unknown` "
+            "(no status signal available) may be returned; treat any "
+            "unrecognised value as non-critical rather than failing."
+        ),
+        examples=["ok"],
+    )
+    message: str = Field(..., description="Status Message", examples=["Operating normally."])
 
 
 # This gets populated by the data platform storage backend at API startup.

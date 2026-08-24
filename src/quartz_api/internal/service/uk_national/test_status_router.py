@@ -129,6 +129,40 @@ async def test_get_status_returns_upstream_status(api_client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_status_passes_through_info(api_client, monkeypatch):
+    """Verifies the Status API 0.2.0 'info' value reaches clients unchanged.
+
+    'info' is a deliberate, non-degraded notice (planned maintenance, a heads-up)
+    and is distinct from 'unknown', which means no signal at all. The v0 Status
+    model types `status` as a plain str, so no mapping is needed — this test pins
+    that, since narrowing the field later would silently drop the value.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(
+            200,
+            json={
+                "key": "gb-solar",
+                "name": "GB Solar",
+                "status": "info",
+                "message": "Planned maintenance 02:00-03:00 UTC.",
+                "source": "manual",
+                "updatedAt": "2026-08-21T16:45:16.252Z",
+            },
+        )
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "info",
+        "message": "Planned maintenance 02:00-03:00 UTC.",
+    }
+
+
+@pytest.mark.asyncio
 async def test_get_status_null_message_becomes_empty_string(api_client, monkeypatch):
     """Verifies a null upstream message is coerced to an empty string."""
 
