@@ -2,11 +2,24 @@ import datetime as dt
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import httpx
 import pytest
+import pytest_asyncio
 import time_machine
+from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
+from quartz_api.internal.service.uk_national import status_router
 from quartz_api.internal.service.uk_national.endpoint_types import gsp_id_map
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def clear_cache():
+    """FastAPICache.init() no-ops once initialised, so the store is shared between
+    tests. Clear it so cached routes don't serve a previous test's response."""
+    await FastAPICache.clear()
+    yield
+    await FastAPICache.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -74,3 +87,145 @@ async def test_check_last_forecast_run_missing_location(api_client, mock_storage
 
     mock_storage.get_predicted_generation.assert_not_called()
 
+
+
+def _mock_status_api(monkeypatch, handler):
+    """Route the status router's outbound httpx calls to an in-process handler."""
+    real_init = httpx.AsyncClient.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        real_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
+
+
+@pytest.mark.asyncio
+async def test_get_status_returns_upstream_status(api_client, monkeypatch):
+    """Verifies status and message are proxied from the Quartz Status API."""
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(
+            200,
+            json={
+                "key": "gb-solar",
+                "name": "GB Solar",
+                "status": "warning",
+                "message": "Degraded",
+                "source": "manual",
+                "updatedAt": "2026-07-21T16:45:16.252Z",
+            },
+        )
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "warning", "message": "Degraded"}
+    assert seen == [f"{status_router.STATUS_URL}/products/gb-solar"]
+
+
+@pytest.mark.asyncio
+async def test_get_status_passes_through_info(api_client, monkeypatch):
+    """Verifies the Status API 0.2.0 'info' value reaches clients unchanged.
+
+    'info' is a deliberate, non-degraded notice (planned maintenance, a heads-up)
+    and is distinct from 'unknown', which means no signal at all. The v0 Status
+    model types `status` as a plain str, so no mapping is needed — this test pins
+    that, since narrowing the field later would silently drop the value.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(
+            200,
+            json={
+                "key": "gb-solar",
+                "name": "GB Solar",
+                "status": "info",
+                "message": "Planned maintenance 02:00-03:00 UTC.",
+                "source": "manual",
+                "updatedAt": "2026-08-21T16:45:16.252Z",
+            },
+        )
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "info",
+        "message": "Planned maintenance 02:00-03:00 UTC.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_status_null_message_becomes_empty_string(api_client, monkeypatch):
+    """Verifies a null upstream message is coerced to an empty string."""
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(200, json={"status": "ok", "message": None})
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "message": ""}
+
+
+@pytest.mark.asyncio
+async def test_get_status_upstream_error_degrades_to_unknown(api_client, monkeypatch):
+    """Verifies an upstream 500 yields 200 with an 'unknown' status, not a 5xx."""
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(500)
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_get_status_connection_error_degrades_to_unknown(api_client, monkeypatch):
+    """Verifies an unreachable Status API yields 200 with an 'unknown' status."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable", request=request)
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+
+
+@pytest.mark.parametrize("payload", [[], None, "ok"])
+@pytest.mark.asyncio
+async def test_get_status_non_object_payload_degrades_to_unknown(
+    api_client,
+    monkeypatch,
+    payload,
+):
+    """Verifies a 200 carrying a non-object body yields 'unknown', not a 500.
+
+    Subscripting a list, None or a str raises TypeError rather than KeyError, so
+    these need catching explicitly alongside the malformed-object cases.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(200, json=payload)
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
