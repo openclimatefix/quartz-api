@@ -24,7 +24,7 @@ from fastapi_cache.decorator import cache
 from pydantic import AfterValidator, TypeAdapter
 from starlette import status
 
-from quartz_api.internal import models
+from quartz_api.internal import eclipse, models
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
@@ -122,6 +122,10 @@ async def get_forecasts_for_a_specific_gsp(
         forecaster_version=GSP_FORECASTER_VERSION,
     )
     log.info(f"Fetched {len(pgvs)} predicted generation values for gsp_id {gsp_id}")
+
+    # gsp_id 0 is the national location; real GSPs are left alone.
+    if gsp_id == 0:
+        pgvs = eclipse.adjust_predicted_generation(pgvs, "GB")
 
     out: list[ForecastValue] = [
         ForecastValue(
@@ -378,6 +382,14 @@ async def get_all_available_forecasts(
             ) for loc in gsps_to_convert.values()
         ]
     log.info(f"Fetched predicted generation values for {len(results)} GSPs")
+
+    # Both live paths can include gsp_id 0; the pre-warmed cache path excludes it.
+    if 0 in gsps_to_convert:
+        national_uuid = gsps_to_convert[0].uuid
+        results = [
+            eclipse.adjust_national_only(snapshot, "GB", national_uuid)
+            for snapshot in results
+        ]
 
     gsp_uuid_id_map = {v.uuid: k for k, v in gsps_to_convert.items()}
     if compact:
