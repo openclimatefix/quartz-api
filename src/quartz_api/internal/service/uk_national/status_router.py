@@ -32,7 +32,7 @@ STATUS_PRODUCT = "gb-solar"
     response_model=Status,
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder, expire=60)
+@cache(key_builder=key_builder, expire=10)
 async def get_status(request: Request) -> Status:  # noqa: ARG001
     """### Get status for the database and forecasts.
 
