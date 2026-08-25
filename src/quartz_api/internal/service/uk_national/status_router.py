@@ -49,7 +49,7 @@ async def get_status(request: Request) -> Status:  # noqa: ARG001
             response.raise_for_status()
             payload = response.json()
         return Status(status=payload["status"], message=payload.get("message") or "")
-    except (httpx.HTTPError, ValueError, KeyError):
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
         log.exception(
             "Could not fetch status for %s from %s",
             STATUS_PRODUCT,

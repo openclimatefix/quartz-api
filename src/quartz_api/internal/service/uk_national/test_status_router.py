@@ -205,3 +205,27 @@ async def test_get_status_connection_error_degrades_to_unknown(api_client, monke
 
     assert response.status_code == 200
     assert response.json()["status"] == "unknown"
+
+
+@pytest.mark.parametrize("payload", [[], None, "ok"])
+@pytest.mark.asyncio
+async def test_get_status_non_object_payload_degrades_to_unknown(
+    api_client,
+    monkeypatch,
+    payload,
+):
+    """Verifies a 200 carrying a non-object body yields 'unknown', not a 500.
+
+    Subscripting a list, None or a str raises TypeError rather than KeyError, so
+    these need catching explicitly alongside the malformed-object cases.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(200, json=payload)
+
+    _mock_status_api(monkeypatch, handler)
+
+    response = await api_client.get("/v0/solar/GB/status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
