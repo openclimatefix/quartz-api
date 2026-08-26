@@ -31,8 +31,8 @@ _REGION_OBSERVER_NAME = "ruvnl"
 
 # Pinned per source, so every horizon of a chart is served by the same model.
 _REGION_FORECASTER_NAMES: dict[str, str] = {
-    "solar": "pvnet_india",
-    "wind": "windnet_india_mo_v2",
+    "solar": "pvnet_india_adjust",
+    "wind": "windnet_india_mo_v2_adjust",
 }
 
 
