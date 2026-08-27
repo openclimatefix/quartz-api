@@ -248,6 +248,28 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     )
 
 
+def trial_expired(auth: AuthDependency, now: dt.datetime) -> bool:
+    """Check whether the caller's trial has ended, per app_metadata.trial_ends_at.
+
+    No claim at all (paid/non-trial user) is treated the same as an unexpired
+    trial: both mean "don't clamp." Only a claim that has actually passed
+    counts as expired.
+    """
+    app_metadata = auth.get("app_metadata", {})
+    if not isinstance(app_metadata, dict):
+        return False
+    raw = app_metadata.get("trial_ends_at")
+    if raw is None:
+        return False
+    try:
+        ends_at = dt.datetime.fromisoformat(str(raw))
+    except ValueError:
+        return False
+    if ends_at.tzinfo is None:
+        ends_at = ends_at.replace(tzinfo=dt.UTC)
+    return ends_at <= now
+
+
 def resolve_forecast_model(
     model: str | None,
     rt: RegionTypeConfig | None,

@@ -14,7 +14,7 @@ from quartz_api.internal import models
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
-from .helpers import internal_to_api_name, timeseries_window, to_uuid
+from .helpers import internal_to_api_name, timeseries_window, to_uuid, trial_expired
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +70,9 @@ async def key_builder(
     parts = [namespace, request.method.lower(), request.url.path, repr(sorted(params))]
     if tier is not None:
         parts.append(tier)
+    #Invalidte cache if trial has expired
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        parts.append("trial_ended=true")
     return ":".join(parts)
 
 
