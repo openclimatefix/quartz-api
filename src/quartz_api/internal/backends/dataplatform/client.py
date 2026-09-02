@@ -93,8 +93,10 @@ class StorageClient(models.StorageInterface):
     ) -> list[models.PredictedGenerationValue]:
 
         # Limit the creation time if not set
+        forecaster_pivot = created_cutoff
         if created_cutoff is None:
-            created_cutoff = dt.datetime.now(tz=dt.UTC) - dt.timedelta(
+            forecaster_pivot = dt.datetime.now(tz=dt.UTC)
+            created_cutoff = forecaster_pivot - dt.timedelta(
                 minutes=forecast_horizon_minutes,
             )
 
@@ -139,19 +141,25 @@ class StorageClient(models.StorageInterface):
             location_uuid = gsp.location_uuid
 
         if forecaster_name is None:
-            # Use the forecaster that produced the most recent forecast for the location by default,
-            # taking into account the desired horizon.
+            # Pick whichever forecaster wrote most recently, as of now rather than the
+            # horizon cutoff, so that changing horizon can't change the model.
             req = messages_pb2.GetLatestForecastsRequest(
                 location_uuid=str(location_uuid),
                 energy_source=energy_type_map[energy_type],
-                pivot_timestamp_utc=created_cutoff,
+                pivot_timestamp_utc=forecaster_pivot,
             )
             resp = await self.dpc.GetLatestForecasts(req)
             if len(resp.forecasts) == 0:
                 return []
+            # Sort newest first by write time, then by init time, then by name.
+            # Two models can write at the same moment, and the data platform does not
+            # guarantee an order, so the extra keys keep the choice stable between requests.
             resp.forecasts.sort(
-                key=lambda f: f.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                reverse=True,
+                key=lambda f: (
+                    -f.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC).timestamp(),
+                    -f.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC).timestamp(),
+                    f.forecaster.forecaster_name,
+                ),
             )
             forecaster = resp.forecasts[0].forecaster
         elif forecaster_version is None:

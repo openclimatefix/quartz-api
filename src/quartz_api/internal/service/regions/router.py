@@ -26,15 +26,14 @@ from .endpoint_types import (
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
-# Backwards-compatibility aliases. The old API exposed a single "ruvnl" region;
-# it has since been split into source-specific regions, so map the legacy name
-# onto the new one per source before resolving.
-_REGION_ALIASES: dict[str, dict[str, str]] = {
-    "solar": {"ruvnl": "ruvnl_solar"},
-    "wind": {"ruvnl": "ruvnl_wind"},
-}
 
 _REGION_OBSERVER_NAME = "ruvnl"
+
+# Pinned per source, so every horizon of a chart is served by the same model.
+_REGION_FORECASTER_NAMES: dict[str, str] = {
+    "solar": "pvnet_india_adjust",
+    "wind": "windnet_india_mo_v2_adjust",
+}
 
 
 async def _resolve_region_location(
@@ -43,13 +42,13 @@ async def _resolve_region_location(
     region: str,
 ) -> models.Location:
     """Resolve a region name to its Location, raising 404 if it doesn't exist."""
-    region = _REGION_ALIASES.get(source, {}).get(region, region)
     locations = await db.get_locations(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
         ),
         location_type=models.LocationType.REGION,
         authdata={},
+        location_names=[region],
     )
     location = next((loc for loc in locations if loc.name == region), None)
     if location is None:
@@ -104,10 +103,7 @@ async def get_regions_route(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid source {source}. Available sources: 'solar'.",
         )
-    legacy_by_new = {new: legacy for legacy, new in _REGION_ALIASES.get(source, {}).items()}
-    region_names = list(
-        dict.fromkeys(legacy_by_new.get(r.name, r.name) for r in regions),
-    )
+    region_names = list(dict.fromkeys(r.name for r in regions))
     return GetRegionsResponse(regions=region_names)
 
 
@@ -136,8 +132,9 @@ async def get_historic_timeseries_route(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
             ),
             location_type=models.LocationType.REGION,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
-            - dt.timedelta(days=2),
+            window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+            .floor("D")
+            .to_pydatetime(),
             window_end=pd.Timestamp.utcnow(),
             authdata={},
             observer_name=_REGION_OBSERVER_NAME,
@@ -205,9 +202,10 @@ async def get_forecast_timeseries_route(
     try:
         pgvs = await db.get_predicted_generation(
             location_uuid=location.uuid,
-            window_start=pd.Timestamp.utcnow().floor("H").to_pydatetime()
-            - dt.timedelta(days=2),
-            window_end=pd.Timestamp.utcnow().floor("H").to_pydatetime()
+            window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+            .floor("D")
+            .to_pydatetime(),
+            window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
             + dt.timedelta(days=2),
             energy_type=(
                 models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
@@ -215,6 +213,7 @@ async def get_forecast_timeseries_route(
             location_type=models.LocationType.REGION,
             forecast_horizon_minutes=horizon_mins,
             authdata={},
+            forecaster_name=_REGION_FORECASTER_NAMES[source],
             day_ahead=day_ahead_forecast,
             day_ahead_closure_time_local=day_ahead_closure_time_local,
         )
@@ -278,8 +277,9 @@ async def get_forecast_csv(
 
     pgvs = await db.get_predicted_generation(
         location_uuid=location.uuid,
-        window_start=pd.Timestamp.utcnow().floor("h").to_pydatetime()
-        - dt.timedelta(days=2),
+        window_start=(pd.Timestamp.utcnow() - dt.timedelta(days=2))
+        .floor("D")
+        .to_pydatetime(),
         window_end=pd.Timestamp.utcnow().floor("h").to_pydatetime()
         + dt.timedelta(days=2),
         energy_type=(
@@ -288,6 +288,7 @@ async def get_forecast_csv(
         location_type=models.LocationType.REGION,
         forecast_horizon_minutes=horizon_mins,
         authdata={},
+        forecaster_name=_REGION_FORECASTER_NAMES[source],
     )
 
     # Format to dataframe
