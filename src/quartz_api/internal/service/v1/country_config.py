@@ -16,16 +16,48 @@ class ForecastModel:
     `name` is the internal DP forecaster_name sent to the data platform.
     `slug` is the user-facing API name (defaults to `name` when not set).
     `label` is the human-readable display name.
+    `adjust_name` is the trend-adjusted variant the `adjusted` param selects; None
+    means there is none and the param is a no-op here.
+
+    `aliases` and `adjust_aliases` are retired user-facing names, still accepted but
+    absent from `/region-types`, the OpenAPI enum and error messages. `aliases` pins
+    the adjuster off and `adjust_aliases` pins it on, so an old name keeps the exact
+    forecast it returned before the adjuster became a parameter.
     """
 
     name: str
     label: str
     slug: str | None = None
+    adjust_name: str | None = None
+    aliases: tuple[str, ...] = ()
+    adjust_aliases: tuple[str, ...] = ()
 
     @property
     def api_name(self) -> str:
         """User-facing model name used in API params and enum values."""
         return self.slug if self.slug is not None else self.name
+
+    def accepts(self, api_name: str) -> bool:
+        """True if `api_name` names this model, current or legacy."""
+        return (
+            api_name == self.api_name
+            or api_name in self.aliases
+            or api_name in self.adjust_aliases
+        )
+
+    def alias_adjust_override(self, api_name: str) -> bool | None:
+        """Trend-adjuster state implied by a legacy name, or None if it implies nothing."""
+        if api_name in self.adjust_aliases:
+            return True
+        if api_name in self.aliases:
+            return False
+        return None
+
+    def internal_name(self, *, adjusted: bool) -> str:
+        """Internal DP forecaster_name for this model at the given adjuster setting."""
+        if adjusted and self.adjust_name is not None:
+            return self.adjust_name
+        return self.name
 
 
 @dataclass(frozen=True)
@@ -38,8 +70,10 @@ class RegionTypeConfig:
     location_type: LocationType
     source_types: tuple[str, ...] = ()
     forecast_models: tuple[ForecastModel, ...] = ()
-    # default_model stores the internal DP forecaster_name, not the user-facing slug.
+    # Internal DP forecaster_name, unadjusted — the `adjusted` param reaches the variant.
     default_model: str | None = None
+    # False (e.g. GB gsp) means no adjusted variants exist, so `adjusted` is a no-op.
+    supports_adjusted: bool = False
     metadata_fields: tuple[str, ...] = ()
     # intraday_models lists models accessible to intraday-only users (subset of forecast_models).
     intraday_models: tuple[ForecastModel, ...] = ()
@@ -56,18 +90,29 @@ class RegionTypeConfig:
         return None
 
     def get_model_by_api_name(self, api_name: str) -> ForecastModel | None:
-        """Look up a ForecastModel by its user-facing API name (slug or internal name)."""
+        """Look up a ForecastModel by its user-facing API name, current or legacy."""
         for fm in self.forecast_models:
-            if fm.api_name == api_name:
+            if fm.accepts(api_name):
                 return fm
         return None
 
     def get_model_by_internal_name(self, name: str) -> ForecastModel | None:
-        """Look up a ForecastModel by its internal DP name."""
+        """Look up a ForecastModel by its internal DP name, adjusted or not."""
         for fm in self.forecast_models:
-            if fm.name == name:
+            if name in (fm.name, fm.adjust_name):
                 return fm
         return None
+
+    def default_forecaster_name(self, *, adjusted: bool = True) -> str | None:
+        """Internal DP forecaster_name for the default model at the given adjuster setting."""
+        if self.default_model is None:
+            return None
+        fm = self.get_model_by_internal_name(self.default_model)
+        if fm is None:
+            return self.default_model
+        return fm.internal_name(
+            adjusted=adjusted and self.supports_adjusted,
+        )
 
     def default_model_api_name(self) -> str | None:
         """User-facing API name for the default forecast model."""
@@ -151,98 +196,92 @@ class FM:
     in any RegionTypeConfig tuple.
     """
 
-    # GB — blend
-    BLEND = ForecastModel(name="blend", label="Blend")
-    BLEND_ADJUST = ForecastModel(name="blend_adjust", label="Blend (Trend Adjusted)")
-    # GB — PVNet single-source models
-    PVNET_ECMWF = ForecastModel(name="pvnet_ecmwf", label="PVNet Intraday (ECMWF)")
-    PVNET_ECMWF_ADJUST = ForecastModel(
-        name="pvnet_ecmwf_adjust",
-        label="PVNet Intraday (ECMWF, Trend Adjusted)",
+    # GB — blend of all models
+    BLEND = ForecastModel(
+        name="blend",
+        label="Blend",
+        adjust_name="blend_adjust",
+        adjust_aliases=("blend_adjust",),
     )
-    PVNET_SAT = ForecastModel(
-        name="pvnet_sat_only",
-        label="PVNet Intraday (Satellite)",
-        slug="pvnet_sat",
+    # GB — NWP-only day-ahead (ECMWF + Met Office, no satellite at day-ahead range)
+    ECMWF_MO = ForecastModel(
+        name="pvnet_day_ahead",
+        label="ECMWF + Met Office",
+        slug="ecmwf_mo",
+        adjust_name="pvnet_day_ahead_adjust",
+        aliases=("pvnet_day_ahead",),
+        adjust_aliases=("pvnet_day_ahead_adjust",),
     )
-    PVNET_SAT_ADJUST = ForecastModel(
-        name="pvnet_sat_only_adjust",
-        label="PVNet Intraday (Satellite, Trend Adjusted)",
-        slug="pvnet_sat_adjust",
-    )
-    PVNET_UKV = ForecastModel(
-        name="pvnet_ukv_only",
-        label="PVNet Intraday (Met Office)",
-        slug="pvnet_ukv",
-    )
-    PVNET_UKV_ADJUST = ForecastModel(
-        name="pvnet_ukv_only_adjust",
-        label="PVNet Intraday (Met Office, Trend Adjusted)",
-        slug="pvnet_ukv_adjust",
-    )
-    # GB — PVNet v2 (intraday)
-    PVNET_INTRADAY = ForecastModel(
+    # GB — full intraday input set
+    ECMWF_MO_SAT_8H = ForecastModel(
         name="pvnet_v2",
-        label="PVNet Intraday",
-        slug="pvnet_intraday",
+        label="ECMWF + Met Office + Satellite (8h)",
+        slug="ecmwf_mo_sat_8h",
+        adjust_name="pvnet_v2_adjust",
+        aliases=("pvnet_intraday",),
+        adjust_aliases=("pvnet_intraday_adjust",),
     )
-    PVNET_INTRADAY_ADJUST = ForecastModel(
-        name="pvnet_v2_adjust",
-        label="PVNet Intraday (Trend Adjusted)",
-        slug="pvnet_intraday_adjust",
+    # GB — single-input ablation models
+    ECMWF = ForecastModel(
+        name="pvnet_ecmwf",
+        label="ECMWF",
+        slug="ecmwf",
+        adjust_name="pvnet_ecmwf_adjust",
+        aliases=("pvnet_ecmwf",),
+        adjust_aliases=("pvnet_ecmwf_adjust",),
     )
-    # GB — PVNet day-ahead
-    PVNET_DAY_AHEAD = ForecastModel(name="pvnet_day_ahead", label="PVNet Day Ahead")
-    PVNET_DAY_AHEAD_ADJUST = ForecastModel(
-        name="pvnet_day_ahead_adjust",
-        label="PVNet Day Ahead (Trend Adjusted)",
+    SAT_8H = ForecastModel(
+        name="pvnet_sat_only",
+        label="Satellite (8h)",
+        slug="sat_8h",
+        adjust_name="pvnet_sat_only_adjust",
+        aliases=("pvnet_sat",),
+        adjust_aliases=("pvnet_sat_adjust",),
+    )
+    MO = ForecastModel(
+        name="pvnet_ukv_only",
+        label="Met Office",
+        slug="mo",
+        adjust_name="pvnet_ukv_only_adjust",
+        aliases=("pvnet_ukv",),
+        adjust_aliases=("pvnet_ukv_adjust",),
     )
     # NL — blend (slugs match GB blend slugs so API is consistent across countries)
-    NL_BLEND = ForecastModel(name="nl_blend", label="Blend", slug="blend")
-    NL_BLEND_ADJUST = ForecastModel(
-        name="nl_blend_adjust",
-        label="Blend (Trend Adjusted)",
-        slug="blend_adjust",
+    NL_BLEND = ForecastModel(
+        name="nl_blend",
+        label="Blend",
+        slug="blend",
+        adjust_name="nl_blend_adjust",
+        adjust_aliases=("blend_adjust",),
     )
     # NL — uncurtailed (regional and national)
     NL_UNCURTAILED = ForecastModel(
         name="nl_regional_pv_ecmwf_mo_sat_uncurtailed",
         label="PV + ECMWF + Met Office + Satellite, Uncurtailed",
         slug="ecmwf_mo_sat_uncurtailed",
-    )
-    NL_UNCURTAILED_ADJUST = ForecastModel(
-        name="nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
-        label="PV + ECMWF + Met Office + Satellite, Uncurtailed (Trend Adjusted)",
-        slug="ecmwf_mo_sat_uncurtailed_adjust",
+        adjust_name="nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
+        adjust_aliases=("ecmwf_mo_sat_uncurtailed_adjust",),
     )
 
 
 _GB_NATIONAL_FORECAST_MODELS = (
     FM.BLEND,
-    FM.BLEND_ADJUST,
-    FM.PVNET_ECMWF,
-    FM.PVNET_ECMWF_ADJUST,
-    FM.PVNET_SAT,
-    FM.PVNET_SAT_ADJUST,
-    FM.PVNET_UKV,
-    FM.PVNET_UKV_ADJUST,
-    FM.PVNET_INTRADAY,
-    FM.PVNET_INTRADAY_ADJUST,
-    FM.PVNET_DAY_AHEAD,
-    FM.PVNET_DAY_AHEAD_ADJUST,
+    FM.ECMWF_MO,
+    FM.ECMWF_MO_SAT_8H,
+    FM.ECMWF,
+    FM.SAT_8H,
+    FM.MO,
 )
 
 _GB_GSP_FORECAST_MODELS = (
     FM.BLEND,
-    FM.PVNET_INTRADAY,
-    FM.PVNET_DAY_AHEAD,
+    FM.ECMWF_MO_SAT_8H,
+    FM.ECMWF_MO,
 )
 
 _NL_NATIONAL_FORECAST_MODELS = (
     FM.NL_BLEND,
-    FM.NL_BLEND_ADJUST,
     FM.NL_UNCURTAILED,
-    FM.NL_UNCURTAILED_ADJUST,
 )
 
 _NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_UNCURTAILED)
@@ -262,9 +301,10 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
-                default_model="blend_adjust",
-                intraday_models=(FM.PVNET_INTRADAY, FM.PVNET_INTRADAY_ADJUST),
-                intraday_default_model=FM.PVNET_INTRADAY_ADJUST,
+                default_model="blend",
+                supports_adjusted=True,
+                intraday_models=(FM.ECMWF_MO_SAT_8H,),
+                intraday_default_model=FM.ECMWF_MO_SAT_8H,
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -275,8 +315,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend",
                 metadata_fields=("gsp_id", "full_name"),
-                intraday_models=(FM.PVNET_INTRADAY,),
-                intraday_default_model=FM.PVNET_INTRADAY,
+                intraday_models=(FM.ECMWF_MO_SAT_8H,),
+                intraday_default_model=FM.ECMWF_MO_SAT_8H,
             ),
         ),
         generation_sources=(
@@ -305,7 +345,8 @@ COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_NL_NATIONAL_FORECAST_MODELS,
-                default_model="nl_blend_adjust",
+                default_model="nl_blend",
+                supports_adjusted=True,
             ),
             RegionTypeConfig(
                 type="province",

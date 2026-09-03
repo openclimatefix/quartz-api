@@ -87,6 +87,14 @@ async def get_forecast(
         ),
     ),
     model: ValidForecastModel | None = None,
+    adjusted: bool = Query(
+        True,
+        description=(
+            "Apply the trend adjuster, which corrects the forecast using the last "
+            "week of observed error. On by default. Ignored for region types with no "
+            "adjusted model variants (e.g. GB `gsp`)."
+        ),
+    ),
 ) -> ForecastResponse:
     """Get the solar generation forecast for a specific region.
 
@@ -114,7 +122,7 @@ async def get_forecast(
     location_type = region.location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
     validate_model(model, rt, location_type.name)
-    model = resolve_forecast_model(model, rt, is_intraday_only)
+    model = resolve_forecast_model(model, rt, is_intraday_only, adjusted)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     win_start = start_utc or now
@@ -173,6 +181,14 @@ async def get_forecast_last_updated_timestamp(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     model: ValidForecastModel | None = None,
+    adjusted: bool = Query(
+        True,
+        description=(
+            "Apply the trend adjuster, which corrects the forecast using the last "
+            "week of observed error. On by default. Ignored for region types with no "
+            "adjusted model variants (e.g. GB `gsp`)."
+        ),
+    ),
 ) -> dt.datetime:
     """Return the creation time of the most recent forecast for a region.
 
@@ -196,7 +212,7 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    model = resolve_forecast_model(model, rt, is_intraday_only)
+    model = resolve_forecast_model(model, rt, is_intraday_only, adjusted)
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
@@ -233,6 +249,14 @@ async def get_forecasts_at_time(
     region_type: ValidRegionType,
     model_name: ValidForecastModel | None = None,
     model_version: str | None = Query(None, description="Forecast model version."),
+    adjusted: bool = Query(
+        True,
+        description=(
+            "Apply the trend adjuster, which corrects the forecast using the last "
+            "week of observed error. On by default. Ignored for region types with no "
+            "adjusted model variants (e.g. GB `gsp`)."
+        ),
+    ),
     time_utc: dt.datetime | None = Query(
         None,
         description="Forecast target time (UTC). Defaults to now floored to 30 minutes.",
@@ -254,7 +278,12 @@ async def get_forecasts_at_time(
             detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
     validate_model(model_name, rt, rt.type)
-    model_name = resolve_forecast_model(model_name, rt, is_intraday_only)
+    model_name = resolve_forecast_model(
+        model_name,
+        rt,
+        is_intraday_only,
+        adjusted,
+    )
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
