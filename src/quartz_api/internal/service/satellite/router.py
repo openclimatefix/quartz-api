@@ -107,6 +107,11 @@ def get_historic_satellite_data_history(
         end = end.replace(tzinfo=UTC)
     if start > end:
         raise HTTPException(status_code=400, detail="start must not be after end")
+    if end - start > timedelta(days=3):
+        raise HTTPException(
+            status_code=400,
+            detail="Range between start and end must not exceed 3 days",
+        )
 
     bucket = get_geotiff_bucket()
 
