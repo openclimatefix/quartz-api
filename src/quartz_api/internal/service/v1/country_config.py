@@ -257,8 +257,9 @@ class FM:
     NL_UNCURTAILED = ForecastModel(
         name="nl_regional_pv_ecmwf_mo_sat_uncurtailed",
         label="PV + ECMWF + Met Office + Satellite, Uncurtailed",
-        slug="ecmwf_mo_sat_uncurtailed",
+        slug="ecmwf_mo_pv_sat_uncurtailed",
         adjust_name="nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
+        aliases=("ecmwf_mo_sat_uncurtailed",),
         adjust_aliases=("ecmwf_mo_sat_uncurtailed_adjust",),
     )
 

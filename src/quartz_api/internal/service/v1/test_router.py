@@ -2201,3 +2201,34 @@ async def test_last_updated_rejects_unknown_model(client: AsyncClient) -> None:
         f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model=not_a_model",
     )
     assert resp.status_code == 400
+
+
+_NL_NATIONAL_RT = COUNTRIES["NL"].get_region_type("national")
+
+
+def test_nl_advertises_the_renamed_uncurtailed_slug() -> None:
+    """The PV-inclusive name is the advertised one; the old name is not."""
+    assert _NL_NATIONAL_RT is not None
+    advertised = {m.api_name for m in _NL_NATIONAL_RT.forecast_models}
+    assert advertised == {"blend", "ecmwf_mo_pv_sat_uncurtailed"}
+
+
+@pytest.mark.parametrize(
+    ("legacy_name", "expected_internal"),
+    [
+        # The old name pins the adjuster off, so it returns what it did before the
+        # rename rather than picking up the new adjusted-by-default.
+        ("ecmwf_mo_sat_uncurtailed", "nl_regional_pv_ecmwf_mo_sat_uncurtailed"),
+        (
+            "ecmwf_mo_sat_uncurtailed_adjust",
+            "nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
+        ),
+        ("blend_adjust", "nl_blend_adjust"),
+    ],
+)
+def test_retired_nl_names_still_resolve(
+    legacy_name: str,
+    expected_internal: str,
+) -> None:
+    """Every pre-rename NL name keeps resolving to the same DP forecaster."""
+    assert resolve_forecast_model(legacy_name, _NL_NATIONAL_RT, False) == expected_internal
