@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi_cache.decorator import cache
 from starlette import status
 from starlette.responses import Response
 
@@ -11,6 +12,7 @@ from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
 from ._ingest import COMPOSITE_CONFIG, _ingest_running, run_ingest
+from .cache import key_builder
 from .endpoint_types import HistoricSatelliteData, HistoricSatelliteDataEntry
 
 router = APIRouter(
@@ -83,7 +85,9 @@ def get_historic_satellite_data_url(
 
 
 @router.get("/history", response_model=list[HistoricSatelliteDataEntry])
+@cache(key_builder=key_builder, expire=15 * 60)
 def get_historic_satellite_data_history(
+    request: Request,  # noqa: ARG001
     channel: str,
     s3_client: S3ClientDep,
     _: AuthDependency,
@@ -94,7 +98,7 @@ def get_historic_satellite_data_history(
 
     Both bounds are inclusive. Walks backwards from ``end`` to ``start`` in 15-minute
     steps, so the FE can bulk-fetch and cache URLs instead of polling the single-URL
-    endpoint. URLs are valid for 6 hours.
+    endpoint. URLs are valid for 6 hours. Responses are cached for 15 minutes.
     """
     if channel not in VALID_CHANNELS:
         raise HTTPException(
