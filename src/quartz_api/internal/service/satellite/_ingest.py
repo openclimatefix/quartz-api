@@ -54,7 +54,7 @@ SAT_MAX_ALPHA = 180
 SAT_OPACITY = 0.6
 
 
-def composite_channels(channel_arrays: list[np.ndarray]) -> np.ndarray:
+def flatten_channels(channel_arrays: list[np.ndarray]) -> np.ndarray:
     """Sum member channel arrays (bottom-to-top) into one composite grey band.
 
     Returned as float32 in [0, 1], the same dtype and convention as a leaf
@@ -294,7 +294,7 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                     with rasterio.open(io.BytesIO(s3_client.download_bytes(s3_bucket, k))) as src:
                         member_arrays.append(src.read(1))
 
-                grey = composite_channels(member_arrays)
+                grey = flatten_channels(member_arrays)
                 tif_bytes = _write_tif(
                     [grey], "float32", crop_transform,
                     tags={"channel": name, "timestamp": ts_str, "bounds_wgs84": wgs84_bounds_tag},
