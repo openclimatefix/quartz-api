@@ -16,6 +16,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import (
     CountryConfig,
+    ForecastModel,
     RegionTypeConfig,
 )
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
@@ -132,8 +133,9 @@ def validate_model(
     """Raise 400 if model is provided but not listed for the region type."""
     if model is None or rt is None or not rt.forecast_models:
         return
-    valid = {f.api_name for f in rt.forecast_models}
-    if model not in valid:
+    if rt.get_model_by_api_name(model) is None:
+        # Only current names are advertised — retired aliases resolve but stay unlisted.
+        valid = {f.api_name for f in rt.forecast_models}
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Model '{model}' is not available for region type '{region_type_label}'. "
@@ -248,48 +250,58 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     )
 
 
+def _default_forecast_model(
+    rt: RegionTypeConfig,
+    is_intraday_only: bool,
+) -> ForecastModel | None:
+    """The model to use when the caller named none, or None if none is configured."""
+    if is_intraday_only and rt.intraday_models:
+        # Naming nothing must not yield a model naming it would 403 on.
+        return rt.intraday_default_model or rt.intraday_models[0]
+    if rt.default_model is None:
+        return None
+    return rt.get_model_by_internal_name(rt.default_model)
+
+
 def resolve_forecast_model(
     model: str | None,
     rt: RegionTypeConfig | None,
     is_intraday_only: bool,
+    adjusted: bool = True,
 ) -> str | None:
-    """Validate and resolve the forecast model, returning the internal DP name.
+    """Resolve a user-facing model name to the internal DP forecaster_name.
 
-    Some models have a user-facing slug (api_name) that differs from the internal DP
-    forecaster_name — e.g. pvnet_v2 is exposed as "pvnet_intraday".  This function:
-      1. Picks the default model if none was requested (intraday default for restricted users)
-      2. Validates intraday-only users can only request intraday models (HTTP 403 otherwise)
-      3. Translates the slug back to the raw DP forecaster_name before the backend call
+    User-facing names are slugs that differ from the DP forecaster_name — pvnet_v2 is
+    exposed as "ecmwf_mo_sat_8h" — and retired slugs are still accepted as aliases.
+    Raises 403 if an intraday-only caller names a model outside their permitted set.
     """
     if rt is None:
         return model
-    if is_intraday_only and rt.intraday_models:
-        allowed = rt.intraday_api_names()
-        if model is not None and model not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    f"Model '{model}' is not available with your current access level. "
-                    f"Intraday-accessible models: {sorted(allowed)}"
-                ),
-            )
-        resolved_api = model or (
-            rt.intraday_default_model.api_name if rt.intraday_default_model else None
+
+    if model is None:
+        fm = _default_forecast_model(rt, is_intraday_only)
+        if fm is None:
+            # None sends no forecaster_name, so the DP selects the forecaster.
+            return rt.default_model
+        return fm.internal_name(adjusted=adjusted and rt.supports_adjusted)
+
+    fm = rt.get_model_by_api_name(model)
+    if fm is None:
+        # Only reachable for a region type with no configured models — every route
+        # calls validate_model first, which 400s an unknown name against a real list.
+        return model
+    if is_intraday_only and rt.intraday_models and fm not in rt.intraday_models:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Model '{model}' is not available with your current access level. "
+                f"Intraday-accessible models: {sorted(rt.intraday_api_names())}"
+            ),
         )
-    else:
-        _default_fm = (
-            rt.get_model_by_internal_name(rt.default_model)
-            if rt.default_model
-            else None
-        )
-        resolved_api = model or (
-            _default_fm.api_name if _default_fm else rt.default_model
-        )
-    # Translate api_name → internal DP name before the backend call.
-    if resolved_api is not None:
-        fm = rt.get_model_by_api_name(resolved_api)
-        return fm.name if fm else resolved_api
-    return None
+    # A retired alias pins its own adjuster state, keeping its pre-rename result.
+    override = fm.alias_adjust_override(model)
+    use_adjusted = adjusted if override is None else override
+    return fm.internal_name(adjusted=use_adjusted and rt.supports_adjusted)
 
 
 def internal_to_api_name(

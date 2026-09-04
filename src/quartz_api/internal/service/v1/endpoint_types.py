@@ -261,6 +261,12 @@ class RegionType(BaseModel):
     level: int
     default_model: str | None = None
     forecast_models: list[ForecastModel] = []
+    supports_adjusted: bool = False
+    """Whether the `adjusted` param has any effect for this region type.
+
+    False means there are no trend-adjusted model variants at this granularity and the
+    param is silently ignored.
+    """
 
 
 class CountryDetail(BaseModel):

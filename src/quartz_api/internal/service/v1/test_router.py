@@ -19,7 +19,8 @@ from quartz_api.internal import eclipse, models
 from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .country_config import COUNTRIES
+from .country_config import COUNTRIES, FM, RegionTypeConfig
+from .helpers import resolve_forecast_model
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -473,7 +474,8 @@ async def test_get_region_types_has_default_model(client: AsyncClient) -> None:
     for rt in resp.json():
         assert "default_model" in rt
     national = next(rt for rt in resp.json() if rt["type"] == "national")
-    assert national["default_model"] == "blend_adjust"
+    # The adjusted variant is reached via ?adjusted, not via the model name.
+    assert national["default_model"] == "blend"
 
 
 @pytest.mark.anyio
@@ -1648,10 +1650,10 @@ async def test_nl_regions_invalid_type_gsp_400(nl_client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_nl_forecast_default_model(nl_client: AsyncClient) -> None:
-    """NL national forecast returns blend_adjust as the default model."""
+    """NL national forecast returns blend as the default model."""
     resp = await nl_client.get("/v1/NL/solar/regions/national/forecast")
     assert resp.status_code == 200
-    assert resp.json()["model_name"] == "blend_adjust"
+    assert resp.json()["model_name"] == "blend"
 
 
 @pytest.mark.anyio
@@ -1719,11 +1721,15 @@ def test_country_config_intraday_models_subset_of_forecast_models() -> None:
 
 
 def test_country_config_intraday_default_in_intraday_models() -> None:
-    """intraday_default_model must be listed in intraday_models when both are set."""
+    """A region type restricting intraday users must name a default they can have."""
     for country_code, cfg in COUNTRIES.items():
         for rt in cfg.region_types:
-            if rt.intraday_default_model is None or not rt.intraday_models:
+            if not rt.intraday_models:
                 continue
+            assert rt.intraday_default_model is not None, (
+                f"{country_code}/{rt.type}: intraday_models is set but "
+                f"intraday_default_model is not"
+            )
             assert rt.intraday_default_model in rt.intraday_models, (
                 f"{country_code}/{rt.type}: intraday_default_model "
                 f"'{rt.intraday_default_model.api_name}' is not in intraday_models"
@@ -1990,3 +1996,239 @@ async def test_national_snapshot_is_eclipse_adjusted(
     assert values
     for value in values:
         assert value["power_kW"] == pytest.approx(_ECLIPSE_POWER_KW * _ECLIPSE_FACTOR_GB)
+
+
+# ---------------------------------------------------------------------------
+# GB model naming — new slugs, retired aliases, and the trend adjuster boolean
+# ---------------------------------------------------------------------------
+
+_GB_NATIONAL_RT = COUNTRIES["GB"].get_region_type("national")
+_GB_GSP_RT = COUNTRIES["GB"].get_region_type("gsp")
+
+
+@pytest.mark.parametrize(
+    ("api_name", "internal_name"),
+    [
+        ("blend", "blend"),
+        ("ecmwf_mo", "pvnet_day_ahead"),
+        ("ecmwf_mo_sat_8h", "pvnet_v2"),
+        ("ecmwf", "pvnet_ecmwf"),
+        ("sat_8h", "pvnet_sat_only"),
+        ("mo", "pvnet_ukv_only"),
+    ],
+)
+def test_gb_model_slugs_map_to_dp_names(api_name: str, internal_name: str) -> None:
+    """Each new GB slug resolves to the expected internal DP forecaster name."""
+    assert _GB_NATIONAL_RT is not None
+    fm = _GB_NATIONAL_RT.get_model_by_api_name(api_name)
+    assert fm is not None, f"'{api_name}' is not a known GB national model"
+    assert fm.name == internal_name
+    assert fm.adjust_name == f"{internal_name}_adjust"
+
+
+def test_gb_national_advertises_only_the_six_new_names() -> None:
+    """Retired aliases resolve but must not appear in the advertised model list."""
+    assert _GB_NATIONAL_RT is not None
+    assert {m.api_name for m in _GB_NATIONAL_RT.forecast_models} == {
+        "blend",
+        "ecmwf_mo",
+        "ecmwf_mo_sat_8h",
+        "ecmwf",
+        "sat_8h",
+        "mo",
+    }
+
+
+@pytest.mark.parametrize(
+    ("legacy_name", "expected_internal"),
+    [
+        # Unadjusted legacy names pin the adjuster off, adjusted ones pin it on,
+        # so a client on an old name keeps the exact forecast it had before.
+        ("blend_adjust", "blend_adjust"),
+        ("pvnet_intraday", "pvnet_v2"),
+        ("pvnet_intraday_adjust", "pvnet_v2_adjust"),
+        ("pvnet_day_ahead", "pvnet_day_ahead"),
+        ("pvnet_day_ahead_adjust", "pvnet_day_ahead_adjust"),
+        ("pvnet_ecmwf", "pvnet_ecmwf"),
+        ("pvnet_ecmwf_adjust", "pvnet_ecmwf_adjust"),
+        ("pvnet_sat", "pvnet_sat_only"),
+        ("pvnet_sat_adjust", "pvnet_sat_only_adjust"),
+        ("pvnet_ukv", "pvnet_ukv_only"),
+        ("pvnet_ukv_adjust", "pvnet_ukv_only_adjust"),
+    ],
+)
+def test_retired_gb_names_still_resolve(
+    legacy_name: str,
+    expected_internal: str,
+) -> None:
+    """Every pre-rename GB model name keeps resolving to the same DP forecaster."""
+    resolved = resolve_forecast_model(legacy_name, _GB_NATIONAL_RT, False)
+    assert resolved == expected_internal
+
+
+@pytest.mark.parametrize(
+    ("adjusted", "expected"),
+    [(True, "pvnet_v2_adjust"), (False, "pvnet_v2")],
+)
+def test_adjusted_selects_variant(
+    adjusted: bool,
+    expected: str,
+) -> None:
+    """`adjusted` selects between a model's plain and adjusted DP forecasters."""
+    resolved = resolve_forecast_model(
+        "ecmwf_mo_sat_8h",
+        _GB_NATIONAL_RT,
+        False,
+        adjusted,
+    )
+    assert resolved == expected
+
+
+def test_adjusted_defaults_on() -> None:
+    """Omitting the model and the boolean gives the adjusted default forecaster."""
+    assert resolve_forecast_model(None, _GB_NATIONAL_RT, False) == "blend_adjust"
+
+
+def test_adjusted_is_noop_for_gsp() -> None:
+    """GSP has no adjusted DP variants, so the boolean must not alter the name."""
+    assert _GB_GSP_RT is not None
+    assert not _GB_GSP_RT.supports_adjusted
+    for flag in (True, False):
+        assert resolve_forecast_model("blend", _GB_GSP_RT, False, flag) == "blend"
+        assert resolve_forecast_model(None, _GB_GSP_RT, False, flag) == "blend"
+
+
+def test_cache_warms_the_adjusted_default() -> None:
+    """The pre-warmed period cache must use the adjusted default where one exists."""
+    assert _GB_NATIONAL_RT is not None and _GB_GSP_RT is not None
+    assert _GB_NATIONAL_RT.default_forecaster_name() == "blend_adjust"
+    assert _GB_GSP_RT.default_forecaster_name() == "blend"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("model", ["ecmwf_mo_sat_8h", "mo", "pvnet_intraday"])
+async def test_national_forecast_accepts_new_and_legacy_names(
+    nation_response_client: AsyncClient,
+    model: str,
+) -> None:
+    """New slugs and retired aliases are both accepted on the forecast route."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model={model}",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_national_forecast_rejects_unknown_model(
+    nation_response_client: AsyncClient,
+) -> None:
+    """A name that is neither a current slug nor an alias is still a 400."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=not_a_model",
+    )
+    assert resp.status_code == 400
+    # Only the current names are advertised back to the caller.
+    assert "pvnet" not in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_region_types_expose_supports_adjusted(client: AsyncClient) -> None:
+    """Clients can discover where the `adjusted` param applies without reading docs."""
+    resp = await client.get("/v1/GB/solar/region-types")
+    assert resp.status_code == 200
+    by_type = {rt["type"]: rt for rt in resp.json()}
+    assert by_type["national"]["supports_adjusted"] is True
+    assert by_type["gsp"]["supports_adjusted"] is False
+
+
+def test_intraday_default_never_falls_back_to_unrestricted_model() -> None:
+    """A missing intraday_default_model must not leak the unrestricted default."""
+    rt = RegionTypeConfig(
+        type="gsp",
+        label="Grid Supply Point",
+        level=10,
+        location_type=models.LocationType.GSP,
+        forecast_models=(FM.BLEND, FM.ECMWF_MO_SAT_8H),
+        default_model="blend",
+        intraday_models=(FM.ECMWF_MO_SAT_8H,),
+        intraday_default_model=None,
+    )
+    resolved = resolve_forecast_model(None, rt, is_intraday_only=True)
+    assert resolved == "pvnet_v2", "intraday-only caller received the unrestricted default"
+
+
+def test_no_configured_default_sends_no_forecaster_filter() -> None:
+    """A region type with no default_model resolves to None, letting the DP choose."""
+    rt = RegionTypeConfig(
+        type="dno",
+        label="DNO",
+        level=5,
+        location_type=models.LocationType.DNO,
+    )
+    assert resolve_forecast_model(None, rt, is_intraday_only=False) is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("model", ["blend_adjust", "pvnet_intraday_adjust"])
+async def test_gsp_rejects_adjust_aliases(client: AsyncClient, model: str) -> None:
+    """GSP has no adjusted variants, so an `_adjust` name is a 400, not silent fallback."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model={model}",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_national_still_accepts_adjust_aliases(
+    nation_response_client: AsyncClient,
+) -> None:
+    """National does have adjusted variants, so the same names keep working there."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=blend_adjust",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_last_updated_rejects_unknown_model(client: AsyncClient) -> None:
+    """last-updated validates the model rather than passing it to the backend."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model=not_a_model",
+    )
+    assert resp.status_code == 400
+
+
+_NL_NATIONAL_RT = COUNTRIES["NL"].get_region_type("national")
+
+
+def test_nl_advertises_the_renamed_uncurtailed_slug() -> None:
+    """The PV-inclusive name is the advertised one; the old name is not."""
+    assert _NL_NATIONAL_RT is not None
+    advertised = {m.api_name for m in _NL_NATIONAL_RT.forecast_models}
+    assert advertised == {"blend", "ecmwf_mo_pv_sat_uncurtailed"}
+
+
+@pytest.mark.parametrize(
+    ("legacy_name", "expected_internal"),
+    [
+        # The old name pins the adjuster off, so it returns what it did before the
+        # rename rather than picking up the new adjusted-by-default.
+        ("ecmwf_mo_sat_uncurtailed", "nl_regional_pv_ecmwf_mo_sat_uncurtailed"),
+        (
+            "ecmwf_mo_sat_uncurtailed_adjust",
+            "nl_regional_pv_ecmwf_mo_sat_uncurtailed_adjust",
+        ),
+        ("blend_adjust", "nl_blend_adjust"),
+    ],
+)
+def test_retired_nl_names_still_resolve(
+    legacy_name: str,
+    expected_internal: str,
+) -> None:
+    """Every pre-rename NL name keeps resolving to the same DP forecaster."""
+    assert resolve_forecast_model(legacy_name, _NL_NATIONAL_RT, False) == expected_internal
