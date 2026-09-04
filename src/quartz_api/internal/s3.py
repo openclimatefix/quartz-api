@@ -62,9 +62,9 @@ class S3Client:
             **({"client_kwargs": {"region_name": region}} if region else {}),
         )
 
-    def get_presigned_url(self, bucket: str, key: str) -> str:
-        """Get a pre-signed URL for a file."""
-        return self.fs.sign(f"s3://{bucket}/{key}", expiration=3600)
+    def get_presigned_url(self, bucket: str, key: str, expiration: int = 3600) -> str:
+        """Get a pre-signed URL for a file, valid for ``expiration`` seconds."""
+        return self.fs.sign(f"s3://{bucket}/{key}", expiration=expiration)
 
     def object_exists(self, bucket: str, key: str) -> bool:
         """Check if an object exists in S3."""

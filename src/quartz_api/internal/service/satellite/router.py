@@ -1,5 +1,5 @@
 """Historic satellite data router."""
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -11,7 +11,7 @@ from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
 from ._ingest import COMPOSITE_CONFIG, _ingest_running, run_ingest
-from .endpoint_types import HistoricSatelliteData
+from .endpoint_types import HistoricSatelliteData, HistoricSatelliteDataEntry
 
 router = APIRouter(
     prefix="/satellite",
@@ -81,6 +81,52 @@ def get_historic_satellite_data_url(
 
     return HistoricSatelliteData(url=s3_client.get_presigned_url(bucket, key))
 
+
+@router.get("/history", response_model=list[HistoricSatelliteDataEntry])
+def get_historic_satellite_data_history(
+    channel: str,
+    s3_client: S3ClientDep,
+    _: AuthDependency,
+    start: datetime,
+    end: datetime,
+) -> list[HistoricSatelliteDataEntry]:
+    """Get pre-signed URLs for every available file for a channel between ``start`` and ``end``.
+
+    Both bounds are inclusive. Walks backwards from ``end`` to ``start`` in 15-minute
+    steps, so the FE can bulk-fetch and cache URLs instead of polling the single-URL
+    endpoint. URLs are valid for 6 hours.
+    """
+    if channel not in VALID_CHANNELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
+        )
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=UTC)
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must not be after end")
+
+    bucket = get_geotiff_bucket()
+
+    ts = end.replace(second=0, microsecond=0)
+    ts -= timedelta(minutes=ts.minute % 15)
+
+    entries: list[HistoricSatelliteDataEntry] = []
+    while ts >= start:
+        key = f"layers/{channel}/{ts:%Y%m%d_%H%M%S}.tif"
+        if s3_client.object_exists(bucket, key):
+            entries.append(
+                HistoricSatelliteDataEntry(
+                    timestamp=ts,
+                    url=s3_client.get_presigned_url(bucket, key, expiration=6 * 60 * 60),
+                ),
+            )
+        ts -= timedelta(minutes=15)
+
+    entries.reverse()
+    return entries
 
 @router.post(
     "/ingest",
