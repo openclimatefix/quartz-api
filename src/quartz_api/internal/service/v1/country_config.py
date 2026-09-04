@@ -37,17 +37,6 @@ class ForecastModel:
         """User-facing model name used in API params and enum values."""
         return self.slug if self.slug is not None else self.name
 
-    def accepts(self, api_name: str, *, adjust_aliases_ok: bool = True) -> bool:
-        """True if `api_name` names this model, current or legacy.
-
-        An `_adjust` alias names a variant that does not exist where the region type
-        has no adjusted models, so those region types pass adjust_aliases_ok=False
-        and reject the name instead of silently serving the unadjusted forecast.
-        """
-        if api_name in (self.api_name, *self.aliases):
-            return True
-        return adjust_aliases_ok and api_name in self.adjust_aliases
-
     def alias_adjust_override(self, api_name: str) -> bool | None:
         """Trend-adjuster state implied by a legacy name, or None if it implies nothing."""
         if api_name in self.adjust_aliases:
@@ -93,9 +82,16 @@ class RegionTypeConfig:
         return None
 
     def get_model_by_api_name(self, api_name: str) -> ForecastModel | None:
-        """Look up a ForecastModel by its user-facing API name, current or legacy."""
+        """Look up a ForecastModel by its user-facing API name, current or legacy.
+
+        An `_adjust` alias names a variant that does not exist where this region type
+        has no adjusted models, so it is unknown there rather than resolving to the
+        plain forecast.
+        """
         for fm in self.forecast_models:
-            if fm.accepts(api_name, adjust_aliases_ok=self.supports_adjusted):
+            if api_name in (fm.api_name, *fm.aliases):
+                return fm
+            if self.supports_adjusted and api_name in fm.adjust_aliases:
                 return fm
         return None
 
