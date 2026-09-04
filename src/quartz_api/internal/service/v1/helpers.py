@@ -287,7 +287,8 @@ def resolve_forecast_model(
 
     fm = rt.get_model_by_api_name(model)
     if fm is None:
-        # Unknown name — validate_model returns 400 error at the routes that call it.
+        # Only reachable for a region type with no configured models — every route
+        # calls validate_model first, which 400s an unknown name against a real list.
         return model
     if is_intraday_only and rt.intraday_models and fm not in rt.intraday_models:
         raise HTTPException(

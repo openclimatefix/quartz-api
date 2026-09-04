@@ -212,6 +212,7 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
+    validate_model(model, rt, location_type.name)
     model = resolve_forecast_model(model, rt, is_intraday_only, adjusted)
 
     now = dt.datetime.now(tz=dt.UTC)

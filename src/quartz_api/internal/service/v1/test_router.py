@@ -2168,3 +2168,36 @@ def test_no_configured_default_sends_no_forecaster_filter() -> None:
         location_type=models.LocationType.DNO,
     )
     assert resolve_forecast_model(None, rt, is_intraday_only=False) is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("model", ["blend_adjust", "pvnet_intraday_adjust"])
+async def test_gsp_rejects_adjust_aliases(client: AsyncClient, model: str) -> None:
+    """GSP has no adjusted variants, so an `_adjust` name is a 400, not silent fallback."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model={model}",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_national_still_accepts_adjust_aliases(
+    nation_response_client: AsyncClient,
+) -> None:
+    """National does have adjusted variants, so the same names keep working there."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model=blend_adjust",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_last_updated_rejects_unknown_model(client: AsyncClient) -> None:
+    """last-updated validates the model rather than passing it to the backend."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model=not_a_model",
+    )
+    assert resp.status_code == 400
