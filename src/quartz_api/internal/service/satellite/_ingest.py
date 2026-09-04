@@ -8,9 +8,11 @@ import numpy as np
 import rasterio
 import sentry_sdk
 import xarray as xr
+from affine import Affine
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from rasterio.windows import from_bounds as window_from_bounds
+from rasterio.windows import transform as window_transform
 
 from quartz_api.internal.s3 import (
     get_geotiff_bucket,
@@ -41,6 +43,73 @@ LAYER_CONFIG = {
     "WV_062": {"invert": True},
     "WV_073": {"invert": True},
 }
+
+COMPOSITE_CONFIG: dict[str, list[str]] = {
+    "COMPOSITE_VISIBLE": ["IR_016", "VIS008", "VIS006"],
+    "COMPOSITE_INFRARED": ["IR_134", "IR_097", "IR_120", "IR_087", "IR_108"],
+    "COMPOSITE_BLUE": ["WV_073", "WV_062"],
+}
+
+SAT_MAX_ALPHA = 180
+SAT_OPACITY = 0.6
+
+
+def flatten_channels(channel_arrays: list[np.ndarray]) -> np.ndarray:
+    """Sum member channel arrays (bottom-to-top) into one composite grey band.
+
+    Returned as float32 in [0, 1], the same dtype and convention as a leaf
+    channel's tif (continuous value, no quantization) — so composite and leaf
+    tifs are the exact same format and every viewer treats them identically.
+    """
+    out_grey = np.zeros_like(channel_arrays[0], dtype=np.float32)
+    out_alpha = np.zeros_like(channel_arrays[0], dtype=np.float32)
+    for arr in channel_arrays:
+        finite = np.isfinite(arr)
+        grey = np.zeros(arr.shape, dtype=np.float32)
+        if finite.any():
+            mn, mx = np.nanmin(arr), np.nanmax(arr)
+            if mx > mn:
+                grey = np.where(
+                    finite, np.clip((arr - mn) / (mx - mn), 0, 1), 0.0,
+                ).astype(np.float32)
+        alpha = (grey * (SAT_MAX_ALPHA / 255.0) * SAT_OPACITY).astype(np.float32)
+
+        new_alpha = alpha + out_alpha * (1 - alpha)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            new_grey = np.where(
+                new_alpha > 0,
+                (grey * alpha + out_grey * out_alpha * (1 - alpha)) / new_alpha,
+                0.0,
+            )
+        out_grey, out_alpha = new_grey.astype(np.float32), new_alpha.astype(np.float32)
+
+    return out_grey
+
+
+def _write_tif(
+    bands: list[np.ndarray],
+    dtype: str,
+    transform: Affine,
+    tags: dict[str, str],
+) -> bytes:
+    """Encode one or more same-shape bands as an in-memory, tagged GeoTIFF.
+
+    (EPSG:3857). Shared by the leaf-channel and composite upload paths below —
+    both write a single float32 band, so they're the same format end to end.
+    """
+    buf = io.BytesIO()
+    with rasterio.open(
+        buf, "w", driver="GTiff",
+        height=bands[0].shape[0], width=bands[0].shape[1],
+        count=len(bands), dtype=dtype,
+        crs="EPSG:3857", transform=transform,
+        compress="deflate", tiled=True,
+        **({"nodata": np.nan} if dtype == "float32" else {}),
+    ) as dst:
+        for i, band in enumerate(bands, start=1):
+            dst.write(band, i)
+        dst.update_tags(**tags)
+    return buf.getvalue()
 
 
 _ingest_running: bool = False
@@ -127,6 +196,8 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
         "EPSG:4326", "EPSG:3857", LEFT, BOTTOM, RIGHT, TOP,
     )
     wgs84_bounds_tag = f"{LEFT},{BOTTOM},{RIGHT},{TOP}"
+    crop_window = window_from_bounds(left_3857, bottom_3857, right_3857, top_3857, dst_tf)
+    crop_transform = window_transform(crop_window, dst_tf)
 
     # Filter to last 48 hours
     cutoff = np.datetime64("now") - np.timedelta64(BACKFILL_HOURS, "h")
@@ -186,29 +257,18 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                     tmp.write(dst_arr, 1)
 
                 full_buf.seek(0)
-                crop_buf = io.BytesIO()
                 with rasterio.open(full_buf) as src:
-                    window = window_from_bounds(
-                        left_3857, bottom_3857, right_3857, top_3857, src.transform,
-                    )
-                    cropped = src.read(1, window=window)
-                    crop_transform = src.window_transform(window)
-                    with rasterio.open(
-                        crop_buf, "w", driver="GTiff",
-                        height=cropped.shape[0], width=cropped.shape[1],
-                        count=1, dtype="float32",
-                        crs="EPSG:3857", transform=crop_transform,
-                        compress="deflate", tiled=True, nodata=np.nan,
-                    ) as dst:
-                        dst.write(cropped, 1)
-                        dst.update_tags(
-                            channel=channel,
-                            timestamp=ts_str,
-                            bounds_wgs84=wgs84_bounds_tag,
-                        )
+                    cropped = src.read(1, window=crop_window)
 
-                s3_client.upload_bytes(s3_bucket, key, crop_buf.getvalue())
-
+                tif_bytes = _write_tif(
+                    [cropped], "float32", crop_transform,
+                    tags={
+                        "channel": channel,
+                        "timestamp": ts_str,
+                        "bounds_wgs84": wgs84_bounds_tag,
+                    },
+                )
+                s3_client.upload_bytes(s3_bucket, key, tif_bytes)
                 uploaded += 1
                 log.info("Uploaded %s @ %s (%d/%d)", channel, ts_str, uploaded + skipped, total)
 
@@ -217,6 +277,47 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
                 log.exception("Failed %s @ %s: %s", channel, ts_str, e)
                 sentry_sdk.capture_exception(e)
 
+        # Second loop to process composites
+        for name, members in COMPOSITE_CONFIG.items():
+            composite_key = f"layers/{name}/{ts_str}.tif"
+            if s3_client.object_exists(s3_bucket, composite_key):
+                continue
+
+            member_keys = [(m, f"layers/{m}/{ts_str}.tif") for m in members]
+            present = [(m, k) for m, k in member_keys if s3_client.object_exists(s3_bucket, k)]
+            missing = [m for m, k in member_keys if (m, k) not in present]
+            if not present:
+                log.info("Skipping composite %s @ %s: no members present", name, ts_str)
+                continue
+            if missing:
+                log.info(
+                    "Composite %s @ %s missing member(s): %s", name, ts_str, ", ".join(missing),
+                )
+
+            try:
+                member_arrays = []
+                for _, k in present:
+                    with rasterio.open(io.BytesIO(s3_client.download_bytes(s3_bucket, k))) as src:
+                        member_arrays.append(src.read(1))
+
+                grey = flatten_channels(member_arrays)
+                tif_bytes = _write_tif(
+                    [grey], "float32", crop_transform,
+                    tags={
+                        "channel": name,
+                        "timestamp": ts_str,
+                        "bounds_wgs84": wgs84_bounds_tag,
+                        "missing_channels": ",".join(missing),
+                    },
+                )
+                s3_client.upload_bytes(s3_bucket, composite_key, tif_bytes)
+                uploaded += 1
+                log.info("Uploaded composite %s @ %s", name, ts_str)
+
+            except Exception as e:
+                failed += 1
+                log.exception("Failed composite %s @ %s: %s", name, ts_str, e)
+                sentry_sdk.capture_exception(e)
 
     latest_t = all_times[-1]
     latest_ts = str(latest_t)[:19].replace("-", "").replace("T", "_").replace(":", "")
