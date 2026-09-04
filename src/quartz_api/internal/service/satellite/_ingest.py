@@ -283,21 +283,32 @@ def _run_ingest(sat_type: str) -> tuple[str, str]:
             if s3_client.object_exists(s3_bucket, composite_key):
                 continue
 
-            member_keys = [f"layers/{m}/{ts_str}.tif" for m in members]
-            if not all(s3_client.object_exists(s3_bucket, k) for k in member_keys):
-                log.info("Skipping composite %s @ %s: missing member(s)", name, ts_str)
+            member_keys = [(m, f"layers/{m}/{ts_str}.tif") for m in members]
+            present = [(m, k) for m, k in member_keys if s3_client.object_exists(s3_bucket, k)]
+            missing = [m for m, k in member_keys if (m, k) not in present]
+            if not present:
+                log.info("Skipping composite %s @ %s: no members present", name, ts_str)
                 continue
+            if missing:
+                log.info(
+                    "Composite %s @ %s missing member(s): %s", name, ts_str, ", ".join(missing),
+                )
 
             try:
                 member_arrays = []
-                for k in member_keys:
+                for _, k in present:
                     with rasterio.open(io.BytesIO(s3_client.download_bytes(s3_bucket, k))) as src:
                         member_arrays.append(src.read(1))
 
                 grey = flatten_channels(member_arrays)
                 tif_bytes = _write_tif(
                     [grey], "float32", crop_transform,
-                    tags={"channel": name, "timestamp": ts_str, "bounds_wgs84": wgs84_bounds_tag},
+                    tags={
+                        "channel": name,
+                        "timestamp": ts_str,
+                        "bounds_wgs84": wgs84_bounds_tag,
+                        "missing_channels": ",".join(missing),
+                    },
                 )
                 s3_client.upload_bytes(s3_bucket, composite_key, tif_bytes)
                 uploaded += 1
