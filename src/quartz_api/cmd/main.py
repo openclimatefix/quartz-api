@@ -145,6 +145,44 @@ def _custom_openapi(
     return openapi_schema
 
 
+# Scalar does not tick an optional parameter when a value is typed into it, so the row
+# is left out of the request and the caller silently gets the default back. Upstream
+# treats that as intended (scalar/scalar#7851); scalar/scalar#2558 asks for this.
+# Scalar already does it for a row added by hand, so this only makes the rows that come
+# from the OpenAPI document behave the same way. Clicks the box rather than setting
+# `checked`, so Scalar's own handler runs and its request state follows. If Scalar
+# renames these classes the listener stops firing and nothing else changes — the
+# greying in `custom_css` still shows which rows are disabled.
+_SCALAR_AUTO_ENABLE_JS = """
+<script>
+  (function () {
+    document.addEventListener(
+      'input',
+      function (event) {
+        var target = event.target;
+        if (!target || !target.closest) return;
+        var editor = target.closest('.code-input-lite__editor');
+        if (!editor) return;
+        var row = editor.closest('tr.group');
+        if (!row) return;
+        var box = row.querySelector('td:first-child input[type="checkbox"]');
+        if (!box || box.checked) return;
+        var cells = row.children;
+        var filled = function (cell) {
+          var field = cell && cell.querySelector('.code-input-lite');
+          return !!field && !field.classList.contains('code-input-lite--empty');
+        };
+        // Both halves must be filled, so a nameless parameter is never enabled.
+        if (!filled(cells[1]) || !filled(cells[cells.length - 1])) return;
+        box.click();
+      },
+      true,
+    );
+  })();
+</script>
+"""
+
+
 def _create_v1_app(
     conf: ConfigTree,
     auth_openapi_config: dict[str, str] | None,
@@ -181,7 +219,7 @@ def _create_v1_app(
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
         """Serve Scalar API reference for v1."""
         root_path = request.scope.get("root_path", "").rstrip("/")
-        return get_scalar_api_reference(
+        page = get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
             authentication=scalar_auth,
@@ -192,6 +230,12 @@ def _create_v1_app(
             default_open_all_tags=True,
             hide_dark_mode_toggle=True,
             agent=AgentScalarConfig(disabled=True),
+            # Pinned: scalar_fastapi defaults to an unversioned jsdelivr URL, which
+            # tracks latest and can change the docs UI — and the selectors the CSS
+            # below relies on — with no deploy of ours.
+            scalar_js_url=(
+                "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0"
+            ),
             custom_css="""
                       /* override theme colours */
                       :root .dark-mode {
@@ -219,7 +263,40 @@ def _create_v1_app(
                       a.open-api-client-button + div {
                         padding-top: 0.75rem;
                       }
+                      /* Scalar never ticks an optional parameter when you type a
+                         value into it, and an unticked row is not sent — upstream
+                         considers that intended (scalar/scalar#7851), and
+                         scalar/scalar#2558 tracks changing it. So grey the disabled
+                         rows to let the enabled ones read as the active set, and name
+                         the state once a disabled row has a value in it.
+                         `code-input-lite--empty` is Scalar's own empty-state class;
+                         `:empty` would miss a field that was typed into and cleared,
+                         which leaves a stray <br> behind. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        .code-input-lite__editor {
+                        color: var(--scalar-color-3);
+                      }
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked)):has(
+                          td:last-child .code-input-lite:not(.code-input-lite--empty)
+                        ) td:nth-child(2)::after {
+                        content: "disabled";
+                        margin-left: auto;
+                        padding-right: 0.75rem;
+                        align-self: center;
+                        font-size: 11px;
+                        color: var(--scalar-color-3);
+                        white-space: nowrap;
+                        pointer-events: none;
+                      }
                     """,
+        )
+        html = page.body.decode()
+        if "</body>" not in html:
+            return page
+        return HTMLResponse(
+            html.replace("</body>", _SCALAR_AUTO_ENABLE_JS + "</body>", 1),
         )
 
     return v1_app
