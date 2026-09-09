@@ -44,6 +44,26 @@ ValidForecastModel = Annotated[
 ]
 
 
+# Deprecated alias for `model_name`, accepted so existing integrations keep working.
+# Deliberately absent from the OpenAPI schema: including it would allow new clients
+# to adopt a name we want rid of. We'll drop the param once no users are using it.
+# No enum either — retired model slugs resolve through it as well as current ones.
+DeprecatedForecastModel = Annotated[
+    str | None,
+    Query(include_in_schema=False),
+]
+
+ValidForecastModelVersion = Annotated[
+    str | None,
+    Query(
+        description=(
+            "Forecast model version. If omitted, the latest version of the selected "
+            "model is used."
+        ),
+    ),
+]
+
+
 def _get_region_type_names(*, exclude_nation: bool = False) -> tuple[str, ...]:
     """Extract all unique region type slugs from country configs."""
     names: set[str] = set()

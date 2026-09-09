@@ -2232,3 +2232,76 @@ def test_retired_nl_names_still_resolve(
 ) -> None:
     """Every pre-rename NL name keeps resolving to the same DP forecaster."""
     assert resolve_forecast_model(legacy_name, _NL_NATIONAL_RT, False) == expected_internal
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("param", ["model_name", "model"])
+async def test_region_forecast_accepts_model_name_and_deprecated_model(
+    nation_response_client: AsyncClient,
+    param: str,
+) -> None:
+    """`model_name` is the current param; `model` still resolves to the same thing."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?{param}=ecmwf",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model_name"] == "ecmwf"
+
+
+@pytest.mark.anyio
+async def test_region_forecast_conflicting_model_params_400(
+    nation_response_client: AsyncClient,
+) -> None:
+    """Supplying both names with different values is rejected, not silently resolved."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=ecmwf&model=mo",
+    )
+    assert resp.status_code == 400
+    assert "deprecated" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_region_forecast_matching_model_params_200(
+    nation_response_client: AsyncClient,
+) -> None:
+    """The same value under both names is not a conflict."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=ecmwf&model=ecmwf",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_forecast_last_updated_accepts_model_name(
+    client: AsyncClient,
+) -> None:
+    """last-updated takes `model_name` alongside the deprecated `model`."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model_name=blend",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_forecast_model_version_param(client: AsyncClient) -> None:
+    """`model_version` is accepted on the per-region forecast route."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=blend&model_version=1.2.3",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_forecasts_snapshot_accepts_deprecated_model_alias(
+    client: AsyncClient,
+) -> None:
+    """The snapshot route accepts `model` too, so one param name works everywhere."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model=blend",
+    )
+    assert resp.status_code == 200

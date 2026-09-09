@@ -23,6 +23,7 @@ from ..cache import (
 )
 from ..endpoint_types import (
     CountryParam,
+    DeprecatedForecastModel,
     ForecastResponse,
     ForecastSnapshot,
     ForecastValue,
@@ -30,6 +31,7 @@ from ..endpoint_types import (
     RegionForecastMatrix,
     RegionForecastValue,
     ValidForecastModel,
+    ValidForecastModelVersion,
     ValidPeriodRegionType,
     ValidRegion,
     ValidRegionType,
@@ -41,6 +43,7 @@ from ..helpers import (
     internal_to_api_name,
     location_display_name,
     resolve_forecast_model,
+    resolve_model_param,
     resolve_nation,
     resolve_region_id,
     timeseries_window,
@@ -86,7 +89,9 @@ async def get_forecast(
             "the 1-hour-ahead forecast value for each target timestep."
         ),
     ),
-    model: ValidForecastModel | None = None,
+    model_name: ValidForecastModel | None = None,
+    model_version: ValidForecastModelVersion = None,
+    model: DeprecatedForecastModel = None,
     adjusted: bool = Query(
         True,
         description=(
@@ -104,6 +109,7 @@ async def get_forecast(
     By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
     """
+    model_name = resolve_model_param(model_name, model)
     is_intraday_only = not check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
@@ -121,8 +127,8 @@ async def get_forecast(
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    validate_model(model, rt, location_type.name)
-    model = resolve_forecast_model(model, rt, is_intraday_only, adjusted)
+    validate_model(model_name, rt, location_type.name)
+    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
     win_start = start_utc or now
@@ -140,7 +146,8 @@ async def get_forecast(
                 authdata={},  # TODO: add auth when loosed on DP side
                 created_cutoff=creation_limit_utc,
                 forecast_horizon_minutes=horizon_minutes or 0,
-                forecaster_name=model,
+                forecaster_name=model_name,
+                forecaster_version=model_version,
             ),
         )
 
@@ -180,7 +187,9 @@ async def get_forecast_last_updated_timestamp(
     region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    model: ValidForecastModel | None = None,
+    model_name: ValidForecastModel | None = None,
+    model_version: ValidForecastModelVersion = None,
+    model: DeprecatedForecastModel = None,
     adjusted: bool = Query(
         True,
         description=(
@@ -196,6 +205,7 @@ async def get_forecast_last_updated_timestamp(
     of the most recent run. Useful for monitoring freshness or driving "last updated"
     indicators in a UI.
     """
+    model_name = resolve_model_param(model_name, model)
     is_intraday_only = not check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
@@ -212,8 +222,8 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    validate_model(model, rt, location_type.name)
-    model = resolve_forecast_model(model, rt, is_intraday_only, adjusted)
+    validate_model(model_name, rt, location_type.name)
+    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
     now = dt.datetime.now(tz=dt.UTC)
     pgvs = await db.get_predicted_generation(
@@ -223,7 +233,8 @@ async def get_forecast_last_updated_timestamp(
         energy_type=source,
         location_type=location_type,
         authdata={},  # TODO: add auth when loosed on DP side
-        forecaster_name=model,
+        forecaster_name=model_name,
+        forecaster_version=model_version,
     )
     if not pgvs:
         raise HTTPException(
@@ -249,7 +260,8 @@ async def get_forecasts_at_time(
     auth: AuthDependency,
     region_type: ValidRegionType,
     model_name: ValidForecastModel | None = None,
-    model_version: str | None = Query(None, description="Forecast model version."),
+    model_version: ValidForecastModelVersion = None,
+    model: DeprecatedForecastModel = None,
     adjusted: bool = Query(
         True,
         description=(
@@ -269,6 +281,7 @@ async def get_forecasts_at_time(
     region. Useful for rendering a map of forecast output across an entire country at
     a glance.
     """
+    model_name = resolve_model_param(model_name, model)
     is_intraday_only = not check_country_access(auth, country)
     nation = await resolve_nation(db, source, country, auth)
 

@@ -129,7 +129,7 @@ async def get_region_types(
     - **type** — the slug used as the `region_type` query parameter throughout the API.
     - **level** — hierarchical depth (lower = coarser; 0 = national).
     - **forecast_models** — the models available for that region type, with the model
-      `name` used as the `model` parameter on forecast endpoints. The first listed model
+      `name` used as the `model_name` parameter on forecast endpoints. The first listed model
       is the default.
     """
     return [

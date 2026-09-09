@@ -125,6 +125,31 @@ def check_region_type(
     return rt
 
 
+def resolve_model_param(
+    model_name: str | None,
+    model: str | None,
+) -> str | None:
+    """Collapse the current `model_name` param and its deprecated `model` alias.
+
+    `model` was the original name on the per-region forecast routes; `model_name` is
+    the name used everywhere now, alongside `model_version`. Both are accepted, but
+    supplying both with different values is a 400 rather than a silent preference.
+    """
+    if model is None:
+        return model_name
+    if model_name is None:
+        return model
+    if model_name != model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Conflicting values for 'model_name' ({model_name!r}) and its deprecated "
+                f"alias 'model' ({model!r}). Supply only 'model_name'."
+            ),
+        )
+    return model_name
+
+
 def validate_model(
     model: str | None,
     rt: RegionTypeConfig | None,
