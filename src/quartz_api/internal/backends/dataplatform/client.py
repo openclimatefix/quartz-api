@@ -1,9 +1,12 @@
 """A data platform implementation that conforms to the DatabaseInterface."""
 import asyncio
+import contextlib
 import datetime as dt
+from collections.abc import Iterator
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import grpc
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from google.protobuf.struct_pb2 import Struct
@@ -15,6 +18,24 @@ from typing_extensions import override
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import get_org_id_from_authdata
+
+
+@contextlib.contextmanager
+def _pinned_forecaster_errors(name: str | None, version: str) -> Iterator[None]:
+    """Turn the data platform's NOT_FOUND into a 404 naming the model and version.
+
+    Pinning a version skips the ListForecasters lookup that would have rejected an
+    unknown name on its own, so the pair is only checked when the forecast call runs.
+    """
+    try:
+        yield
+    except grpc.aio.AioRpcError as e:
+        if e.code() is not grpc.StatusCode.NOT_FOUND:
+            raise
+        raise HTTPException(
+            status_code=404,
+            detail=f"Forecast model '{name}' has no version '{version}'.",
+        ) from e
 
 energy_type_map: dict[models.EnergyType, common_pb2.EnergySource] = {
     models.EnergyType.SOLAR: common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
@@ -171,7 +192,7 @@ class StorageClient(models.StorageInterface):
             if not resp.forecasters:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                    detail=f"Forecast model '{forecaster_name}' not found.",
                 )
             forecaster = resp.forecasters[0]
         else:
@@ -213,9 +234,15 @@ class StorageClient(models.StorageInterface):
             for window in windows
         ]
 
-        resps = await asyncio.gather(
-            *(self.dpc.GetForecastAsTimeseries(req) for req in reqs),
+        pinned = (
+            _pinned_forecaster_errors(forecaster_name, forecaster_version)
+            if forecaster_version is not None
+            else contextlib.nullcontext()
         )
+        with pinned:
+            resps = await asyncio.gather(
+                *(self.dpc.GetForecastAsTimeseries(req) for req in reqs),
+            )
 
         values = []
         for resp in resps:
@@ -381,7 +408,7 @@ class StorageClient(models.StorageInterface):
             if not resp.forecasters:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Forecast model '{forecaster_name}' not found in data platform.",
+                    detail=f"Forecast model '{forecaster_name}' not found.",
                 )
             forecaster = resp.forecasters[0]
         else:
@@ -396,7 +423,13 @@ class StorageClient(models.StorageInterface):
             timestamp_utc=snapshot_timestamp_utc,
             forecaster=forecaster,
         )
-        resp = await self.dpc.GetForecastAtTimestamp(req)
+        pinned = (
+            _pinned_forecaster_errors(forecaster_name, forecaster_version)
+            if forecaster_version is not None
+            else contextlib.nullcontext()
+        )
+        with pinned:
+            resp = await self.dpc.GetForecastAtTimestamp(req)
 
         def _map_resp(resp: messages_pb2.GetForecastAtTimestampResponse) \
                 -> list[models.PredictedGenerationValue]:

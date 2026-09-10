@@ -18,7 +18,7 @@ from apitally.fastapi import ApitallyMiddleware
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
@@ -183,6 +183,40 @@ _SCALAR_AUTO_ENABLE_JS = """
 """
 
 
+
+# The data platform answers with gRPC status codes; map the ones that describe the
+# caller's request onto the matching HTTP status so a client sees a normal error.
+_GRPC_TO_HTTP: dict[Any, int] = {
+    grpc.StatusCode.NOT_FOUND: status.HTTP_404_NOT_FOUND,
+    grpc.StatusCode.INVALID_ARGUMENT: status.HTTP_400_BAD_REQUEST,
+    grpc.StatusCode.PERMISSION_DENIED: status.HTTP_403_FORBIDDEN,
+    grpc.StatusCode.UNAUTHENTICATED: status.HTTP_401_UNAUTHORIZED,
+    grpc.StatusCode.ALREADY_EXISTS: status.HTTP_409_CONFLICT,
+    grpc.StatusCode.RESOURCE_EXHAUSTED: status.HTTP_429_TOO_MANY_REQUESTS,
+    grpc.StatusCode.UNAVAILABLE: status.HTTP_503_SERVICE_UNAVAILABLE,
+    grpc.StatusCode.DEADLINE_EXCEEDED: status.HTTP_504_GATEWAY_TIMEOUT,
+}
+
+
+async def _grpc_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Answer an uncaught data platform failure with an HTTP error, not a gRPC repr.
+
+    Uncaught, an AioRpcError reaches the caller as its own repr, carrying
+    debug_error_string and the peer address with it. The platform's `details()` is a
+    short sentence and worth passing on when the caller can act on it; anything that
+    maps to a 5xx is reported generically and left in full in the log.
+    """
+    code = exc.code() if isinstance(exc, grpc.aio.AioRpcError) else None
+    http_status = _GRPC_TO_HTTP.get(code, status.HTTP_502_BAD_GATEWAY)
+    log.error(f"Data platform call to {request.url.path} failed: {exc!r}")
+    if http_status >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        detail = "Upstream request failed. Please try again."
+    else:
+        detail = (exc.details() if isinstance(exc, grpc.aio.AioRpcError) else None) or (
+            "The request was rejected upstream."
+        )
+    return JSONResponse(status_code=http_status, content={"detail": detail})
+
 def _create_v1_app(
     conf: ConfigTree,
     auth_openapi_config: dict[str, str] | None,
@@ -211,6 +245,7 @@ def _create_v1_app(
 
     v1_app.state.limiter = limiter or ratelimit.limiter
     v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
@@ -540,6 +575,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     # Add middlewares
     server.state.limiter = ratelimit.limiter
     server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     server.add_middleware(SlowAPIMiddleware)
     server.add_middleware(
         CORSMiddleware,
