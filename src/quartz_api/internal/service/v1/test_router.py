@@ -196,6 +196,20 @@ def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
 
 
 @pytest_asyncio.fixture
+async def isolated_cache() -> AsyncGenerator[None, None]:
+    """Give a test its own cache backend.
+
+    `FastAPICache.init` is a no-op once any other test has initialised it, so a test
+    needing its own backend must reset first — and reset again afterwards, or the next
+    test inherits this one's backend.
+    """
+    FastAPICache.reset()
+    FastAPICache.init(InMemoryBackend(), prefix="test-isolated")
+    yield
+    FastAPICache.reset()
+
+
+@pytest_asyncio.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with DummyDB backend and GB read access."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
@@ -258,6 +272,44 @@ async def trial_client() -> AsyncGenerator[AsyncClient, None]:
 _FIXED_NL_PROVINCE_UUID = uuid4()
 _NL_PROVINCE_INTERNAL_NAME = "nl_region_2_friesland"
 _NL_PROVINCE_DISPLAY_NAME = "friesland"
+
+
+class ReverseOrderGSPClient(StorageClient):
+    """DummyDB variant returning GSPs in reverse-alphabetical order.
+
+    The data platform gives no ordering guarantee, so the API must impose one.
+    """
+
+    _GSP_NAMES = ("CHARLIE", "BRAVO", "ALPHA")
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=uuid4(),
+                    name=name,
+                    latitude=51.5,
+                    longitude=-0.1,
+                    capacity_kilowatts=1000,
+                    location_type=models.LocationType.GSP,
+                )
+                for name in self._GSP_NAMES
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
 
 
 class NLProvinceClient(NationNameStorageClient):
@@ -910,6 +962,48 @@ async def test_get_regions_no_filter_returns_all(client: AsyncClient) -> None:
     regions = resp.json()
     assert isinstance(regions, list)
     assert len(regions) >= 1
+
+
+@pytest.mark.anyio
+async def test_get_regions_sorted_by_type_level_then_name(isolated_cache: None) -> None:  # noqa: ARG001
+    """Unfiltered regions sort by region type level first, then by name.
+
+    The GSP names here all sort ahead of the nation name alphabetically, so the nation
+    only comes first if the level is the primary sort key.
+    """
+    app = _make_app(ReverseOrderGSPClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get("/v1/GB/solar/regions")
+
+    assert resp.status_code == 200
+    regions = resp.json()
+
+    # national is level 0, so it sorts ahead of the GSPs despite "uk" > "alpha"
+    assert regions[0]["type"] == "national"
+
+    levels = {rt.type: rt.level for rt in COUNTRIES["GB"].region_types}
+    keys = [(levels.get(r["type"], 10_000), r["name"].lower()) for r in regions]
+    assert keys == sorted(keys), keys
+
+
+@pytest.mark.anyio
+async def test_get_regions_sorted_when_backend_returns_unordered(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Regions arriving from the backend out of order are sorted before being returned."""
+    app = _make_app(ReverseOrderGSPClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
+
+    assert resp.status_code == 200
+    names = [r["name"] for r in resp.json()]
+    assert names == ["ALPHA", "BRAVO", "CHARLIE"], names
 
 
 @pytest.mark.anyio
@@ -2305,3 +2399,4 @@ async def test_forecasts_snapshot_accepts_deprecated_model_alias(
         "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model=blend",
     )
     assert resp.status_code == 200
+

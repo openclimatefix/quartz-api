@@ -85,15 +85,16 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=parent_uuid,
         )
-        return _apply_name_filter(
+        return _filter_and_sort(
             [location_to_detail(loc, country) for loc in locs],
             name,
+            country,
         )
 
     if region_type is not None:
         rt = check_region_type(country, region_type, country.code)
         if rt.location_type == models.LocationType.NATION:
-            return _apply_name_filter([location_to_detail(nation, country)], name)
+            return _filter_and_sort([location_to_detail(nation, country)], name, country)
 
         locs = await db.get_locations(
             energy_type=source,
@@ -101,9 +102,10 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=to_uuid(nation.uuid),
         )
-        return _apply_name_filter(
+        return _filter_and_sort(
             [location_to_detail(loc, country) for loc in locs],
             name,
+            country,
         )
 
     # No filters — combine all region types
@@ -126,17 +128,38 @@ async def get_country_regions(
             raise result
         for loc in result:
             out.append(location_to_detail(loc, country))
-    return _apply_name_filter(out, name)
+    return _filter_and_sort(out, name, country)
 
 
-def _apply_name_filter(
+# A location whose LocationType the country has no configured region type for is
+# returned with `type: null` — it still needs somewhere to sort.
+_UNTYPED_LEVEL = 10_000
+
+
+def _filter_and_sort(
     regions: list[RegionDetail],
     name: str | None,
+    country: CountryParam,
 ) -> list[RegionDetail]:
-    if name is None:
-        return regions
-    needle = name.lower()
-    return [r for r in regions if needle in r.name.lower()]
+    """Apply the optional name filter, then impose a deterministic order.
+
+    The data platform gives no ordering guarantee, so without this the same request can
+    return the same regions in a different order each time the 60s cache expires.
+
+    Ordered by region type level, then by name. National types are level 0, so they sort
+    to the top without a special case.
+    """
+    if name is not None:
+        needle = name.lower()
+        regions = [r for r in regions if needle in r.name.lower()]
+
+    levels = {rt.type: rt.level for rt in country.region_types}
+
+    def _sort_key(region: RegionDetail) -> tuple[int, str]:
+        level = _UNTYPED_LEVEL if region.type is None else levels[region.type]
+        return (level, region.name.lower())
+
+    return sorted(regions, key=_sort_key)
 
 
 @router.get(
