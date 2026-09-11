@@ -2400,3 +2400,191 @@ async def test_forecasts_snapshot_accepts_deprecated_model_alias(
     )
     assert resp.status_code == 200
 
+
+# ---------------------------------------------------------------------------
+# Run metadata — latest run across the response, not the first value's
+# ---------------------------------------------------------------------------
+
+_RUN_TIMES = [
+    dt.datetime(2026, 4, 17, 3, 0, tzinfo=dt.UTC),
+    dt.datetime(2026, 4, 17, 6, 0, tzinfo=dt.UTC),
+    dt.datetime(2026, 4, 17, 5, 0, tzinfo=dt.UTC),
+]
+
+
+def _pgv(
+    created: dt.datetime,
+    *,
+    location_uuid: UUID | None = None,
+    valid: dt.datetime | None = None,
+    capacity: float = 1000.0,
+) -> models.PredictedGenerationValue:
+    """A forecast value whose run timestamps are offset from `created` by 30 minutes."""
+    return models.PredictedGenerationValue(
+        power_kilowatts=100.0,
+        valid_timestamp=valid or created + dt.timedelta(hours=1),
+        location_uuid=location_uuid or uuid4(),
+        capacity_kilowatts=capacity,
+        forecaster_name="blend",
+        forecaster_version="1.0.0",
+        created_timestamp=created,
+        init_timestamp=created - dt.timedelta(minutes=30),
+    )
+
+
+class MultiRunForecastClient(StorageClient):
+    """Returns forecast values spanning several model runs, oldest run first.
+
+    The data platform stitches the latest-run value for each target time, so a real
+    response spans many runs in no particular order. `reverse=True` returns the same
+    values back-to-front to prove the result does not depend on ordering.
+    """
+
+    def __init__(self, *, reverse: bool = False) -> None:
+        super().__init__()
+        self._reverse = reverse
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        """Three GSPs, so a snapshot spans more than one run."""
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=uuid4(),
+                    name=f"GSP {i}",
+                    latitude=54.0,
+                    longitude=-2.0,
+                    capacity_kilowatts=1000.0,
+                    location_type=models.LocationType.GSP,
+                )
+                for i in range(len(_RUN_TIMES))
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+    def _values(self, location_uuid: UUID) -> list[models.PredictedGenerationValue]:
+        values = [
+            _pgv(
+                created,
+                location_uuid=location_uuid,
+                valid=dt.datetime(2026, 4, 17, 12 + i, tzinfo=dt.UTC),
+                capacity=1000.0 + 100 * i,
+            )
+            for i, created in enumerate(_RUN_TIMES)
+        ]
+        return list(reversed(values)) if self._reverse else values
+
+    async def get_predicted_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        return self._values(UUID(str(location_uuid)))
+
+    async def get_predicted_generation_snapshot(  # type: ignore[override]
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        """One value per region, each from a different run — mirrors `snapshot[0]` risk."""
+        values = [
+            _pgv(created, location_uuid=uuid, valid=snapshot_timestamp_utc)
+            for uuid, created in zip(location_uuids, _RUN_TIMES, strict=True)
+        ]
+        return list(reversed(values)) if self._reverse else values
+
+
+async def _get(db: models.StorageInterface, url: str) -> dict:
+    app = _make_app(db, ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get(url)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+_LATEST_RUN = "2026-04-17T06:00:00Z"
+_LATEST_INIT = "2026-04-17T05:30:00Z"
+
+
+@pytest.mark.anyio
+async def test_forecast_reports_latest_run_not_first_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A forecast spanning several runs reports the most recent run's timestamps."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert body["last_updated_utc"] == _LATEST_RUN
+    assert body["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_forecast_run_metadata_independent_of_value_order(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Reversing the order the backend returns values in changes nothing."""
+    forward = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    reverse = await _get(
+        MultiRunForecastClient(reverse=True),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert forward["last_updated_utc"] == reverse["last_updated_utc"] == _LATEST_RUN
+    assert forward["latest_init_utc"] == reverse["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_snapshot_run_metadata_independent_of_region_order(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`ListLocations` guarantees no ordering, so the first region must not decide this."""
+    url = "/v1/GB/solar/forecasts/snapshot?region_type=gsp"
+    forward = await _get(MultiRunForecastClient(), url)
+    reverse = await _get(MultiRunForecastClient(reverse=True), url)
+    assert forward["last_updated_utc"] == reverse["last_updated_utc"] == _LATEST_RUN
+    assert forward["latest_init_utc"] == reverse["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_forecast_capacity_from_latest_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Hoisted capacity comes from the latest target time, not whichever value is first."""
+    forward = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    reverse = await _get(
+        MultiRunForecastClient(reverse=True),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert forward["capacity_kW"] == reverse["capacity_kW"] == 1200.0

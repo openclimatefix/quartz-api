@@ -38,6 +38,7 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     check_country_access,
+    latest_capacity,
     location_display_name,
     resolve_nation,
     resolve_region_id,
@@ -123,10 +124,9 @@ async def get_generation(
             ),
         )
 
-    first = agvs[0] if agvs else None
     return GenerationResponse(
         region_name=location_display_name(region, country),
-        capacity_kW=first.capacity_kilowatts if first else 0.0,
+        capacity_kW=latest_capacity(agvs),
         observer_name=observer,
         values=[
             GenerationValue(time_utc=v.valid_timestamp, power_kW=v.power_kilowatts)

@@ -391,3 +391,31 @@ def window_chunks(
         chunks.append((chunk_start, chunk_end))
         chunk_start = chunk_end
     return chunks
+
+
+def latest_run_timestamps(
+    values: list,
+) -> tuple[dt.datetime | None, dt.datetime | None]:
+    """Return the latest `created_timestamp` / `init_timestamp` across forecast values.
+
+    The data platform stitches the best-available (latest-run) value for each target
+    time, so a response spans many model runs. Taking the maximum makes
+    `last_updated_utc` mean "the most recent run contributing to this response" rather
+    than "whichever value the platform happened to return first".
+    """
+    created = [v.created_timestamp for v in values if v.created_timestamp]
+    init = [v.init_timestamp for v in values if v.init_timestamp]
+    return (max(created) if created else None, max(init) if init else None)
+
+
+def latest_capacity(values: list) -> float:
+    """Return the capacity of the value with the latest `valid_timestamp`.
+
+    The platform gives no ordering guarantee, so taking `values[0]` made this depend on
+    which value came back first. Effective capacity is time-varying, so a single hoisted
+    number cannot express a mid-window change either way — but the latest value's
+    capacity at least applied inside the requested window, and is reproducible.
+    """
+    if not values:
+        return 0.0
+    return max(values, key=lambda v: v.valid_timestamp).capacity_kilowatts

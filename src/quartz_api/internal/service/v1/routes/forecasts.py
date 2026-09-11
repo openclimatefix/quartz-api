@@ -41,6 +41,8 @@ from ..endpoint_types import (
 from ..helpers import (
     check_country_access,
     internal_to_api_name,
+    latest_capacity,
+    latest_run_timestamps,
     location_display_name,
     resolve_forecast_model,
     resolve_model_param,
@@ -155,13 +157,14 @@ async def get_forecast(
         pgvs = eclipse.adjust_predicted_generation(pgvs, country.code)
 
     first = pgvs[0] if pgvs else None
+    last_updated, latest_init = latest_run_timestamps(pgvs)
     return ForecastResponse(
         region_name=location_display_name(region, country),
-        capacity_kW=first.capacity_kilowatts if first else 0.0,
+        capacity_kW=latest_capacity(pgvs),
         model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        last_updated_utc=first.created_timestamp if first else None,
-        latest_init_utc=first.init_timestamp if first else None,
+        last_updated_utc=last_updated,
+        latest_init_utc=latest_init,
         horizon_minutes=horizon_minutes,
         values=[
             ForecastValue(
@@ -334,12 +337,13 @@ async def get_forecasts_at_time(
 
     region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     first = snapshot[0] if snapshot else None
+    last_updated, latest_init = latest_run_timestamps(snapshot)
     return ForecastSnapshot(
         time_utc=snapshot_time,
         model_name=internal_to_api_name(first.forecaster_name if first else None, rt),
         model_version=first.forecaster_version if first else None,
-        last_updated_utc=first.created_timestamp if first else None,
-        latest_init_utc=first.init_timestamp if first else None,
+        last_updated_utc=last_updated,
+        latest_init_utc=latest_init,
         values=[
             RegionForecastValue(
                 region_name=region_names.get(v.location_uuid, ""),
