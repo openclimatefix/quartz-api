@@ -374,6 +374,29 @@ def _create_v1_app(
                         .code-input-lite__editor {
                         color: var(--scalar-color-3);
                       }
+                      /* A dropdown row has no `.code-input-lite`, so the rule above
+                         misses it and its value read as active while unticked. The
+                         value sits in a ghost button, greyed here to match. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button,
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button span {
+                        color: var(--scalar-color-3) !important;
+                      }
+                      /* Scalar's own tick is near-white on dark and reads much like
+                         the unticked one at a glance. The checkbox itself is
+                         transparent and overlaid; the visible mark is the sibling
+                         div, whose `color` the tick inherits. */
+                      .scalar-data-table
+                        td:first-child
+                        input[type="checkbox"]:checked
+                        + div {
+                        color: var(--scalar-color-accent) !important;
+                      }
                       .scalar-data-table
                         tr.group:has(td:first-child input[type="checkbox"]:not(:checked)):has(
                           td:last-child .code-input-lite:not(.code-input-lite--empty)
