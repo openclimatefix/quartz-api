@@ -296,6 +296,15 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         v1_app.dependency_overrides[models.get_storage_client] = lambda: storage
         warm_v1_task = asyncio.create_task(warm_all_v1_caches(v1_app))
 
+    warm_satellite_task = None
+    if "satellite" in conf.get_string("api.routers").split(","):
+        from quartz_api.internal.service.satellite.cache import warm_all_satellite_caches
+        from quartz_api.internal.service.satellite.config import VALID_CHANNELS
+
+        warm_satellite_task = asyncio.create_task(
+            warm_all_satellite_caches(s3_module.get_s3_client(), VALID_CHANNELS),
+        )
+
     # make sure cache is cleaned up every 10 seconds
     backend = FastAPICache.get_backend()
     if backend is not None and isinstance(backend, ClearedInMemoryBackend):
@@ -307,6 +316,8 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         warm_task.cancel()
     if warm_v1_task is not None:
         warm_v1_task.cancel()
+    if warm_satellite_task is not None:
+        warm_satellite_task.cancel()
 
     if clear_cache_periodically is not None:
         clear_cache_periodically.cancel()
