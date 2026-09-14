@@ -2425,6 +2425,9 @@ def _pgv(
         valid_timestamp=valid or created + dt.timedelta(hours=1),
         location_uuid=location_uuid or uuid4(),
         capacity_kilowatts=capacity,
+        # Deliberately out of order, and not in the order the keys sort by name
+        # either, so a fix that only reverses or only sorts as strings still fails.
+        plevels_kilowatts={"p90": 240.0, "p10": 180.0, "p2": 90.0},
         forecaster_name="blend",
         forecaster_version="1.0.0",
         created_timestamp=created,
@@ -2669,3 +2672,35 @@ async def test_generation_detail_adds_per_value_capacity(
     )
     assert "capacity_kW" not in default["values"][0]
     assert runs["values"][0]["capacity_kW"] is not None
+
+
+@pytest.mark.anyio
+async def test_forecast_plevels_ordered_by_percentile(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Probability levels come back lowest percentile first, whatever order the DP used."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert list(body["values"][0]["plevels_kW"]) == ["p2", "p10", "p90"]
+
+
+@pytest.mark.anyio
+async def test_snapshot_plevels_ordered_by_percentile(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The same ordering applies to the snapshot's per-region values."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp",
+    )
+    assert list(body["values"][0]["plevels_kW"]) == ["p2", "p10", "p90"]
+
+
+def test_plevel_sort_key_keeps_unrecognised_names() -> None:
+    """An unexpected key sorts last rather than raising, so it is never dropped."""
+    from .helpers import sort_plevels
+
+    ordered = sort_plevels({"p90": 1.0, "median": 2.0, "p10": 3.0})
+    assert list(ordered) == ["p10", "p90", "median"]

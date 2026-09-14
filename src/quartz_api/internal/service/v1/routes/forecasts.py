@@ -48,10 +48,12 @@ from ..helpers import (
     latest_run_timestamps,
     location_display_name,
     parse_forecast_metadata,
+    plevel_sort_key,
     resolve_forecast_model,
     resolve_model_param,
     resolve_nation,
     resolve_region_id,
+    sort_plevels,
     timeseries_window,
     to_uuid,
     validate_model,
@@ -184,7 +186,7 @@ def _forecast_value(
     value = ForecastValue(
         time_utc=pgv.valid_timestamp,
         power_kW=pgv.power_kilowatts,
-        plevels_kW=pgv.plevels_kilowatts,
+        plevels_kW=sort_plevels(pgv.plevels_kilowatts),
     )
     if detail == DetailLevel.values:
         return value
@@ -370,7 +372,7 @@ async def get_forecasts_at_time(
                 region_name=region_names.get(v.location_uuid, ""),
                 capacity_kW=v.capacity_kilowatts,
                 power_kW=v.power_kilowatts,
-                plevels_kW=v.plevels_kilowatts or None,
+                plevels_kW=sort_plevels(v.plevels_kilowatts) or None,
             )
             for v in snapshot
         ],
@@ -509,7 +511,8 @@ async def get_forecasts_period(
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=[v.power_kW for v in windowed],
                 plevels_kW={
-                    k: [v.plevels_kW.get(k, 0.0) for v in windowed] for k in plevel_keys
+                    k: [v.plevels_kW.get(k, 0.0) for v in windowed]
+                    for k in sorted(plevel_keys, key=plevel_sort_key)
                 },
             ),
         )

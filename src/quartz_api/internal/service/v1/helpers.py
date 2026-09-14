@@ -23,6 +23,9 @@ from .country_config import (
 )
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
 
+# Sorts after every numbered level, so an unrecognised key is kept, not dropped.
+_PLEVEL_UNKNOWN = 10_000
+
 
 async def resolve_nation(
     db: models.StorageInterface,
@@ -440,3 +443,22 @@ def parse_forecast_metadata(metadata: dict) -> dict | None:
         with contextlib.suppress(json.JSONDecodeError):
             parsed["app_version"] = json.loads(raw)
     return parsed
+
+
+def plevel_sort_key(name: str) -> tuple[int, str]:
+    """Order a probability level by its percentile, so p10 precedes p90.
+
+    A name that is not `p<digits>` sorts after the numbered ones rather than raising,
+    so an unknown future key from the DP still comes back.
+    """
+    digits = name[1:] if name[:1].lower() == "p" else name
+    return (int(digits), name) if digits.isdigit() else (_PLEVEL_UNKNOWN, name)
+
+
+def sort_plevels(plevels: dict) -> dict:
+    """Return the probability levels ordered from lowest percentile to highest.
+
+    The DP hands these over as a map with no ordering guarantee. JSON objects
+    keep insertion order, so ordering them here is what the caller sees.
+    """
+    return {k: plevels[k] for k in sorted(plevels, key=plevel_sort_key)}
