@@ -165,6 +165,48 @@ def _custom_openapi(
 #
 # If Scalar renames these sections nothing gets an order and the panel falls back to
 # Scalar's own order, which is today's behaviour.
+# Scalar persists the auth block in localStorage, and looks the redirect up with `??`
+# rather than the `||` it uses for every other secret. So a stored empty string counts
+# as a deliberate choice and beats the value we send, while an absent key falls through
+# to it. Deleting just that key is not enough — Scalar rewrites it from its own state —
+# so the whole persisted entry has to go for the config to be read again.
+#
+# Only entries that have nothing worth keeping are removed: the redirect must be empty
+# (the stuck state) and the token empty too, so nobody holding a live token is signed
+# out to fix a cosmetic field. Runs in <head>, before the bundle hydrates. Any change
+# to Scalar's storage shape makes it a no-op rather than a hazard.
+_SCALAR_REDIRECT_REPAIR_JS = """
+<script>
+  (function () {
+    var REDIRECT = 'x-scalar-secret-redirect-uri';
+    var TOKEN = 'x-scalar-secret-token';
+    function stuck(node) {
+      if (!node || typeof node !== 'object') return false;
+      if (node[REDIRECT] === '' && (node[TOKEN] === '' || node[TOKEN] === undefined)) {
+        return true;
+      }
+      for (var k in node) {
+        if (Object.prototype.hasOwnProperty.call(node, k) && stuck(node[k])) return true;
+      }
+      return false;
+    }
+    var doomed = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      try {
+        var name = localStorage.key(i);
+        var raw = localStorage.getItem(name);
+        if (!raw || raw.indexOf(REDIRECT) === -1) continue;
+        if (stuck(JSON.parse(raw))) doomed.push(name);
+      } catch (e) {
+        // A non-JSON entry, or storage blocked: leave it untouched.
+      }
+    }
+    for (var j = 0; j < doomed.length; j++) localStorage.removeItem(doomed[j]);
+  })();
+</script>
+"""
+
+
 _SCALAR_SECTION_ORDER_JS = r"""
 <script>
   (function () {
@@ -314,10 +356,27 @@ def _create_v1_app(
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
         """Serve Scalar API reference for v1."""
         root_path = request.scope.get("root_path", "").rstrip("/")
+        # Scalar defaults the OAuth redirect to the current page, but `persist_auth`
+        # stores the auth block in localStorage — so once the field has been cleared
+        # it stays cleared, and nothing ever refills it. Sending it on every load is
+        # what makes it self-healing. This is the docs page itself, which Auth0 must
+        # already allow as a callback, so it needs no new registration.
+        page_auth = dict(scalar_auth)
+        if page_auth:
+            redirect_uri = str(request.url.replace(query="", fragment=""))
+            page_auth["securitySchemes"] = {
+                "oauth2": {
+                    "flows": {
+                        "authorizationCode": {
+                            "x-scalar-secret-redirect-uri": redirect_uri,
+                        },
+                    },
+                },
+            }
         page = get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
-            authentication=scalar_auth,
+            authentication=page_auth,
             persist_auth=True,
             theme=Theme.ALTERNATE,
             dark_mode=True,
@@ -417,6 +476,10 @@ def _create_v1_app(
             return page
         return HTMLResponse(
             html.replace(
+                "<head>",
+                "<head>" + _SCALAR_REDIRECT_REPAIR_JS,
+                1,
+            ).replace(
                 "</body>",
                 _SCALAR_AUTO_ENABLE_JS + _SCALAR_SECTION_ORDER_JS + "</body>",
                 1,
