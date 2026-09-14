@@ -1,6 +1,7 @@
 """Pydantic models for v1 API request/response types."""
 
 import datetime as dt
+import enum
 from typing import Annotated
 
 from fastapi import Path, Query
@@ -59,6 +60,32 @@ ValidForecastModelVersion = Annotated[
         description=(
             "Forecast model version. If omitted, the latest version of the selected "
             "model is used."
+        ),
+    ),
+]
+
+
+class DetailLevel(enum.StrEnum):
+    """How much per-value metadata a time-series response carries."""
+
+    values = "values"
+    runs = "runs"
+    full = "full"
+
+
+ValidDetail = Annotated[
+    DetailLevel,
+    Query(
+        description=(
+            "How much metadata to return per value. "
+            "`values` (default) — the values only. "
+            "`runs` — adds which model run produced each value (run and init time, model "
+            "name and version) plus that value's own capacity; the top-level fields "
+            "describe only the latest run in the response. "
+            "`full` — adds the forecaster's own metadata, including when each input data "
+            "source was last ingested. Keys there vary by model. "
+            "On generation routes there is no model run, so `runs` adds only capacity and "
+            "`full` adds nothing further."
         ),
     ),
 ]
@@ -316,39 +343,101 @@ class RegionDetail(RegionSummary):
 
 
 class ForecastValue(BaseModel):
-    """A single forecast value at a point in time."""
+    """A single forecast value at a point in time.
+
+    Everything below `plevels_kW` is populated only when `detail` is raised above
+    `values` — see `DetailLevel`.
+    """
 
     time_utc: dt.datetime
     power_kW: float
     plevels_kW: dict[str, float] = Field(default_factory=dict)
 
-
-class ForecastResponse(BaseModel):
-    """Forecast time series for a region, with shared metadata."""
-
-    region_name: str
-    capacity_kW: float
-    model_name: str | None = None
-    model_version: str | None = None
     last_updated_utc: dt.datetime | None = None
     latest_init_utc: dt.datetime | None = None
-    horizon_minutes: int | None = None
+    model_name: str | None = None
+    model_version: str | None = None
+    capacity_kW: float | None = None
+    metadata: dict | None = Field(
+        default=None,
+        description=(
+            "Passthrough of the forecaster's own metadata, including when each input "
+            "data source was last ingested. Keys vary by model and are not a stable "
+            "contract — they will be replaced by a typed structure once all models run "
+            "through one pipeline. Returned only when `detail=full`."
+        ),
+    )
+
+
+class ForecastResponse(BaseModel):
+    """Forecast time series for a region, with shared metadata.
+
+    The data platform stitches the latest-run value for each target time, so a response
+    normally spans several model runs. The fields below describe the response as a whole;
+    use `detail=runs` for each value's own run.
+    """
+
+    region_name: str
+    capacity_kW: float = Field(
+        description=(
+            "Effective capacity at the last target time in the response. Capacity varies "
+            "over time, so on a long window earlier values may have had a different one — "
+            "use `detail=runs` for per-value capacity."
+        ),
+    )
+    model_name: str | None = Field(
+        default=None,
+        description="Model that produced the response.",
+    )
+    model_version: str | None = Field(
+        default=None,
+        description="Version of that model.",
+    )
+    last_updated_utc: dt.datetime | None = Field(
+        default=None,
+        description=(
+            "When the most recent run contributing to this response was created. Earlier "
+            "values may come from earlier runs."
+        ),
+    )
+    latest_init_utc: dt.datetime | None = Field(
+        default=None,
+        description="Init time of that most recent run.",
+    )
+    horizon_minutes: int | None = Field(
+        default=None,
+        description="Echo of the requested `horizon_minutes` filter, if any.",
+    )
     values: list[ForecastValue]
 
 
 class GenerationValue(BaseModel):
-    """A single observed generation value at a point in time."""
+    """A single observed generation value at a point in time.
+
+    `capacity_kW` is populated only when `detail` is raised above `values`. Observed
+    values carry no model run, so there is nothing further for `detail=full` to add.
+    """
 
     time_utc: dt.datetime
     power_kW: float
+
+    capacity_kW: float | None = None
 
 
 class GenerationResponse(BaseModel):
     """Observed generation time series for a region, with shared metadata."""
 
     region_name: str
-    capacity_kW: float
-    observer_name: str | None = None
+    capacity_kW: float = Field(
+        description=(
+            "Effective capacity at the last target time in the response. Capacity varies "
+            "over time — use `detail=runs` for per-value capacity."
+        ),
+    )
+    observer_name: str | None = Field(
+        default=None,
+        description="Observer the values were recorded by, e.g. `pvlive_in_day`.",
+    )
     values: list[GenerationValue]
 
 
@@ -364,11 +453,25 @@ class RegionForecastValue(BaseModel):
 class ForecastSnapshot(BaseModel):
     """Snapshot forecast across all regions at a single point in time."""
 
-    time_utc: dt.datetime
-    model_name: str | None = None
-    model_version: str | None = None
-    last_updated_utc: dt.datetime | None = None
-    latest_init_utc: dt.datetime | None = None
+    time_utc: dt.datetime = Field(
+        description="The single target time every value in this snapshot is for.",
+    )
+    model_name: str | None = Field(
+        default=None,
+        description="Model that produced the snapshot.",
+    )
+    model_version: str | None = Field(default=None, description="Version of that model.")
+    last_updated_utc: dt.datetime | None = Field(
+        default=None,
+        description=(
+            "When the most recent run contributing to this snapshot was created. Regions "
+            "are forecasted independently, so others may come from earlier runs."
+        ),
+    )
+    latest_init_utc: dt.datetime | None = Field(
+        default=None,
+        description="Init time of that most recent run.",
+    )
     values: list[RegionForecastValue]
 
 

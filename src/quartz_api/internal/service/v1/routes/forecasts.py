@@ -21,15 +21,18 @@ from ..cache import (
     key_builder,
     warm_v1_forecast_cache,
 )
+from ..country_config import RegionTypeConfig
 from ..endpoint_types import (
     CountryParam,
     DeprecatedForecastModel,
+    DetailLevel,
     ForecastResponse,
     ForecastSnapshot,
     ForecastValue,
     RegionForecast,
     RegionForecastMatrix,
     RegionForecastValue,
+    ValidDetail,
     ValidForecastModel,
     ValidForecastModelVersion,
     ValidPeriodRegionType,
@@ -44,6 +47,7 @@ from ..helpers import (
     latest_capacity,
     latest_run_timestamps,
     location_display_name,
+    parse_forecast_metadata,
     resolve_forecast_model,
     resolve_model_param,
     resolve_nation,
@@ -91,6 +95,7 @@ async def get_forecast(
             "the 1-hour-ahead forecast value for each target timestep."
         ),
     ),
+    detail: ValidDetail = DetailLevel.values,
     model_name: ValidForecastModel | None = None,
     model_version: ValidForecastModelVersion = None,
     model: DeprecatedForecastModel = None,
@@ -166,15 +171,31 @@ async def get_forecast(
         last_updated_utc=last_updated,
         latest_init_utc=latest_init,
         horizon_minutes=horizon_minutes,
-        values=[
-            ForecastValue(
-                time_utc=v.valid_timestamp,
-                power_kW=v.power_kilowatts,
-                plevels_kW=v.plevels_kilowatts,
-            )
-            for v in pgvs
-        ],
+        values=[_forecast_value(v, rt, detail) for v in pgvs],
     )
+
+
+def _forecast_value(
+    pgv: models.PredictedGenerationValue,
+    rt: RegionTypeConfig,
+    detail: DetailLevel,
+) -> ForecastValue:
+    """Build a ForecastValue, promoting per-value run metadata when asked for."""
+    value = ForecastValue(
+        time_utc=pgv.valid_timestamp,
+        power_kW=pgv.power_kilowatts,
+        plevels_kW=pgv.plevels_kilowatts,
+    )
+    if detail == DetailLevel.values:
+        return value
+    value.last_updated_utc = pgv.created_timestamp
+    value.latest_init_utc = pgv.init_timestamp
+    value.model_name = internal_to_api_name(pgv.forecaster_name, rt)
+    value.model_version = pgv.forecaster_version
+    value.capacity_kW = pgv.capacity_kilowatts
+    if detail == DetailLevel.full:
+        value.metadata = parse_forecast_metadata(pgv.metadata)
+    return value
 
 
 @router.get(

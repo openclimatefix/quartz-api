@@ -23,12 +23,14 @@ from ..cache import (
 )
 from ..endpoint_types import (
     CountryParam,
+    DetailLevel,
     GenerationResponse,
     GenerationSnapshot,
     GenerationValue,
     RegionGeneration,
     RegionGenerationMatrix,
     RegionGenerationValue,
+    ValidDetail,
     ValidObserver,
     ValidPeriodRegionType,
     ValidRegion,
@@ -55,6 +57,7 @@ router = APIRouter(tags=["Generation"])
     "/{country}/{source}/regions/{region}/generation",
     status_code=status.HTTP_200_OK,
     response_model=GenerationResponse,
+    response_model_exclude_none=True,
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_generation(
@@ -65,6 +68,7 @@ async def get_generation(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     observer: ValidObserver = "pvlive_in_day",
+    detail: ValidDetail = DetailLevel.values,
     start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
         None,
@@ -129,7 +133,13 @@ async def get_generation(
         capacity_kW=latest_capacity(agvs),
         observer_name=observer,
         values=[
-            GenerationValue(time_utc=v.valid_timestamp, power_kW=v.power_kilowatts)
+            GenerationValue(
+                time_utc=v.valid_timestamp,
+                power_kW=v.power_kilowatts,
+                capacity_kW=(
+                    None if detail == DetailLevel.values else v.capacity_kilowatts
+                ),
+            )
             for v in agvs
         ],
     )

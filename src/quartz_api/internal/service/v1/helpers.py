@@ -2,7 +2,9 @@
 
 # ruff: noqa: ARG001
 
+import contextlib
 import datetime as dt
+import json
 from uuid import UUID
 
 import pandas as pd
@@ -419,3 +421,22 @@ def latest_capacity(values: list) -> float:
     if not values:
         return 0.0
     return max(values, key=lambda v: v.valid_timestamp).capacity_kilowatts
+
+
+def parse_forecast_metadata(metadata: dict) -> dict | None:
+    """Return the forecaster's metadata dict with `app_version` parsed into an object.
+
+    The pipeline stringifies `app_version` — for `blend` it is a JSON object encoded as
+    a string — so returning it verbatim would make clients parse twice. Everything else
+    passes through as the forecaster wrote it: the keys vary by model and are not a
+    stable contract, pending a single pipeline that makes them predictable. If/when they
+    are in future, we can revisit this.
+    """
+    if not metadata:
+        return None
+    parsed = dict(metadata)
+    raw = parsed.get("app_version")
+    if isinstance(raw, str):
+        with contextlib.suppress(json.JSONDecodeError):
+            parsed["app_version"] = json.loads(raw)
+    return parsed

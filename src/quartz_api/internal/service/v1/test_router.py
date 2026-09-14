@@ -2429,6 +2429,10 @@ def _pgv(
         forecaster_version="1.0.0",
         created_timestamp=created,
         init_timestamp=created - dt.timedelta(minutes=30),
+        metadata={
+            "app_version": '{"blend": "1.2.22", "pvnet_v2": "3.0.1"}',
+            "nwp_last_updated": "2026-09-06T23:12:33+00:00",
+        },
     )
 
 
@@ -2588,3 +2592,80 @@ async def test_forecast_capacity_from_latest_value(
         "/v1/GB/solar/regions/national/forecast",
     )
     assert forward["capacity_kW"] == reverse["capacity_kW"] == 1200.0
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_values_omits_per_value_metadata(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The default response carries only the value itself."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    value = body["values"][0]
+    assert set(value) == {"time_utc", "power_kW", "plevels_kW"}
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_runs_promotes_run_per_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`detail=runs` reports each value's own run, not the response-wide latest."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=runs",
+    )
+    runs = [v["last_updated_utc"] for v in body["values"]]
+    assert runs == [t.isoformat().replace("+00:00", "Z") for t in _RUN_TIMES]
+    assert body["last_updated_utc"] == _LATEST_RUN  # hoisted field still the latest
+    assert body["values"][0]["capacity_kW"] == 1000.0
+    assert "metadata" not in body["values"][0]
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_full_parses_app_version(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`detail=full` adds the forecaster metadata, with `app_version` as an object."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=full",
+    )
+    metadata = body["values"][0]["metadata"]
+    assert metadata["app_version"] == {"blend": "1.2.22", "pvnet_v2": "3.0.1"}
+    assert metadata["nwp_last_updated"] == "2026-09-06T23:12:33+00:00"
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_is_part_of_the_cache_key(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A default response must not be served to a request that asked for runs."""
+    app = _make_app(MultiRunForecastClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        default = await ac.get("/v1/GB/solar/regions/national/forecast")
+        runs = await ac.get("/v1/GB/solar/regions/national/forecast?detail=runs")
+
+    assert "last_updated_utc" not in default.json()["values"][0]
+    assert "last_updated_utc" in runs.json()["values"][0]
+
+
+@pytest.mark.anyio
+async def test_generation_detail_adds_per_value_capacity(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Observed values have no run, so `detail` only promotes capacity."""
+    default = await _get(
+        StorageClient(),
+        "/v1/GB/solar/regions/national/generation",
+    )
+    runs = await _get(
+        StorageClient(),
+        "/v1/GB/solar/regions/national/generation?detail=runs",
+    )
+    assert "capacity_kW" not in default["values"][0]
+    assert runs["values"][0]["capacity_kW"] is not None
