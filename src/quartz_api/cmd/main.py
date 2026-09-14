@@ -153,6 +153,66 @@ def _custom_openapi(
 # `checked`, so Scalar's own handler runs and its request state follows. If Scalar
 # renames these classes the listener stops firing and nothing else changes — the
 # greying in `custom_css` still shows which rows are disabled.
+# Scalar renders the Test Request panel in a fixed order that puts Cookies and Headers
+# above Query Parameters, and offers no configuration for it (scalar/scalar exposes only
+# tagsSorter / operationsSorter / orderSchemaPropertiesBy, none of which touch this
+# panel). Query parameters are what callers actually set on this API, so lift them.
+#
+# The sections are flex children of the tabpanel, so `order` moves them. It cannot be
+# pure CSS: the ids are sequential (`scalar-client-0-5`, `-6`, …) and shift by route
+# depending on which sections exist, so neither id nor :nth-child identifies a section
+# reliably — the only stable handle is the header text, which CSS cannot match.
+#
+# If Scalar renames these sections nothing gets an order and the panel falls back to
+# Scalar's own order, which is today's behaviour.
+_SCALAR_SECTION_ORDER_JS = r"""
+<script>
+  (function () {
+    var ORDER = {
+      'Authentication': 10,
+      'Variables': 20,
+      'Query Parameters': 30,
+      'Request Body': 40,
+      'Headers': 50,
+      'Cookies': 60,
+      'Code Snippet': 90,
+    };
+    function apply() {
+      var panels = document.querySelectorAll(
+        '.request-section-content[role="tabpanel"]',
+      );
+      for (var p = 0; p < panels.length; p++) {
+        var kids = panels[p].children;
+        for (var i = 0; i < kids.length; i++) {
+          var el = kids[i];
+          var head = el.querySelector('button, [role="button"], h2, h3');
+          var label = head ? head.textContent.trim().replace(/\s+/g, ' ') : '';
+          var order = null;
+          for (var name in ORDER) {
+            if (label.indexOf(name) === 0) { order = ORDER[name]; break; }
+          }
+          // A section we do not recognise sits mid-panel rather than jumping to an
+          // end. The unlabelled one is a flex-grow spacer that pins Code Snippet to
+          // the bottom, so it has to stay just above it.
+          if (order === null) order = label ? 45 : 80;
+          var want = String(order);
+          if (el.style.order !== want) el.style.order = want;
+        }
+      }
+    }
+    // The panel is built when the modal opens and rebuilt when the route changes.
+    var queued = false;
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; apply(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    apply();
+  })();
+</script>
+"""
+
+
 _SCALAR_AUTO_ENABLE_JS = """
 <script>
   (function () {
@@ -271,6 +331,8 @@ def _create_v1_app(
             scalar_js_url=(
                 "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0"
             ),
+            order_schema_properties_by=("preserve"),
+            hide_client_button=(True),
             custom_css="""
                       /* override theme colours */
                       :root .dark-mode {
@@ -331,7 +393,11 @@ def _create_v1_app(
         if "</body>" not in html:
             return page
         return HTMLResponse(
-            html.replace("</body>", _SCALAR_AUTO_ENABLE_JS + "</body>", 1),
+            html.replace(
+                "</body>",
+                _SCALAR_AUTO_ENABLE_JS + _SCALAR_SECTION_ORDER_JS + "</body>",
+                1,
+            ),
         )
 
     return v1_app
@@ -553,7 +619,7 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             server.swagger_ui_init_oauth = {
                 "usePkceWithAuthorizationCodeGrant": True,
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": "openid profile email offline_access",
                 "additionalQueryStringParams": {"audience": audience},
             }
 
