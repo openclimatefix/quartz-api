@@ -147,6 +147,30 @@ def check_region_type(
     return rt
 
 
+def resolve_observer_param(
+    cfg: CountryConfig,
+    source: str,
+    observer: str,
+) -> str:
+    """Validate an observer against the country's generation sources, returning its DP name.
+
+    `ValidObserver` only checks the observer exists for *some* country, so each route
+    has to confirm it exists for *this* one before resolving it for the DP.
+    """
+    available = {
+        gs.api_name for gs in cfg.generation_sources if gs.source == source
+    }
+    if observer not in available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Observer '{observer}' is not available for "
+                f"{cfg.code} {source}. Available: {sorted(available)}"
+            ),
+        )
+    return cfg.resolve_observer(observer)
+
+
 def resolve_model_param(
     model_name: str | None,
     model: str | None,

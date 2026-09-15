@@ -45,6 +45,7 @@ from ..helpers import (
     location_display_name,
     region_metadata,
     resolve_nation,
+    resolve_observer_param,
     resolve_region_id,
     timeseries_window,
     to_uuid,
@@ -95,7 +96,7 @@ async def get_generation(
     - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
-    dp_observer = country.resolve_observer(observer)
+    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
     resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
@@ -182,7 +183,7 @@ async def get_generation_at_timestamp(
     rarely have data.
     """
     check_country_access(auth, country)
-    dp_observer = country.resolve_observer(observer)
+    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
@@ -326,20 +327,7 @@ async def get_generation_period(
                 f"for national-level data."
             ),
         )
-    valid_observers = {
-        gs.api_name
-        for gs in country.generation_sources
-        if gs.source == source.name.lower()
-    }
-    if observer not in valid_observers:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Observer '{observer}' is not available for "
-                f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}"
-            ),
-        )
-    dp_observer = country.resolve_observer(observer)
+    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
     validate_window(win_start, win_end)
@@ -433,7 +421,7 @@ async def refresh_generation_cache(
     """
     if ADMIN_PERMISSION not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    dp_observer = country.resolve_observer(observer)
+    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{dp_observer}"
     if generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
