@@ -1,3 +1,4 @@
+"""This module contains functions for scoping sites to the caller's organization."""
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -5,6 +6,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency, get_org_id_from_authdata
+
 
 def require_org_id(auth: AuthDependency) -> str | None:
     """Return the org_id for the caller, or raise 403 if they have no company."""
@@ -19,7 +21,6 @@ async def get_site(
     auth: AuthDependency,
 ) -> models.Location:
     """Return the site for the given site_id, or raise 404 if not found."""
-    
     require_org_id(auth)
     locs = await db.get_locations(
         energy_type=None,
