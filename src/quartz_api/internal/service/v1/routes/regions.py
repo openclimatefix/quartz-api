@@ -54,10 +54,10 @@ async def get_country_regions(
     """List regions for a country, optionally filtered by type, parent, and/or name.
 
     Filter behavior:
-    - No filters — returns every region across all configured region types.
-    - `region_type` — restricts results to one granularity level (e.g. `gsp`).
-    - `parent` — returns the direct children of the specified parent region.
-    - `name` — case-insensitive substring search across region names.
+    - No filters: returns every region across all configured region types.
+    - `region_type`: restricts results to one granularity level (e.g. `gsp`).
+    - `parent`: returns the direct children of the specified parent region.
+    - `name`: case-insensitive substring search across region names.
     """
     check_country_access(auth, country)
     nation = await resolve_nation(db, source, country, auth)

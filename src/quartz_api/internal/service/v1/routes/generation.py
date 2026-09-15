@@ -80,20 +80,20 @@ async def get_generation(
 ) -> GenerationResponse:
     """Get observed solar generation for a specific region.
 
-    Returns a time series of measured generation values — power in kW — from the
+    Returns a time series of measured generation values (power in kW) from the
     specified observer. The default window is the **last 24 hours**; use `start_utc` /
     `end_utc` to extend or shift it. Historical data is available up to 1 year back.
 
     Two observers are available for GB solar:
 
-    - **pvlive_in_day** (default) — PV_Live in-day estimates, updated every 30 minutes.
+    - **pvlive_in_day** (default): PV_Live in-day estimates, updated every 30 minutes.
       These are the most recent values but may be revised later.
-    - **pvlive_day_after** — PV_Live day-after final values, available from the following
+    - **pvlive_day_after**: PV_Live day-after final values, available from the following
       morning. Use these when accuracy is more important than latency.
 
     NL currently has one observer for solar:
 
-    - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
+    - **ned_nl**: NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
     api_observer, dp_observer = resolve_observer_param(
@@ -177,7 +177,7 @@ async def get_generation_at_timestamp(
 ) -> GenerationSnapshot:
     """Get observed generation for all regions of a given type at a specific time.
 
-    Returns a `GenerationSnapshot` — a single point in time with one observed generation
+    Returns a `GenerationSnapshot`: a single point in time with one observed generation
     value per region. Useful for rendering a map of current solar output across an entire
     country.
 
@@ -293,14 +293,14 @@ async def get_generation_period(
 ) -> RegionGenerationMatrix:
     """Get observed generation for all (or selected) regions across a time window.
 
-    Returns a `RegionGenerationMatrix` — a compact columnar structure with a shared
+    Returns a `RegionGenerationMatrix`: a compact columnar structure with a shared
     `times` array and one `power_kW` series per region. Analogous to the forecast
     period endpoint but for observed (actual) generation data.
 
     This endpoint is served entirely from a pre-warmed cache (one key per region).
     It does not make live data-platform calls per request. If the cache has not yet
     been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
-    header — retry after a minute. The cache covers a ±2-day window around now,
+    header, so retry after a minute. The cache covers a ±2-day window around now,
     refreshed every 24 hours (or on demand via `POST /{country}/{source}/generation/refresh`).
 
     Time-window and region filtering are applied in-memory from the cached data.

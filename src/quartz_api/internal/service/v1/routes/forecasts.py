@@ -113,7 +113,7 @@ async def get_forecast(
 ) -> ForecastResponse:
     """Get the solar generation forecast for a specific region.
 
-    Returns a time series of forecast values — power in kW at 30-minute resolution —
+    Returns a time series of forecast values (power in kW at 30-minute resolution)
     along with model metadata (name, version, creation time, initialisation time).
 
     By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
@@ -305,7 +305,7 @@ async def get_forecasts_at_time(
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific time.
 
-    Returns a `ForecastSnapshot` — a single point in time with one forecast value per
+    Returns a `ForecastSnapshot`: a single point in time with one forecast value per
     region. Useful for rendering a map of forecast output across an entire country at
     a glance.
     """
@@ -405,7 +405,7 @@ async def get_forecasts_period(
 ) -> RegionForecastMatrix:
     """Get forecasts for all (or selected) regions across a time window.
 
-    Returns a `RegionForecastMatrix` — a compact columnar structure with a shared
+    Returns a `RegionForecastMatrix`: a compact columnar structure with a shared
     `times` array and one `power_kW` series per region. Designed for efficiently
     loading all-region forecast data for charts or grid-management tools in a single
     request.
@@ -413,14 +413,14 @@ async def get_forecasts_period(
     This endpoint is served entirely from a pre-warmed cache (one key per region).
     It does not make live data-platform calls per request. If the cache has not yet
     been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
-    header — retry after a minute. The cache covers a ±2-day window around now,
+    header, so retry after a minute. The cache covers a ±2-day window around now,
     refreshed every 24 hours (or on demand via `POST /{country}/{source}/forecasts/refresh`).
 
     Time-window and region filtering are applied in-memory from the cached data.
     This endpoint fetches only the default forecast model for the selected
     country + region type.
 
-    Model and horizon filters are **not** supported on this endpoint — use
+    Model and horizon filters are **not** supported on this endpoint; use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
 
     Not available to intraday-only subscriptions: this endpoint serves the pre-warmed

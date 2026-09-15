@@ -78,11 +78,11 @@ ValidDetail = Annotated[
     Query(
         description=(
             "How much metadata to return per value. "
-            "`values` (default) — the values only. "
-            "`runs` — adds which model run produced each value (run and init time, model "
+            "`values` (default): the values only. "
+            "`runs`: adds which model run produced each value (run and init time, model "
             "name and version) plus that value's own capacity; the top-level fields "
             "describe only the latest run in the response. "
-            "`full` — adds the forecaster's own metadata, including when each input data "
+            "`full`: adds the forecaster's own metadata, including when each input data "
             "source was last ingested. Keys there vary by model. "
             "On generation routes there is no model run, so `runs` adds only capacity and "
             "`full` adds nothing further."
@@ -104,14 +104,14 @@ def _get_region_type_names(*, exclude_nation: bool = False) -> tuple[str, ...]:
 
 _REGION_TYPE_DESCRIPTION = (
     "Region type slug (e.g. 'gsp', 'national'). "
-    "Valid values are country-specific — see `/{country}/{source}/region-types`. "
+    "Valid values are country-specific; see `/{country}/{source}/region-types`. "
     "The enum lists all types across all countries."
 )
 
 _PERIOD_REGION_TYPE_DESCRIPTION = (
-    "Region type slug (e.g. 'gsp'). Only sub-national types are supported — "
+    "Region type slug (e.g. 'gsp'). Only sub-national types are supported; "
     "national-level data is not pre-warmed. "
-    "Valid values are country-specific — see `/{country}/{source}/region-types`. "
+    "Valid values are country-specific; see `/{country}/{source}/region-types`. "
     "The enum lists all types across all countries."
 )
 
@@ -225,7 +225,7 @@ ValidRegion = Annotated[
     str,
     Path(
         description=(
-            "Region identifier — `national`, a region `name` (case-insensitive), or a UUID. "
+            "Region identifier: `national`, a region `name` (case-insensitive), or a UUID. "
             "Use `GET /{country}/{source}/regions` to browse available regions."
         ),
         min_length=2,
@@ -263,7 +263,7 @@ def _check_window_end(v: dt.datetime | None) -> dt.datetime | None:
         v = v.replace(tzinfo=dt.UTC)
     if v > latest:
         raise ValueError(
-            "end_utc is more than a year ahead. No forecast extends that far — check "
+            "end_utc is more than a year ahead. No forecast extends that far, so check "
             "the year, and that the value is an ISO 8601 timestamp rather than an epoch.",
         )
     return v
@@ -280,7 +280,7 @@ ValidWindowEnd = Annotated[
     dt.datetime | None,
     Query(
         description=(
-            "End of window (UTC). The default depends on the endpoint — see its "
+            "End of window (UTC). The default depends on the endpoint; see its "
             "description."
         ),
     ),
@@ -362,7 +362,7 @@ class RegionType(BaseModel):
 
 
 class CountryDetail(BaseModel):
-    """Full capability manifest for a country — region types, models, and generation sources."""
+    """Full capability manifest for a country: region types, models, and generation sources."""
 
     country: str
     name: str
@@ -391,7 +391,7 @@ class ForecastValue(BaseModel):
     """A single forecast value at a point in time.
 
     Everything below `plevels_kW` is populated only when `detail` is raised above
-    `values` — see `DetailLevel`.
+    `values`. See `DetailLevel`.
     """
 
     time_utc: dt.datetime
@@ -408,7 +408,7 @@ class ForecastValue(BaseModel):
         description=(
             "Passthrough of the forecaster's own metadata, including when each input "
             "data source was last ingested. Keys vary by model and are not a stable "
-            "contract — they will be replaced by a typed structure once all models run "
+            "contract, and will be replaced by a typed structure once all models run "
             "through one pipeline. Returned only when `detail=full`."
         ),
     )
@@ -426,7 +426,7 @@ class ForecastResponse(BaseModel):
     capacity_kW: float = Field(
         description=(
             "Effective capacity at the last target time in the response. Capacity varies "
-            "over time, so on a long window earlier values may have had a different one — "
+            "over time, so on a long window earlier values may have had a different one; "
             "use `detail=runs` for per-value capacity."
             "N.B. this is now `effective` rather than the `installed` that was provided "
             "through the v0 API; this is still available if needed through metadata, but "
@@ -463,7 +463,7 @@ class ForecastResponse(BaseModel):
             "`installed_capacity_kW` where the platform has one: the capacity before "
             "degradation, which is what v0 reported as `installedCapacityMw` and what "
             "PV Live publishes. It is a few percent higher than `capacity_kW` (effective) "
-            "and is **not** what the forecast is normalised against — prefer `capacity_kW`. "
+            "and is **not** what the forecast is normalised against, so prefer `capacity_kW`. "
             "Retained for convenient reference and migration from v0."
         ),
     )
@@ -490,7 +490,7 @@ class GenerationResponse(BaseModel):
     capacity_kW: float = Field(
         description=(
             "Effective capacity at the last target time in the response. Capacity varies "
-            "over time — use `detail=runs` for per-value capacity."
+            "over time; use `detail=runs` for per-value capacity."
         ),
     )
     observer_name: str | None = Field(
@@ -504,7 +504,7 @@ class GenerationResponse(BaseModel):
             "`installed_capacity_kW` where the platform has one: the capacity before "
             "degradation, which is what v0 reported as `installedCapacityMw` and what "
             "PV Live publishes. It is a few percent higher than `capacity_kW` and is "
-            "**not** what the forecast is normalised against — prefer `capacity_kW`. "
+            "**not** what the forecast is normalised against, so prefer `capacity_kW`. "
             "Retained for migration from v0."
         ),
     )
@@ -512,7 +512,7 @@ class GenerationResponse(BaseModel):
 
 
 class RegionForecastValue(BaseModel):
-    """A single forecast value for one region — used in snapshot responses."""
+    """A single forecast value for one region, used in snapshot responses."""
 
     region_name: str
     capacity_kW: float
@@ -546,7 +546,7 @@ class ForecastSnapshot(BaseModel):
 
 
 class RegionGenerationValue(BaseModel):
-    """A single observed generation value for one region — used in snapshot responses."""
+    """A single observed generation value for one region, used in snapshot responses."""
 
     region_name: str
     capacity_kW: float
@@ -562,7 +562,7 @@ class GenerationSnapshot(BaseModel):
 
 
 class RegionForecast(BaseModel):
-    """Forecast time series for one region — used in matrix responses."""
+    """Forecast time series for one region, used in matrix responses."""
 
     region_name: str
     capacity_kW: float
@@ -583,7 +583,7 @@ class RegionForecastMatrix(BaseModel):
 
 
 class RegionGeneration(BaseModel):
-    """Generation time series for one region — used in matrix responses."""
+    """Generation time series for one region, used in matrix responses."""
 
     region_name: str
     capacity_kW: float
