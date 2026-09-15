@@ -125,6 +125,11 @@ def _custom_openapi(
                         "openid": "OpenID",
                         "profile": "Profile",
                         "email": "Email",
+                        # Auth0 only issues a refresh token when this is asked for, and
+                        # without one the docs page's "refresh token" control has nothing
+                        # to use. It has to be in both places: here to declare it on the
+                        # scheme, and in `scalar_auth` below to actually request it.
+                        "offline_access": "Refresh token",
                     },
                 },
             },
@@ -333,7 +338,7 @@ def _create_v1_app(
             "preferredSecurityScheme": "oauth2",
             "oauth2": {
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": "openid profile email offline_access",
             },
         }
 
