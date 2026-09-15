@@ -12,6 +12,8 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from ..cache import key_builder
 from ..country_config import COUNTRIES
 from ..endpoint_types import (
+    AUTH_RESPONSES,
+    SNAPSHOT_RESPONSES,
     Centroid,
     CountryDetail,
     CountryParam,
@@ -25,7 +27,12 @@ from ..endpoint_types import (
 router = APIRouter(tags=["Discovery"])
 
 
-@router.get("/sources", status_code=status.HTTP_200_OK, response_model=list[Source])
+@router.get(
+    "/sources",
+    responses=AUTH_RESPONSES,
+    status_code=status.HTTP_200_OK,
+    response_model=list[Source],
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_sources(
     request: Request,
@@ -43,6 +50,7 @@ async def get_sources(
 
 @router.get(
     "/countries",
+    responses=AUTH_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[CountryDetail],
 )
@@ -109,6 +117,7 @@ async def get_countries(
 
 @router.get(
     "/{country}/{source}/region-types",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[RegionType],
 )
@@ -150,6 +159,7 @@ async def get_region_types(
 
 @router.get(
     "/{country}/{source}/generation-sources",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[GenerationSource],
 )

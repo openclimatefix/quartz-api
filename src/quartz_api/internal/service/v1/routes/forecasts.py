@@ -25,6 +25,9 @@ from ..cache import (
 )
 from ..country_config import RegionTypeConfig
 from ..endpoint_types import (
+    PERIOD_RESPONSES,
+    REGION_RESPONSES,
+    SNAPSHOT_RESPONSES,
     CountryParam,
     DeprecatedForecastModel,
     DetailLevel,
@@ -72,6 +75,7 @@ router = APIRouter(tags=["Forecasts"])
 
 @router.get(
     "/{country}/{source}/regions/{region}/forecast",
+    responses=REGION_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=ForecastResponse,
     response_model_exclude_none=True,
@@ -200,6 +204,7 @@ def _forecast_value(
 
 @router.get(
     "/{country}/{source}/regions/{region}/forecast/last-updated",
+    responses=REGION_RESPONSES,
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
@@ -273,6 +278,7 @@ async def get_forecast_last_updated_timestamp(
 
 @router.get(
     "/{country}/{source}/forecasts/snapshot",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     summary="Get Forecasts at Timestamp",
     response_model=ForecastSnapshot,
@@ -390,6 +396,7 @@ async def get_forecasts_at_time(
 
 @router.get(
     "/{country}/{source}/forecasts/period",
+    responses=PERIOD_RESPONSES,
     status_code=status.HTTP_200_OK,
     summary="Get Forecasts for Period",
 )
@@ -559,6 +566,7 @@ async def get_forecasts_period(
 
 @router.post(
     "/{country}/{source}/forecasts/refresh",
+    responses=SNAPSHOT_RESPONSES,
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )

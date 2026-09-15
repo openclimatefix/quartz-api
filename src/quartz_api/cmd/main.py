@@ -25,7 +25,7 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -112,7 +112,8 @@ def _custom_openapi(
     )
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
-    openapi_schema["tags"] = server.openapi_tags
+    if server.openapi_tags:
+        openapi_schema["tags"] = server.openapi_tags
 
     if auth_config:
         domain = auth_config["domain"]
@@ -373,7 +374,9 @@ def _create_v1_app(
     )
 
     v1_app.state.limiter = limiter or ratelimit.limiter
-    v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
     v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
@@ -734,6 +737,12 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
+    # FastAPI() above is constructed before the auth branch runs, so it never received
+    # `description`. The branches append to that local, and _custom_openapi reads
+    # server.description, so both the base text and the authentication section were
+    # being assembled and discarded.
+    server.description = description
+
     # Customize the OpenAPI schema (after auth config is resolved)
     server.openapi = lambda: _custom_openapi(server)
 
@@ -748,7 +757,9 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Add middlewares
     server.state.limiter = ratelimit.limiter
-    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
     server.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     server.add_middleware(SlowAPIMiddleware)
     server.add_middleware(

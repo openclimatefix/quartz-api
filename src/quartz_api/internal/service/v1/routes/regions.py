@@ -11,6 +11,8 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..cache import key_builder
 from ..endpoint_types import (
+    REGION_RESPONSES,
+    SNAPSHOT_RESPONSES,
     CountryParam,
     OptionalValidRegionType,
     RegionDetail,
@@ -33,6 +35,7 @@ router = APIRouter(tags=["Discovery"])
 
 @router.get(
     "/{country}/{source}/regions",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[RegionDetail],
 )
@@ -172,6 +175,7 @@ def _filter_and_sort(
 
 @router.get(
     "/{country}/{source}/regions/{region}",
+    responses=REGION_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=RegionDetail,
 )

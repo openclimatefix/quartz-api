@@ -24,6 +24,12 @@ for copy-paste examples in Python, curl, and JavaScript.
 A free trial is available. Sign up through the `Authorize` button at the top or on any
 request in these docs, or at [app.quartz.solar](https://app.quartz.solar) to get started.
 
+## Rate limits
+
+Requests are limited to **20 per second** and **3,600 per hour**, counted per user and
+per route. Over either limit the response is a **429** carrying a `Retry-After` header
+with the number of seconds to wait.
+
 ## Units & conventions
 
 - Power values are in **kW** throughout.

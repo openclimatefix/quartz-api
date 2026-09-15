@@ -1,9 +1,11 @@
 """Rate limiting utilities for the Quartz API."""
 
+import contextlib
 import logging
 
 import jwt
-from fastapi import Request
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -44,3 +46,30 @@ def get_user_key(request: Request) -> str:
 default_limits = ["3600/hour", "20/second"]
 
 limiter = Limiter(key_func=get_user_key, default_limits=default_limits, key_style="endpoint")
+
+
+def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Answer a rate limit with the same error shape as every other v1 error.
+
+    slowapi's own handler returns `{"error": ...}`, where everything else in the API
+    returns `{"detail": ...}`, so a client needs a special case for this one status.
+    It also sends no `Retry-After`, leaving a caller to guess when to come back.
+    """
+    retry_after = 1
+    limit = getattr(getattr(request.state, "view_rate_limit", None), "limit", None)
+    window = getattr(limit, "get_expiry", None)
+    if callable(window):
+        with contextlib.suppress(Exception):
+            retry_after = max(1, int(window()))
+
+    detail = getattr(exc, "detail", "") or ""
+    response = JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": f"Rate limit exceeded: {detail}. Applied per user per route."},
+        headers={"Retry-After": str(retry_after)},
+    )
+    with contextlib.suppress(Exception):
+        response = request.app.state.limiter._inject_headers(
+            response, request.state.view_rate_limit,
+        )
+    return response

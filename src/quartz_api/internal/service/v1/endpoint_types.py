@@ -247,6 +247,9 @@ ValidRegion = Annotated[
             "Region identifier: `national`, a region `name` (case-insensitive), or a UUID. "
             "Use `GET /{country}/{source}/regions` to browse available regions."
         ),
+        # Without an example the docs render curl snippets with a literal `{region}`
+        # in the URL, which is not a request anyone can send.
+        examples=["national"],
         min_length=2,
         max_length=256,
     ),
@@ -269,7 +272,12 @@ def _check_window_start(v: dt.datetime | None) -> dt.datetime | None:
 
 ValidWindowStart = Annotated[
     dt.datetime | None,
-    Query(description="Start of window (UTC)."),
+    Query(
+        description=(
+            "Start of window (UTC). History reaches 1 year back, and a single request "
+            "may span at most 3 months; split a longer range across requests."
+        ),
+    ),
     AfterValidator(_check_window_start),
 ]
 
@@ -300,7 +308,7 @@ ValidWindowEnd = Annotated[
     Query(
         description=(
             "End of window (UTC). The default depends on the endpoint; see its "
-            "description."
+            "description. A single request may span at most 3 months."
         ),
     ),
     AfterValidator(_check_window_end),
@@ -328,6 +336,43 @@ DeprecatedObserver = Annotated[
     str | None,
     Query(include_in_schema=False),
 ]
+
+
+class ErrorDetail(BaseModel):
+    """The body of every error this API returns."""
+
+    detail: str
+
+
+def _err(description: str) -> dict:
+    return {"model": ErrorDetail, "description": description}
+
+
+# Attached to routes so the schema declares what can come back, not just 200 and 422.
+# Without these the docs imply every non-200 is a validation error, and a client
+# generated from the spec has no type for the ones it will actually meet.
+AUTH_RESPONSES: dict = {
+    401: _err("No bearer token, or one that could not be verified."),
+    403: _err("The token is valid but lacks access to this country or model."),
+    429: _err("Rate limit exceeded. Carries a `Retry-After` header."),
+}
+
+REGION_RESPONSES: dict = {
+    **AUTH_RESPONSES,
+    400: _err("A parameter was rejected, e.g. an observer or model not available here."),
+    404: _err("No such region in this country."),
+}
+
+SNAPSHOT_RESPONSES: dict = {
+    **AUTH_RESPONSES,
+    400: _err("A parameter was rejected, e.g. an unknown region type."),
+}
+
+PERIOD_RESPONSES: dict = {
+    **AUTH_RESPONSES,
+    400: _err("A parameter was rejected, e.g. an unknown region name."),
+    503: _err("The pre-warmed cache is still filling. Carries a `Retry-After` header."),
+}
 
 
 class Centroid(BaseModel):

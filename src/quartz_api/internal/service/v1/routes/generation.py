@@ -23,6 +23,9 @@ from ..cache import (
     warm_v1_generation_cache,
 )
 from ..endpoint_types import (
+    PERIOD_RESPONSES,
+    REGION_RESPONSES,
+    SNAPSHOT_RESPONSES,
     CountryParam,
     DeprecatedObserver,
     DetailLevel,
@@ -61,6 +64,7 @@ router = APIRouter(tags=["Generation"])
 
 @router.get(
     "/{country}/{source}/regions/{region}/generation",
+    responses=REGION_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=GenerationResponse,
     response_model_exclude_none=True,
@@ -143,6 +147,7 @@ async def get_generation(
 
 @router.get(
     "/{country}/{source}/generation/snapshot",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     summary="Get Generation at Timestamp",
     response_model=GenerationSnapshot,
@@ -267,6 +272,7 @@ async def get_generation_at_timestamp(
 
 @router.get(
     "/{country}/{source}/generation/period",
+    responses=PERIOD_RESPONSES,
     status_code=status.HTTP_200_OK,
     summary="Get Generation for Period",
 )
@@ -416,6 +422,7 @@ async def get_generation_period(
 
 @router.post(
     "/{country}/{source}/generation/refresh",
+    responses=SNAPSHOT_RESPONSES,
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
