@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import typing
 from collections.abc import AsyncGenerator
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import pytest
@@ -1298,6 +1299,27 @@ async def test_get_region_generation_nl_defaults_to_its_own_observer(
     resp = await nl_client.get(f"/v1/NL/solar/regions/{region_id}/generation")
     assert resp.status_code == 200
     assert resp.json()["observer_name"] == "ned_nl"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_far_future_end_utc_422(client: AsyncClient) -> None:
+    """An end_utc years ahead is a mistyped year or an epoch, not a real request."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?end_utc=3026-01-01T00:00:00Z",
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_near_future_end_utc_ok(client: AsyncClient) -> None:
+    """An end_utc inside the next year is still accepted — the cap must not be too tight."""
+    region_id = str(uuid4())
+    end = quote((dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=14)).isoformat())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?end_utc={end}",
+    )
+    assert resp.status_code == 200
 
 
 @pytest.mark.anyio

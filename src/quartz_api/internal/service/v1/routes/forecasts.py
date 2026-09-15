@@ -41,6 +41,7 @@ from ..endpoint_types import (
     ValidRegion,
     ValidRegionType,
     ValidSource,
+    ValidWindowEnd,
     ValidWindowStart,
 )
 from ..helpers import (
@@ -82,10 +83,7 @@ async def get_forecast(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     start_utc: ValidWindowStart = None,
-    end_utc: dt.datetime | None = Query(
-        None,
-        description="End of forecast window (UTC). Defaults to 48 hours from now.",
-    ),
+    end_utc: ValidWindowEnd = None,
     creation_limit_utc: dt.datetime | None = Query(
         None,
         description=(
@@ -399,11 +397,7 @@ async def get_forecasts_period(
         description="Start of window (UTC). Defaults to 2 days before now "
         "(floored to the nearest 6 hours).",
     ),
-    end_utc: dt.datetime | None = Query(
-        None,
-        description="End of window (UTC). Defaults to 2 days after now "
-        "(floored to the nearest 6 hours).",
-    ),
+    end_utc: ValidWindowEnd = None,
     region_names: list[str] | None = Query(
         None,
         description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",

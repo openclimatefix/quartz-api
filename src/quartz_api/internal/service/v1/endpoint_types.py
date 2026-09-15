@@ -255,6 +255,39 @@ ValidWindowStart = Annotated[
 ]
 
 
+def _check_window_end(v: dt.datetime | None) -> dt.datetime | None:
+    if v is None:
+        return None
+    latest = dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=365)
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=dt.UTC)
+    if v > latest:
+        raise ValueError(
+            "end_utc is more than a year ahead. No forecast extends that far — check "
+            "the year, and that the value is an ISO 8601 timestamp rather than an epoch.",
+        )
+    return v
+
+
+# The mirror of ValidWindowStart. It is not a data-availability limit the way the start
+# is — it exists to catch a mistyped year or an epoch passed where a timestamp belongs,
+# which otherwise returns an empty series and looks like missing data.
+# The Query has to live in here rather than on each route. A route-level `= Query(...)`
+# default does not error alongside an Annotated AfterValidator, it just silently skips
+# the validator — so the per-route wording is given up to keep the check. Each route's
+# docstring states its own default window.
+ValidWindowEnd = Annotated[
+    dt.datetime | None,
+    Query(
+        description=(
+            "End of window (UTC). The default depends on the endpoint — see its "
+            "description."
+        ),
+    ),
+    AfterValidator(_check_window_end),
+]
+
+
 ValidObserver = Annotated[
     str | None,
     Query(
