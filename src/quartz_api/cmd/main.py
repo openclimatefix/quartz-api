@@ -1,6 +1,7 @@
 """API providing access to OCF's Quartz Forecasts."""
 
 import asyncio
+import copy
 import functools
 import importlib
 import importlib.metadata
@@ -77,6 +78,19 @@ class GetHealthResponse(BaseModel):
     status: int
 
 
+# Every scope the docs page asks Auth0 for. `offline_access` is what makes Auth0 issue a
+# refresh token; the rest identify the user. Defined once because the same list has to
+# reach three places — the OpenAPI security scheme, the scopes Scalar requests, and the
+# scopes Scalar pre-ticks. A scope that is not ticked at login is not in the token, and
+# the token cannot be refreshed afterwards, so they all default to on.
+_OAUTH_SCOPES: dict[str, str] = {
+    "openid": "OpenID",
+    "profile": "Profile",
+    "email": "Email",
+    "offline_access": "Refresh token",
+}
+
+
 def _custom_openapi(
     server: FastAPI,
     auth_config: dict[str, str] | None = None,
@@ -121,16 +135,7 @@ def _custom_openapi(
                     # so Auth0 receives it on the redirect.
                     "authorizationUrl": f"https://{domain}/authorize?audience={audience}",
                     "tokenUrl": f"https://{domain}/oauth/token",
-                    "scopes": {
-                        "openid": "OpenID",
-                        "profile": "Profile",
-                        "email": "Email",
-                        # Auth0 only issues a refresh token when this is asked for, and
-                        # without one the docs page's "refresh token" control has nothing
-                        # to use. It has to be in both places: here to declare it on the
-                        # scheme, and in `scalar_auth` below to actually request it.
-                        "offline_access": "Refresh token",
-                    },
+                    "scopes": dict(_OAUTH_SCOPES),
                 },
             },
         }
@@ -334,11 +339,28 @@ def _create_v1_app(
 
     scalar_auth: dict = {}
     if auth_openapi_config:
+        # Two shapes on purpose. The flat `oauth2` block is what older Scalar builds
+        # read; `securitySchemes` is the current one, and is also where the redirect URI
+        # has to go. `selectedScopes` is the half that matters here: `scopes` only says
+        # what may be requested, so without it the boxes render unticked and the token
+        # comes back without them.
         scalar_auth = {
             "preferredSecurityScheme": "oauth2",
             "oauth2": {
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email offline_access",
+                "scopes": " ".join(_OAUTH_SCOPES),
+            },
+            "securitySchemes": {
+                "oauth2": {
+                    "flows": {
+                        "authorizationCode": {
+                            "x-scalar-secret-client-id": conf.get_string(
+                                "auth0.client_id",
+                            ),
+                            "selectedScopes": list(_OAUTH_SCOPES),
+                        },
+                    },
+                },
             },
         }
 
@@ -366,18 +388,13 @@ def _create_v1_app(
         # it stays cleared, and nothing ever refills it. Sending it on every load is
         # what makes it self-healing. This is the docs page itself, which Auth0 must
         # already allow as a callback, so it needs no new registration.
-        page_auth = dict(scalar_auth)
+        page_auth = copy.deepcopy(scalar_auth)
         if page_auth:
             redirect_uri = str(request.url.replace(query="", fragment=""))
-            page_auth["securitySchemes"] = {
-                "oauth2": {
-                    "flows": {
-                        "authorizationCode": {
-                            "x-scalar-secret-redirect-uri": redirect_uri,
-                        },
-                    },
-                },
-            }
+            # Merged into the flow rather than assigned over it: the same block carries
+            # the client id and the pre-ticked scopes, and replacing it drops both.
+            flow = page_auth["securitySchemes"]["oauth2"]["flows"]["authorizationCode"]
+            flow["x-scalar-secret-redirect-uri"] = redirect_uri
         page = get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
