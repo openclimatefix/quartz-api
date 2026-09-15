@@ -77,15 +77,34 @@ ValidDetail = Annotated[
     DetailLevel,
     Query(
         description=(
-            "How much metadata to return per value. "
+            "How much metadata to return. "
             "`values` (default): the values only. "
-            "`runs`: adds which model run produced each value (run and init time, model "
-            "name and version) plus that value's own capacity; the top-level fields "
-            "describe only the latest run in the response. "
-            "`full`: adds the forecaster's own metadata, including when each input data "
-            "source was last ingested. Keys there vary by model. "
-            "On generation routes there is no model run, so `runs` adds only capacity and "
-            "`full` adds nothing further."
+            "`runs`: adds to each value which model run produced it (run and init time, "
+            "model name and version) plus that value's own capacity; the top-level "
+            "fields describe only the latest run in the response. "
+            "`full`: adds the forecaster's own metadata to each value, including when "
+            "each input data source was last ingested, with keys that vary by model. It "
+            "also adds a top-level `metadata` object carrying `installed_capacity_kW` "
+            "where the platform has one."
+        ),
+    ),
+]
+
+
+# Generation values are observations, so they have no model run behind them. Kept as its
+# own annotation rather than one description covering both routes, which left a reader
+# on the generation route working out which half applied to them.
+ValidGenerationDetail = Annotated[
+    DetailLevel,
+    Query(
+        description=(
+            "How much metadata to return. "
+            "`values` (default): the values only. "
+            "`runs`: adds each value's own capacity. Observations have no model run, so "
+            "there is no run or init time to add here as there is on a forecast. "
+            "`full`: adds nothing further per value, and adds a top-level `metadata` "
+            "object carrying `installed_capacity_kW` where the platform has one. "
+            "Accepted so one request shape works across forecast and generation routes."
         ),
     ),
 ]

@@ -29,8 +29,9 @@ request in these docs, or at [app.quartz.solar](https://app.quartz.solar) to get
 - Power values are in **kW** throughout.
 - All timestamps are **UTC ISO 8601** (`2020-01-01T12:00:00Z`).
 - Regions are identified by **name** (case-insensitive). Browse them with the
-  `/regions` endpoints. A region's UUID is accepted anywhere a name is, but names
-  are stable and readable, so prefer them.
+  `/regions` endpoints, which is where every name in this API comes from. Responses
+  identify regions by name and never return a UUID. The platform's own UUIDs are also
+  accepted anywhere a name is, for callers who already hold one.
 """
 
 from .router import router

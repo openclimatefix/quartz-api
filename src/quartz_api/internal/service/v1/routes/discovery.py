@@ -164,7 +164,7 @@ async def get_generation_sources(
 
     Generation sources represent the different observers that produce actual (measured)
     generation data, for example PV_Live in-day estimates vs finalised day-after values.
-    Use the `name` field as the `observer` parameter on generation endpoints.
+    Use the `name` field as the `observer_name` parameter on generation endpoints.
     """
     return [
         GenerationSource(source=s.source, name=s.api_name, label=s.label)
