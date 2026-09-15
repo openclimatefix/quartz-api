@@ -197,16 +197,19 @@ def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
 
 @pytest_asyncio.fixture
 async def isolated_cache() -> AsyncGenerator[None, None]:
-    """Give a test its own cache backend.
+    """Give a test its own cache, so a cached response cannot cross test boundaries.
 
-    `FastAPICache.init` is a no-op once any other test has initialised it, so a test
-    needing its own backend must reset first — and reset again afterwards, or the next
-    test inherits this one's backend.
+    Two things have to happen. `FastAPICache.init` is a no-op once any other test has
+    initialised it, so the cache must be reset first. And `InMemoryBackend._store` is a
+    *class* attribute, shared by every instance — so constructing a new backend isolates
+    nothing on its own and the store has to be emptied too.
     """
+    InMemoryBackend._store.clear()
     FastAPICache.reset()
     FastAPICache.init(InMemoryBackend(), prefix="test-isolated")
     yield
     FastAPICache.reset()
+    InMemoryBackend._store.clear()
 
 
 @pytest_asyncio.fixture
@@ -2704,3 +2707,4 @@ def test_plevel_sort_key_keeps_unrecognised_names() -> None:
 
     ordered = sort_plevels({"p90": 1.0, "median": 2.0, "p10": 3.0})
     assert list(ordered) == ["p10", "p90", "median"]
+
