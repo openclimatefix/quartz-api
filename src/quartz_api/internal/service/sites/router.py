@@ -173,7 +173,6 @@ async def get_forecast(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    tz: models.TZDependency,
 ) -> list[PredictedPower]:
     """Get forecast of a site (Solar or Wind, auto-detected)."""
     site = await _get_site_with_energy_type(db, site_uuid, auth)
@@ -201,11 +200,13 @@ async def get_forecast(
         authdata=auth,
         forecaster_name=forecaster_name,
     )
+    # Time is always returned in UTC, matching the legacy (v0.2.4) India API this
+    # replaces, rather than converted to the deployment's configured tz.
     out: list[PredictedPower] = [
         PredictedPower(
             PowerKW=v.power_kilowatts,
-            Time=v.valid_timestamp.astimezone(tz=tz),
-            created_time=v.created_timestamp.astimezone(tz=tz),
+            Time=v.valid_timestamp.astimezone(tz=dt.UTC),
+            created_time=v.created_timestamp.astimezone(tz=dt.UTC),
             forecaster_name=v.forecaster_name,
             forecaster_version=v.forecaster_version,
         )
