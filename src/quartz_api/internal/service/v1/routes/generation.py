@@ -24,6 +24,7 @@ from ..cache import (
 )
 from ..endpoint_types import (
     CountryParam,
+    DeprecatedObserver,
     DetailLevel,
     GenerationResponse,
     GenerationSnapshot,
@@ -70,7 +71,8 @@ async def get_generation(
     region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
     detail: ValidDetail = DetailLevel.values,
     start_utc: ValidWindowStart = None,
     end_utc: dt.datetime | None = Query(
@@ -96,7 +98,9 @@ async def get_generation(
     - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
-    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
+    api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
@@ -134,7 +138,7 @@ async def get_generation(
     return GenerationResponse(
         region_name=location_display_name(region, country),
         capacity_kW=latest_capacity(agvs),
-        observer_name=observer,
+        observer_name=api_observer,
         metadata=region_metadata(region, detail),
         values=[
             GenerationValue(
@@ -163,7 +167,8 @@ async def get_generation_at_timestamp(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
     time_utc: dt.datetime | None = Query(
         None,
         description=(
@@ -183,7 +188,9 @@ async def get_generation_at_timestamp(
     rarely have data.
     """
     check_country_access(auth, country)
-    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
+    api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
@@ -250,7 +257,7 @@ async def get_generation_at_timestamp(
     region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     return GenerationSnapshot(
         time_utc=snapshot_time,
-        observer_name=observer,
+        observer_name=api_observer,
         values=[
             RegionGenerationValue(
                 region_name=region_names.get(v.location_uuid, ""),
@@ -273,7 +280,8 @@ async def get_generation_period(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidPeriodRegionType,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
     start_utc: dt.datetime | None = Query(
         None,
         description="Start of window (UTC). Defaults to 2 days before now "
@@ -327,7 +335,9 @@ async def get_generation_period(
                 f"for national-level data."
             ),
         )
-    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
+    _api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
     validate_window(win_start, win_end)
@@ -409,7 +419,8 @@ async def refresh_generation_cache(
     request: Request,
     auth: AuthDependency,
     region_type: ValidRegionType = "gsp",
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
 ) -> Response:
     """Trigger a background re-warm of the generation period cache.
 
@@ -421,7 +432,9 @@ async def refresh_generation_cache(
     """
     if ADMIN_PERMISSION not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    dp_observer = resolve_observer_param(country, source.name.lower(), observer)
+    _api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{dp_observer}"
     if generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")

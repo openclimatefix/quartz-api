@@ -256,13 +256,25 @@ ValidWindowStart = Annotated[
 
 
 ValidObserver = Annotated[
-    str,
+    str | None,
     Query(
-        description="The observer source name.",
+        description=(
+            "The observer source name. If omitted, the country's first configured "
+            "observer is used (see `/{country}/{source}/generation-sources`)."
+        ),
         pattern=_build_observer_pattern(),
         examples=list(_get_observer_sources()),
         enum=list(_get_observer_sources()),
     ),
+]
+
+
+# Deprecated alias for `observer_name`, accepted so existing integrations keep working.
+# Hidden from the OpenAPI schema for the same reason as `model`: a new client should
+# only ever see the name we intend to keep. Dropped once no users are on it.
+DeprecatedObserver = Annotated[
+    str | None,
+    Query(include_in_schema=False),
 ]
 
 

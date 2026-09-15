@@ -180,6 +180,18 @@ class CountryConfig:
                 return gt
         return None
 
+    def default_observer(self, source: str) -> str | None:
+        """Return the observer used when a request does not name one.
+
+        The first configured source wins, so the order in `generation_sources` is the
+        default order. Countries observe different things — GB has PV Live, NL has NED —
+        so there is no one literal that works as a cross-country default.
+        """
+        for gs in self.generation_sources:
+            if gs.source == source:
+                return gs.api_name
+        return None
+
     def resolve_observer(self, api_name: str) -> str:
         """Return the internal DP observer name for a user-facing API name."""
         for gs in self.generation_sources:

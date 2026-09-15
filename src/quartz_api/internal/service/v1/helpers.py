@@ -150,25 +150,43 @@ def check_region_type(
 def resolve_observer_param(
     cfg: CountryConfig,
     source: str,
-    observer: str,
-) -> str:
-    """Validate an observer against the country's generation sources, returning its DP name.
+    observer_name: str | None = None,
+    observer: str | None = None,
+) -> tuple[str, str]:
+    """Collapse the observer params and return `(api_name, dp_name)` for the country.
 
-    `ValidObserver` only checks the observer exists for *some* country, so each route
-    has to confirm it exists for *this* one before resolving it for the DP.
+    Both names are returned because both are needed and they are not always the same:
+    NL's `ned_nl` is `nednl` inside the DP. The DP name goes to the backend, the API
+    name goes back to the caller — a response must echo the name they can ask for.
+
+    `observer` was the original param name; `observer_name` is the name used now, matching
+    the `observer_name` response field and the `model_name` param. Both are accepted, but
+    supplying both with different values is a 400 rather than a silent preference.
+
+    `ValidObserver` only checks the observer exists for *some* country, so the value still
+    has to be confirmed against *this* one before it is resolved for the DP.
     """
-    available = {
-        gs.api_name for gs in cfg.generation_sources if gs.source == source
-    }
-    if observer not in available:
+    if observer is not None and observer_name is not None and observer != observer_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Observer '{observer}' is not available for "
+                f"Conflicting values for 'observer_name' ({observer_name!r}) and its "
+                f"deprecated alias 'observer' ({observer!r}). Supply only 'observer_name'."
+            ),
+        )
+    chosen = observer_name or observer or cfg.default_observer(source)
+    available = {
+        gs.api_name for gs in cfg.generation_sources if gs.source == source
+    }
+    if chosen is None or chosen not in available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Observer '{chosen}' is not available for "
                 f"{cfg.code} {source}. Available: {sorted(available)}"
             ),
         )
-    return cfg.resolve_observer(observer)
+    return chosen, cfg.resolve_observer(chosen)
 
 
 def resolve_model_param(

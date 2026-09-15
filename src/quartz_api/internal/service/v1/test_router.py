@@ -770,7 +770,7 @@ async def test_get_generation_period_invalid_observer_returns_400(
     client: AsyncClient,
 ) -> None:
     resp = await client.get(
-        "/v1/GB/solar/generation/period?region_type=gsp&observer=unknown_obs",
+        "/v1/GB/solar/generation/period?region_type=gsp&observer_name=unknown_obs",
     )
     assert resp.status_code == 422
 
@@ -1244,6 +1244,63 @@ async def test_get_region_generation_day_after_observer(client: AsyncClient) -> 
 
 
 @pytest.mark.anyio
+async def test_get_region_generation_observer_name_param(client: AsyncClient) -> None:
+    """observer_name is the current spelling of the observer param."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_observer_alias_agrees(client: AsyncClient) -> None:
+    """The deprecated `observer` alias and `observer_name` may both be sent if they agree."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation"
+        "?observer=pvlive_day_after&observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_observer_alias_conflict_400(
+    client: AsyncClient,
+) -> None:
+    """Conflicting observer / observer_name is a 400, not a silent preference."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation"
+        "?observer=pvlive_in_day&observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 400
+    assert "observer_name" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_defaults_observer(client: AsyncClient) -> None:
+    """With no observer at all, the country's first configured observer is used."""
+    region_id = str(uuid4())
+    resp = await client.get(f"/v1/GB/solar/regions/{region_id}/generation")
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_in_day"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_nl_defaults_to_its_own_observer(
+    nl_client: AsyncClient,
+) -> None:
+    """The default observer is per-country — NL has no PV Live, so it must not be assumed."""
+    region_id = str(uuid4())
+    resp = await nl_client.get(f"/v1/NL/solar/regions/{region_id}/generation")
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "ned_nl"
+
+
+@pytest.mark.anyio
 async def test_get_region_generation_time_window(client: AsyncClient) -> None:
     """Explicit start_utc + end_utc window is forwarded — endpoint returns 200."""
     region_id = str(uuid4())
@@ -1260,10 +1317,10 @@ async def test_get_region_generation_time_window(client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_get_region_generation_invalid_observer_422(client: AsyncClient) -> None:
-    """observer not matching the allowed pattern returns 422."""
+    """observer_name not matching the allowed pattern returns 422."""
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/generation?observer=not_a_real_observer",
+        f"/v1/GB/solar/regions/{region_id}/generation?observer_name=not_a_real_observer",
     )
     assert resp.status_code == 422
 
@@ -1371,9 +1428,9 @@ async def test_get_generation_snapshot_explicit_timestamp(client: AsyncClient) -
 async def test_get_generation_snapshot_invalid_observer_422(
     client: AsyncClient,
 ) -> None:
-    """observer not matching the allowed pattern returns 422."""
+    """observer_name not matching the allowed pattern returns 422."""
     resp = await client.get(
-        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer=bogus",
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer_name=bogus",
     )
     assert resp.status_code == 422
 
