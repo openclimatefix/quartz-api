@@ -58,6 +58,25 @@ dp_to_internal_location_type: dict[common_pb2.LocationType, models.LocationType]
 
 _DP_SERVICE = "ocf.dp.DataPlatformDataService"
 
+# The DP reports power as a capacity in watts plus a 0-1 fraction of it, so every value
+# it returns needs the same watts-to-kW conversion. This was open-coded at each call site
+# and had drifted: some truncated with int(), one truncated the watts before dividing and
+# one rounded to 4dp, so the same region's power differed between the timeseries and
+# snapshot routes. Rounding is the rule here — int() discarded anything under 1 kW and
+# biased every value downwards.
+#
+# 3dp is 1 W, which is already finer than a generation forecast means anything at. It is
+# not an accuracy limit either way: the DP sends the fraction as a float32, so ~7
+# significant figures is all that ever arrives, and at GB national capacity that is
+# several kW of representation noise before any rounding here.
+_KW_DP = 3
+
+
+def _kw(capacity_watts: float, fraction: float = 1.0) -> float:
+    """Convert a DP capacity in watts, optionally scaled by a 0-1 fraction, to kW."""
+    return round(float(capacity_watts) * float(fraction) / 1000, _KW_DP)
+
+
 def struct_to_dict(pb_struct: Struct) -> dict[str, str | float | bool]:
     """Convert a protobuf struct to a python dictionary.
 
@@ -260,19 +279,16 @@ class StorageClient(models.StorageInterface):
             out: list[models.PredictedGenerationValue] = []
             for v in values:
                 plevels: dict[str, int | float] = {
-                    f"p{int(plevel[1:])}": int(v.effective_capacity_watts * frac / 1000.0)
+                    f"p{int(plevel[1:])}": _kw(v.effective_capacity_watts, frac)
                     for plevel, frac in v.other_statistics_fractions.items()
                 }
 
                 out.append(models.PredictedGenerationValue(
-                    power_kilowatts=int(
-                        float(v.effective_capacity_watts) \
-                            * float(v.p50_value_fraction) / 1000,
-                    ),
+                    power_kilowatts=_kw(v.effective_capacity_watts, v.p50_value_fraction),
                     valid_timestamp=v.target_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     location_uuid=UUID(location_uuid) \
                         if isinstance(location_uuid, str) else location_uuid,
-                    capacity_kilowatts=int(float(v.effective_capacity_watts) / 1000),
+                    capacity_kilowatts=_kw(v.effective_capacity_watts),
                     created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     init_timestamp=v.initialization_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     forecaster_name=forecaster.forecaster_name,
@@ -336,11 +352,9 @@ class StorageClient(models.StorageInterface):
             out: list[models.ActualGenerationValue] = [
                 models.ActualGenerationValue(
                     valid_timestamp=v.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                    power_kilowatts=int(
-                        v.effective_capacity_watts * v.value_fraction / 1000.0,
-                    ),
+                    power_kilowatts=_kw(v.effective_capacity_watts, v.value_fraction),
                     location_uuid=UUID(resp.location_uuid),
-                    capacity_kilowatts=int(v.effective_capacity_watts / 1000.0),
+                    capacity_kilowatts=_kw(v.effective_capacity_watts),
                     observer_name=observer_name,
                 )
                 for v in resp.values
@@ -435,10 +449,10 @@ class StorageClient(models.StorageInterface):
                 -> list[models.PredictedGenerationValue]:
             out: list[models.PredictedGenerationValue] = [
                 models.PredictedGenerationValue(
-                    power_kilowatts=int(v.value_fraction * v.effective_capacity_watts) / 1000,
+                    power_kilowatts=_kw(v.effective_capacity_watts, v.value_fraction),
                     valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
                     location_uuid=UUID(v.location_uuid),
-                    capacity_kilowatts=v.effective_capacity_watts / 1000,
+                    capacity_kilowatts=_kw(v.effective_capacity_watts),
                     forecaster_name=forecaster.forecaster_name,
                     forecaster_version=forecaster.forecaster_version,
                     created_timestamp=v.created_timestamp_utc.ToDatetime(tzinfo=dt.UTC),
@@ -476,12 +490,9 @@ class StorageClient(models.StorageInterface):
             out: list[models.ActualGenerationValue] = [
                 models.ActualGenerationValue(
                     valid_timestamp=resp.timestamp_utc.ToDatetime(tzinfo=dt.UTC),
-                    power_kilowatts=round(
-                        v.value_fraction * v.effective_capacity_watts / 1000,
-                        4,
-                    ),
+                    power_kilowatts=_kw(v.effective_capacity_watts, v.value_fraction),
                     location_uuid=UUID(v.location_uuid),
-                    capacity_kilowatts=v.effective_capacity_watts / 1000,
+                    capacity_kilowatts=_kw(v.effective_capacity_watts),
                     observer_name=observer_name,
                 )
                 for v in resp.values
@@ -573,7 +584,7 @@ class StorageClient(models.StorageInterface):
                 models.Location(
                     uuid=UUID(loc.location_uuid),
                     name=loc.location_name,
-                    capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
+                    capacity_kilowatts=_kw(loc.effective_capacity_watts),
                     latitude=loc.latlng.latitude,
                     longitude=loc.latlng.longitude,
                     location_type=dp_to_internal_location_type.get(loc.location_type),
@@ -615,7 +626,7 @@ class StorageClient(models.StorageInterface):
                 name=created.location_name,
                 latitude=location.latitude,
                 longitude=location.longitude,
-                capacity_kilowatts=created.effective_capacity_watts / 1000.0,
+                capacity_kilowatts=_kw(created.effective_capacity_watts),
                 location_type=location_type,
                 metadata=location.metadata,
             )
@@ -645,7 +656,7 @@ class StorageClient(models.StorageInterface):
             name=resp.location_name,
             latitude=current.latitude,
             longitude=current.longitude,
-            capacity_kilowatts=resp.effective_capacity_watts / 1000.0,
+            capacity_kilowatts=_kw(resp.effective_capacity_watts),
             location_type=location_type,
             metadata=merged_metadata,
         )
@@ -691,7 +702,7 @@ class StorageClient(models.StorageInterface):
         return models.Location(
             uuid=UUID(loc.location_uuid),
             name=loc.location_name,
-            capacity_kilowatts=loc.effective_capacity_watts / 1000.0,
+            capacity_kilowatts=_kw(loc.effective_capacity_watts),
             latitude=loc.latlng.latitude,
             longitude=loc.latlng.longitude,
             metadata=struct_to_dict(loc.metadata) if loc.metadata is not None else {},

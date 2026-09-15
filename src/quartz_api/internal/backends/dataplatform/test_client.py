@@ -253,7 +253,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(resp), 5)
                     self.assertEqual(
                         resp[0].plevels_kilowatts,
-                        {"p90": 899, "p2": 19, "p98": 980, "p10": 100, "p75": 750, "p25": 250},
+                        # The fractions are exact tenths of a 1 MW capacity, so these are
+                        # whole kW. They read 899 and 19 until `_kw` started rounding:
+                        # the fractions arrive as float32, so 0.9 is really 0.89999997,
+                        # and int() truncated a kW off every value that landed just under.
+                        {"p90": 900, "p2": 20, "p98": 980, "p10": 100, "p75": 750, "p25": 250},
                     )
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
