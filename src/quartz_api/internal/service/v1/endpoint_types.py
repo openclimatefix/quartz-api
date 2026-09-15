@@ -3,6 +3,7 @@
 import datetime as dt
 import enum
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Path, Query
 from pydantic import (
@@ -664,3 +665,31 @@ class RegionGenerationMatrix(BaseModel):
     cache_updated_utc: dt.datetime | None = None
     times_utc: list[dt.datetime]
     regions: list[RegionGeneration]
+
+
+class SiteInput(BaseModel):
+    """Fields a client can set when creating or updating a site."""
+
+    client_site_id: int | None = None
+    client_site_name: str | None = None
+    status: str | None = Field(
+        None,
+        description="One of 'active', 'inactive', 'commissioning'. Unset reads as 'active'.",
+    )
+    latitude: float | None = Field(None, ge=-90, le=90)
+    longitude: float | None = Field(None, ge=-180, le=180)
+    metadata: dict[str, str | int | float] | None = None
+
+
+class SiteDetail(SiteInput):
+    """A single site's full detail."""
+
+    site_id: UUID
+    capacity_kW: float
+    metadata: dict[str, str | int | float] = Field(default_factory=dict)
+
+
+class SiteList(BaseModel):
+    """Envelope for the site list endpoint."""
+
+    sites: list[SiteDetail]
