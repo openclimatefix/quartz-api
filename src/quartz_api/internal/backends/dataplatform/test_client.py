@@ -4,6 +4,7 @@ import unittest
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 from fastapi import HTTPException
 from google.protobuf.struct_pb2 import Struct
 from ocf.dp.dp import common_pb2
@@ -11,7 +12,7 @@ from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 
 from quartz_api.internal import models
 
-from .client import StorageClient, make_day_ahead_windows
+from .client import StorageClient, _pinned_forecaster_errors, make_day_ahead_windows
 
 TEST_TIMESTAMP_UTC = dt.datetime(2024, 2, 1, 12, 0, 0, tzinfo=dt.UTC)
 
@@ -252,7 +253,11 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(resp), 5)
                     self.assertEqual(
                         resp[0].plevels_kilowatts,
-                        {"p90": 899, "p2": 19, "p98": 980, "p10": 100, "p75": 750, "p25": 250},
+                        # The fractions are exact tenths of a 1 MW capacity, so these are
+                        # whole kW. They read 899 and 19 until `_kw` started rounding:
+                        # the fractions arrive as float32, so 0.9 is really 0.89999997,
+                        # and int() truncated a kW off every value that landed just under.
+                        {"p90": 900, "p2": 20, "p98": 980, "p10": 100, "p75": 750, "p25": 250},
                     )
 
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
@@ -929,3 +934,40 @@ class TestDayAheadWindows(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(windows[0]["end"], window_end)
         self.assertEqual(windows[0]["pivot_timestamp_utc"],
                          dt.datetime(2023, 7, 1, 3, 30, tzinfo=dt.UTC))
+
+
+class TestPinnedForecasterErrors(unittest.TestCase):
+    """A pinned model version is only checked when the forecast call runs."""
+
+    @staticmethod
+    def _rpc_error(code: grpc.StatusCode) -> grpc.aio.AioRpcError:
+        return grpc.aio.AioRpcError(
+            code,
+            grpc.aio.Metadata(),
+            grpc.aio.Metadata(),
+            details="no such forecaster: no rows in result set",
+        )
+
+    def test_not_found_becomes_404_naming_the_pair(self):
+        with (
+            self.assertRaises(HTTPException) as ctx,
+            _pinned_forecaster_errors("blend", "9.9.9"),
+        ):
+            raise self._rpc_error(grpc.StatusCode.NOT_FOUND)
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertIn("blend", ctx.exception.detail)
+        self.assertIn("9.9.9", ctx.exception.detail)
+
+    def test_other_statuses_pass_through(self):
+        """Only NOT_FOUND means the pair is wrong; the rest are the app's problem."""
+        with (
+            self.assertRaises(grpc.aio.AioRpcError),
+            _pinned_forecaster_errors("blend", "9.9.9"),
+        ):
+            raise self._rpc_error(grpc.StatusCode.UNAVAILABLE)
+
+    def test_success_passes_through(self):
+        with _pinned_forecaster_errors("blend", "9.9.9"):
+            result = "fine"
+        self.assertEqual(result, "fine")

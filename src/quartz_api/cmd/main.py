@@ -1,6 +1,7 @@
 """API providing access to OCF's Quartz Forecasts."""
 
 import asyncio
+import copy
 import functools
 import importlib
 import importlib.metadata
@@ -18,13 +19,13 @@ from apitally.fastapi import ApitallyMiddleware
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -77,6 +78,19 @@ class GetHealthResponse(BaseModel):
     status: int
 
 
+# Every scope the docs page asks Auth0 for. `offline_access` is what makes Auth0 issue a
+# refresh token; the rest identify the user. Defined once because the same list has to
+# reach three places — the OpenAPI security scheme, the scopes Scalar requests, and the
+# scopes Scalar pre-ticks. A scope that is not ticked at login is not in the token, and
+# the token cannot be refreshed afterwards, so they all default to on.
+_OAUTH_SCOPES: dict[str, str] = {
+    "openid": "OpenID",
+    "profile": "Profile",
+    "email": "Email",
+    "offline_access": "Refresh token",
+}
+
+
 def _custom_openapi(
     server: FastAPI,
     auth_config: dict[str, str] | None = None,
@@ -98,7 +112,8 @@ def _custom_openapi(
     )
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
-    openapi_schema["tags"] = server.openapi_tags
+    if server.openapi_tags:
+        openapi_schema["tags"] = server.openapi_tags
 
     if auth_config:
         domain = auth_config["domain"]
@@ -121,11 +136,7 @@ def _custom_openapi(
                     # so Auth0 receives it on the redirect.
                     "authorizationUrl": f"https://{domain}/authorize?audience={audience}",
                     "tokenUrl": f"https://{domain}/oauth/token",
-                    "scopes": {
-                        "openid": "OpenID",
-                        "profile": "Profile",
-                        "email": "Email",
-                    },
+                    "scopes": dict(_OAUTH_SCOPES),
                 },
             },
         }
@@ -145,6 +156,180 @@ def _custom_openapi(
     return openapi_schema
 
 
+# Scalar does not tick an optional parameter when a value is typed into it, so the row
+# is left out of the request and the caller silently gets the default back. Upstream
+# treats that as intended (scalar/scalar#7851); scalar/scalar#2558 asks for this.
+# Scalar already does it for a row added by hand, so this only makes the rows that come
+# from the OpenAPI document behave the same way. Clicks the box rather than setting
+# `checked`, so Scalar's own handler runs and its request state follows. If Scalar
+# renames these classes the listener stops firing and nothing else changes — the
+# greying in `custom_css` still shows which rows are disabled.
+# Scalar renders the Test Request panel in a fixed order that puts Cookies and Headers
+# above Query Parameters, and offers no configuration for it (scalar/scalar exposes only
+# tagsSorter / operationsSorter / orderSchemaPropertiesBy, none of which touch this
+# panel). Query parameters are what callers actually set on this API, so lift them.
+#
+# The sections are flex children of the tabpanel, so `order` moves them. It cannot be
+# pure CSS: the ids are sequential (`scalar-client-0-5`, `-6`, …) and shift by route
+# depending on which sections exist, so neither id nor :nth-child identifies a section
+# reliably — the only stable handle is the header text, which CSS cannot match.
+#
+# If Scalar renames these sections nothing gets an order and the panel falls back to
+# Scalar's own order, which is today's behaviour.
+# Scalar persists the auth block in localStorage, and looks the redirect up with `??`
+# rather than the `||` it uses for every other secret. So a stored empty string counts
+# as a deliberate choice and beats the value we send, while an absent key falls through
+# to it. Deleting just that key is not enough — Scalar rewrites it from its own state —
+# so the whole persisted entry has to go for the config to be read again.
+#
+# Only entries that have nothing worth keeping are removed: the redirect must be empty
+# (the stuck state) and the token empty too, so nobody holding a live token is signed
+# out to fix a cosmetic field. Runs in <head>, before the bundle hydrates. Any change
+# to Scalar's storage shape makes it a no-op rather than a hazard.
+_SCALAR_REDIRECT_REPAIR_JS = """
+<script>
+  (function () {
+    var REDIRECT = 'x-scalar-secret-redirect-uri';
+    var TOKEN = 'x-scalar-secret-token';
+    function stuck(node) {
+      if (!node || typeof node !== 'object') return false;
+      if (node[REDIRECT] === '' && (node[TOKEN] === '' || node[TOKEN] === undefined)) {
+        return true;
+      }
+      for (var k in node) {
+        if (Object.prototype.hasOwnProperty.call(node, k) && stuck(node[k])) return true;
+      }
+      return false;
+    }
+    var doomed = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      try {
+        var name = localStorage.key(i);
+        var raw = localStorage.getItem(name);
+        if (!raw || raw.indexOf(REDIRECT) === -1) continue;
+        if (stuck(JSON.parse(raw))) doomed.push(name);
+      } catch (e) {
+        // A non-JSON entry, or storage blocked: leave it untouched.
+      }
+    }
+    for (var j = 0; j < doomed.length; j++) localStorage.removeItem(doomed[j]);
+  })();
+</script>
+"""
+
+
+_SCALAR_SECTION_ORDER_JS = r"""
+<script>
+  (function () {
+    var ORDER = {
+      'Authentication': 10,
+      'Variables': 20,
+      'Query Parameters': 30,
+      'Request Body': 40,
+      'Headers': 50,
+      'Cookies': 60,
+      'Code Snippet': 90,
+    };
+    function apply() {
+      var panels = document.querySelectorAll(
+        '.request-section-content[role="tabpanel"]',
+      );
+      for (var p = 0; p < panels.length; p++) {
+        var kids = panels[p].children;
+        for (var i = 0; i < kids.length; i++) {
+          var el = kids[i];
+          var head = el.querySelector('button, [role="button"], h2, h3');
+          var label = head ? head.textContent.trim().replace(/\s+/g, ' ') : '';
+          var order = null;
+          for (var name in ORDER) {
+            if (label.indexOf(name) === 0) { order = ORDER[name]; break; }
+          }
+          // A section we do not recognise sits mid-panel rather than jumping to an
+          // end. The unlabelled one is a flex-grow spacer that pins Code Snippet to
+          // the bottom, so it has to stay just above it.
+          if (order === null) order = label ? 45 : 80;
+          var want = String(order);
+          if (el.style.order !== want) el.style.order = want;
+        }
+      }
+    }
+    // The panel is built when the modal opens and rebuilt when the route changes.
+    var queued = false;
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; apply(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    apply();
+  })();
+</script>
+"""
+
+
+_SCALAR_AUTO_ENABLE_JS = """
+<script>
+  (function () {
+    document.addEventListener(
+      'input',
+      function (event) {
+        var target = event.target;
+        if (!target || !target.closest) return;
+        var editor = target.closest('.code-input-lite__editor');
+        if (!editor) return;
+        var row = editor.closest('tr.group');
+        if (!row) return;
+        var box = row.querySelector('td:first-child input[type="checkbox"]');
+        if (!box || box.checked) return;
+        var cells = row.children;
+        var filled = function (cell) {
+          var field = cell && cell.querySelector('.code-input-lite');
+          return !!field && !field.classList.contains('code-input-lite--empty');
+        };
+        // Both halves must be filled, so a nameless parameter is never enabled.
+        if (!filled(cells[1]) || !filled(cells[cells.length - 1])) return;
+        box.click();
+      },
+      true,
+    );
+  })();
+</script>
+"""
+
+
+
+# The data platform answers with gRPC status codes; map the ones that describe the
+# caller's request onto the matching HTTP status so a client sees a normal error.
+_GRPC_TO_HTTP: dict[Any, int] = {
+    grpc.StatusCode.NOT_FOUND: status.HTTP_404_NOT_FOUND,
+    grpc.StatusCode.INVALID_ARGUMENT: status.HTTP_400_BAD_REQUEST,
+    grpc.StatusCode.PERMISSION_DENIED: status.HTTP_403_FORBIDDEN,
+    grpc.StatusCode.UNAUTHENTICATED: status.HTTP_401_UNAUTHORIZED,
+    grpc.StatusCode.ALREADY_EXISTS: status.HTTP_409_CONFLICT,
+    grpc.StatusCode.RESOURCE_EXHAUSTED: status.HTTP_429_TOO_MANY_REQUESTS,
+    grpc.StatusCode.UNAVAILABLE: status.HTTP_503_SERVICE_UNAVAILABLE,
+    grpc.StatusCode.DEADLINE_EXCEEDED: status.HTTP_504_GATEWAY_TIMEOUT,
+}
+
+
+async def _grpc_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Answer an uncaught data platform failure with an HTTP error, not a gRPC repr.
+
+    Uncaught, an AioRpcError reaches the caller as its own repr, carrying
+    debug_error_string and the peer address with it. The platform's `details()` is a
+    short sentence and worth passing on when the caller can act on it; anything that
+    maps to a 5xx is reported generically and left in full in the log.
+    """
+    code = exc.code() if isinstance(exc, grpc.aio.AioRpcError) else None
+    http_status = _GRPC_TO_HTTP.get(code, status.HTTP_502_BAD_GATEWAY)
+    log.error(f"Data platform call to {request.url.path} failed: {exc!r}")
+    if http_status >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        detail = "Upstream request failed. Please try again."
+    else:
+        detail = (exc.details() if isinstance(exc, grpc.aio.AioRpcError) else None) or (
+            "The request was rejected upstream."
+        )
+    return JSONResponse(status_code=http_status, content={"detail": detail})
+
 def _create_v1_app(
     conf: ConfigTree,
     auth_openapi_config: dict[str, str] | None,
@@ -155,11 +340,28 @@ def _create_v1_app(
 
     scalar_auth: dict = {}
     if auth_openapi_config:
+        # Two shapes on purpose. The flat `oauth2` block is what older Scalar builds
+        # read; `securitySchemes` is the current one, and is also where the redirect URI
+        # has to go. `selectedScopes` is the half that matters here: `scopes` only says
+        # what may be requested, so without it the boxes render unticked and the token
+        # comes back without them.
         scalar_auth = {
             "preferredSecurityScheme": "oauth2",
             "oauth2": {
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": " ".join(_OAUTH_SCOPES),
+            },
+            "securitySchemes": {
+                "oauth2": {
+                    "flows": {
+                        "authorizationCode": {
+                            "x-scalar-secret-client-id": conf.get_string(
+                                "auth0.client_id",
+                            ),
+                            "selectedScopes": list(_OAUTH_SCOPES),
+                        },
+                    },
+                },
             },
         }
 
@@ -172,7 +374,10 @@ def _create_v1_app(
     )
 
     v1_app.state.limiter = limiter or ratelimit.limiter
-    v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
+    v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
     v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
@@ -181,10 +386,22 @@ def _create_v1_app(
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
         """Serve Scalar API reference for v1."""
         root_path = request.scope.get("root_path", "").rstrip("/")
-        return get_scalar_api_reference(
+        # Scalar defaults the OAuth redirect to the current page, but `persist_auth`
+        # stores the auth block in localStorage — so once the field has been cleared
+        # it stays cleared, and nothing ever refills it. Sending it on every load is
+        # what makes it self-healing. This is the docs page itself, which Auth0 must
+        # already allow as a callback, so it needs no new registration.
+        page_auth = copy.deepcopy(scalar_auth)
+        if page_auth:
+            redirect_uri = str(request.url.replace(query="", fragment=""))
+            # Merged into the flow rather than assigned over it: the same block carries
+            # the client id and the pre-ticked scopes, and replacing it drops both.
+            flow = page_auth["securitySchemes"]["oauth2"]["flows"]["authorizationCode"]
+            flow["x-scalar-secret-redirect-uri"] = redirect_uri
+        page = get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
-            authentication=scalar_auth,
+            authentication=page_auth,
             persist_auth=True,
             theme=Theme.ALTERNATE,
             dark_mode=True,
@@ -192,6 +409,14 @@ def _create_v1_app(
             default_open_all_tags=True,
             hide_dark_mode_toggle=True,
             agent=AgentScalarConfig(disabled=True),
+            # Pinned: scalar_fastapi defaults to an unversioned jsdelivr URL, which
+            # tracks latest and can change the docs UI — and the selectors the CSS
+            # below relies on — with no deploy of ours.
+            scalar_js_url=(
+                "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0"
+            ),
+            order_schema_properties_by=("preserve"),
+            hide_client_button=(True),
             custom_css="""
                       /* override theme colours */
                       :root .dark-mode {
@@ -219,7 +444,71 @@ def _create_v1_app(
                       a.open-api-client-button + div {
                         padding-top: 0.75rem;
                       }
+                      /* Scalar never ticks an optional parameter when you type a
+                         value into it, and an unticked row is not sent — upstream
+                         considers that intended (scalar/scalar#7851), and
+                         scalar/scalar#2558 tracks changing it. So grey the disabled
+                         rows to let the enabled ones read as the active set, and name
+                         the state once a disabled row has a value in it.
+                         `code-input-lite--empty` is Scalar's own empty-state class;
+                         `:empty` would miss a field that was typed into and cleared,
+                         which leaves a stray <br> behind. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        .code-input-lite__editor {
+                        color: var(--scalar-color-3);
+                      }
+                      /* A dropdown row has no `.code-input-lite`, so the rule above
+                         misses it and its value read as active while unticked. The
+                         value sits in a ghost button, greyed here to match. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button,
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button span {
+                        color: var(--scalar-color-3) !important;
+                      }
+                      /* Scalar's own tick is near-white on dark and reads much like
+                         the unticked one at a glance. The checkbox itself is
+                         transparent and overlaid; the visible mark is the sibling
+                         div, whose `color` the tick inherits. */
+                      .scalar-data-table
+                        td:first-child
+                        input[type="checkbox"]:checked
+                        + div {
+                        color: var(--scalar-color-accent) !important;
+                      }
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked)):has(
+                          td:last-child .code-input-lite:not(.code-input-lite--empty)
+                        ) td:nth-child(2)::after {
+                        content: "disabled";
+                        margin-left: auto;
+                        padding-right: 0.75rem;
+                        align-self: center;
+                        font-size: 11px;
+                        color: var(--scalar-color-3);
+                        white-space: nowrap;
+                        pointer-events: none;
+                      }
                     """,
+        )
+        html = page.body.decode()
+        if "</body>" not in html:
+            return page
+        return HTMLResponse(
+            html.replace(
+                "<head>",
+                "<head>" + _SCALAR_REDIRECT_REPAIR_JS,
+                1,
+            ).replace(
+                "</body>",
+                _SCALAR_AUTO_ENABLE_JS + _SCALAR_SECTION_ORDER_JS + "</body>",
+                1,
+            ),
         )
 
     return v1_app
@@ -452,12 +741,18 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             server.swagger_ui_init_oauth = {
                 "usePkceWithAuthorizationCodeGrant": True,
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": "openid profile email offline_access",
                 "additionalQueryStringParams": {"audience": audience},
             }
 
         case _:
             raise ValueError("Invalid Auth0 configuration")
+
+    # FastAPI() above is constructed before the auth branch runs, so it never received
+    # `description`. The branches append to that local, and _custom_openapi reads
+    # server.description, so both the base text and the authentication section were
+    # being assembled and discarded.
+    server.description = description
 
     # Customize the OpenAPI schema (after auth config is resolved)
     server.openapi = lambda: _custom_openapi(server)
@@ -473,12 +768,23 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Add middlewares
     server.state.limiter = ratelimit.limiter
-    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
+    server.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     server.add_middleware(SlowAPIMiddleware)
+    cors_origins = [
+        o.strip() for o in conf.get_string("api.origins").split(",") if o.strip()
+    ]
     server.add_middleware(
         CORSMiddleware,
-        allow_origins=conf.get_string("api.origins").split(","),
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        # Credentialed CORS cannot be combined with a wildcard: Starlette echoes the
+        # requesting origin back and sets Allow-Credentials, so any site would get
+        # credentialed access. This API authenticates with a bearer token, which a
+        # browser never attaches on its own, so nothing needs the flag while origins
+        # are open. Naming origins explicitly turns it back on.
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -2,7 +2,10 @@
 
 # ruff: noqa: ARG001
 
+import contextlib
 import datetime as dt
+import json
+from collections.abc import Iterator
 from uuid import UUID
 
 import pandas as pd
@@ -20,6 +23,9 @@ from .country_config import (
     RegionTypeConfig,
 )
 from .endpoint_types import Centroid, RegionDetail, RegionSummary
+
+# Sorts after every numbered level, so an unrecognised key is kept, not dropped.
+_PLEVEL_UNKNOWN = 10_000
 
 
 async def resolve_nation(
@@ -93,13 +99,44 @@ def location_to_detail(
     )
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
+    metadata: dict = {k: v for k, v in loc.metadata.items() if k in allowed}
+    installed = installed_capacity_kw(loc)
+    if installed is not None:
+        metadata["installed_capacity_kW"] = installed
     return RegionDetail(
         name=location_display_name(loc, country_cfg),
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
-        metadata={k: v for k, v in loc.metadata.items() if k in allowed},
+        metadata=metadata,
     )
+
+
+def is_api_region(loc: models.Location, cfg: CountryConfig) -> bool:
+    """Whether a platform location is a region this country's API exposes.
+
+    The platform's enclosing filter is transitive, so a lookup under a nation returns
+    everything beneath it: GSPs, but also primary substations and individual sites. Only
+    the location types a country configures a region type for are part of its API
+    surface, and anything else has to be dropped before it reaches a caller or is
+    accepted as a region id.
+    """
+    if loc.location_type is None:
+        return False
+    return cfg.location_type_to_region_type(loc.location_type) is not None
+
+
+def installed_capacity_kw(loc: models.Location) -> float | None:
+    """Return the location's capacity before degradation, if the platform has one.
+
+    This is what v0 reported as `installedCapacityMw` and what PV Live publishes. It is
+    not what the forecast is normalised against — `capacity_kW` is — and it is a few
+    percent higher, so it is kept out of the top level and named explicitly. Returns
+    `None` where the platform has no such figure, rather than quietly falling back to
+    the effective capacity and reporting one number as the other.
+    """
+    raw = loc.metadata.get("capacity_no_degradation_kw")
+    return float(raw) if isinstance(raw, (int, float)) else None
 
 
 def to_uuid(val: str | UUID) -> UUID:
@@ -125,6 +162,73 @@ def check_region_type(
     return rt
 
 
+def resolve_observer_param(
+    cfg: CountryConfig,
+    source: str,
+    observer_name: str | None = None,
+    observer: str | None = None,
+) -> tuple[str, str]:
+    """Collapse the observer params and return `(api_name, dp_name)` for the country.
+
+    Both names are returned because both are needed and they are not always the same:
+    NL's `ned_nl` is `nednl` inside the DP. The DP name goes to the backend, the API
+    name goes back to the caller — a response must echo the name they can ask for.
+
+    `observer` was the original param name; `observer_name` is the name used now, matching
+    the `observer_name` response field and the `model_name` param. Both are accepted, but
+    supplying both with different values is a 400 rather than a silent preference.
+
+    `ValidObserver` only checks the observer exists for *some* country, so the value still
+    has to be confirmed against *this* one before it is resolved for the DP.
+    """
+    if observer is not None and observer_name is not None and observer != observer_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Conflicting values for 'observer_name' ({observer_name!r}) and its "
+                f"deprecated alias 'observer' ({observer!r}). Supply only 'observer_name'."
+            ),
+        )
+    chosen = observer_name or observer or cfg.default_observer(source)
+    available = {
+        gs.api_name for gs in cfg.generation_sources if gs.source == source
+    }
+    if chosen is None or chosen not in available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Observer '{chosen}' is not available for "
+                f"{cfg.code} {source}. Available: {sorted(available)}"
+            ),
+        )
+    return chosen, cfg.resolve_observer(chosen)
+
+
+def resolve_model_param(
+    model_name: str | None,
+    model: str | None,
+) -> str | None:
+    """Collapse the current `model_name` param and its deprecated `model` alias.
+
+    `model` was the original name on the per-region forecast routes; `model_name` is
+    the name used everywhere now, alongside `model_version`. Both are accepted, but
+    supplying both with different values is a 400 rather than a silent preference.
+    """
+    if model is None:
+        return model_name
+    if model_name is None:
+        return model
+    if model_name != model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Conflicting values for 'model_name' ({model_name!r}) and its deprecated "
+                f"alias 'model' ({model!r}). Supply only 'model_name'."
+            ),
+        )
+    return model_name
+
+
 def validate_model(
     model: str | None,
     rt: RegionTypeConfig | None,
@@ -143,6 +247,35 @@ def validate_model(
         )
 
 
+async def fetch_api_region(
+    region_uuid: UUID,
+    cfg: CountryConfig,
+    energy_type: models.EnergyType,
+    db: models.StorageInterface,
+) -> models.Location:
+    """Fetch a region by UUID, 404ing if it is not a region this country exposes.
+
+    The type check is deliberately repeated here rather than left to
+    `resolve_region_id`. Both are lookups by UUID with no location type, and the
+    platform will happily return a site or a substation for one. Keeping the check at
+    the point of fetch means a new caller cannot reintroduce the hole by resolving an
+    id some other way, and it is the same single call either way.
+    """
+    locs = await db.get_locations(
+        energy_type=energy_type,
+        location_type=None,
+        authdata={},  # TODO: add auth when loosed on DP side
+        location_uuid=region_uuid,
+    )
+    region = next((loc for loc in locs if is_api_region(loc, cfg)), None)
+    if region is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region '{region_uuid}' not found in {cfg.code}.",
+        )
+    return region
+
+
 async def resolve_region_id(
     region_id: str,
     cfg: CountryConfig,
@@ -152,17 +285,23 @@ async def resolve_region_id(
     """Resolve a region path param to an internal UUID.
 
     Resolution order:
-    1. "national" slug → nation UUID
-    2. Nation display name or internal name → nation UUID
-    3. Mapped display name (e.g. "friesland") → reverse-lookup to DP internal name, then search
-    4. Anything else → case-insensitive name search across all region types
+    1. A UUID → confirmed to sit within this country, then used as-is
+    2. "national" slug → nation UUID
+    3. Nation display name or internal name → nation UUID
+    4. Mapped display name (e.g. "friesland") → reverse-lookup to DP internal name, then search
+    5. Anything else → case-insensitive name search across all region types
+
+    A UUID is checked against the country like every other form. It used to be returned
+    the moment it parsed, which let a region UUID from one country resolve under another
+    country's path — the country permission is checked against the path, so that was the
+    one step between a single-country subscription and another country's data.
     """
     try:
-        return UUID(region_id)
+        candidate: UUID | None = UUID(region_id)
     except ValueError:
-        pass
+        candidate = None
 
-    # Need the nation for both "national" resolution and name search.
+    # Needed by every branch: the UUID check, "national", and the name search.
     nations = await db.get_locations(
         energy_type=energy_type,
         location_type=models.LocationType.NATION,
@@ -176,6 +315,30 @@ async def resolve_region_id(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"National region for '{cfg.nation_name}' not found.",
+        )
+
+    if candidate is not None:
+        if candidate == to_uuid(nation.uuid):
+            return candidate
+        within = await db.get_locations(
+            energy_type=energy_type,
+            location_type=None,
+            authdata={},
+            enclosing_location_uuid=to_uuid(nation.uuid),
+            location_uuid=candidate,
+        )
+        # Confirmed client-side rather than trusting the response to be empty, for the
+        # same reason the name search below re-checks its own filter. The region type
+        # check matters as much as the country one: the enclosing filter reaches sites
+        # and substations, which are not regions this API exposes.
+        if any(
+            to_uuid(loc.uuid) == candidate and is_api_region(loc, cfg)
+            for loc in within
+        ):
+            return candidate
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region '{region_id}' not found in {cfg.code}.",
         )
 
     if region_id == "national":
@@ -205,8 +368,16 @@ async def resolve_region_id(
         enclosing_location_uuid=to_uuid(nation.uuid),
         location_names=[search_name],
     )
-    # Client-side confirmation: DP may not filter by name server-side yet.
-    match = next((loc for loc in locs if loc.name.lower() == search_name.lower()), None)
+    # Client-side confirmation: DP may not filter by name server-side yet, and the
+    # enclosing filter reaches sites and substations that are not API regions.
+    match = next(
+        (
+            loc
+            for loc in locs
+            if loc.name.lower() == search_name.lower() and is_api_region(loc, cfg)
+        ),
+        None,
+    )
     if match is not None:
         return match.uuid
     raise HTTPException(
@@ -315,6 +486,33 @@ def internal_to_api_name(
     return fm.api_name if fm else internal_name
 
 
+@contextlib.contextmanager
+def api_facing_model_errors(
+    internal_name: str | None,
+    rt: RegionTypeConfig | None,
+) -> Iterator[None]:
+    """Rewrite an internal forecaster name in a 404 detail to the name the caller used.
+
+    Pinning an unknown `model_version` is only caught by the platform, which raises
+    naming the forecaster it was given. That is the internal name, so asking for
+    `model_name=blend` came back as "Forecast model 'blend_adjust' has no version",
+    naming something the caller cannot pass back. The backend keeps the internal name
+    because v0 has no separate user-facing one.
+    """
+    try:
+        yield
+    except HTTPException as e:
+        if (
+            e.status_code == status.HTTP_404_NOT_FOUND
+            and internal_name
+            and isinstance(e.detail, str)
+        ):
+            api_name = internal_to_api_name(internal_name, rt)
+            if api_name and api_name != internal_name:
+                e.detail = e.detail.replace(f"'{internal_name}'", f"'{api_name}'")
+        raise
+
+
 def timeseries_window(
     start_utc: dt.datetime | None,
     end_utc: dt.datetime | None,
@@ -366,3 +564,81 @@ def window_chunks(
         chunks.append((chunk_start, chunk_end))
         chunk_start = chunk_end
     return chunks
+
+
+def latest_run_timestamps(
+    values: list,
+) -> tuple[dt.datetime | None, dt.datetime | None]:
+    """Return the latest `created_timestamp` / `init_timestamp` across forecast values.
+
+    The data platform stitches the best-available (latest-run) value for each target
+    time, so a response spans many model runs. Taking the maximum makes
+    `last_updated_utc` mean "the most recent run contributing to this response" rather
+    than "whichever value the platform happened to return first".
+    """
+    created = [v.created_timestamp for v in values if v.created_timestamp]
+    init = [v.init_timestamp for v in values if v.init_timestamp]
+    return (max(created) if created else None, max(init) if init else None)
+
+
+def latest_capacity(values: list) -> float:
+    """Return the capacity of the value with the latest `valid_timestamp`.
+
+    The platform gives no ordering guarantee, so taking `values[0]` made this depend on
+    which value came back first. Effective capacity is time-varying, so a single hoisted
+    number cannot express a mid-window change either way — but the latest value's
+    capacity at least applied inside the requested window, and is reproducible.
+    """
+    if not values:
+        return 0.0
+    return max(values, key=lambda v: v.valid_timestamp).capacity_kilowatts
+
+
+def parse_forecast_metadata(metadata: dict) -> dict | None:
+    """Return the forecaster's metadata dict with `app_version` parsed into an object.
+
+    The pipeline stringifies `app_version` — for `blend` it is a JSON object encoded as
+    a string — so returning it verbatim would make clients parse twice. Everything else
+    passes through as the forecaster wrote it: the keys vary by model and are not a
+    stable contract, pending a single pipeline that makes them predictable. If/when they
+    are in future, we can revisit this.
+    """
+    if not metadata:
+        return None
+    parsed = dict(metadata)
+    raw = parsed.get("app_version")
+    if isinstance(raw, str):
+        with contextlib.suppress(json.JSONDecodeError):
+            parsed["app_version"] = json.loads(raw)
+    return parsed
+
+
+def plevel_sort_key(name: str) -> tuple[int, str]:
+    """Order a probability level by its percentile, so p10 precedes p90.
+
+    A name that is not `p<digits>` sorts after the numbered ones rather than raising,
+    so an unknown future key from the DP still comes back.
+    """
+    digits = name[1:] if name[:1].lower() == "p" else name
+    return (int(digits), name) if digits.isdigit() else (_PLEVEL_UNKNOWN, name)
+
+
+def sort_plevels(plevels: dict) -> dict:
+    """Return the probability levels ordered from lowest percentile to highest.
+
+    The DP hands these over as a map with no ordering guarantee. JSON objects
+    keep insertion order, so ordering them here is what the caller sees.
+    """
+    return {k: plevels[k] for k in sorted(plevels, key=plevel_sort_key)}
+
+
+def region_metadata(loc: models.Location, detail: object) -> dict | None:
+    """Region-level extras for a time-series wrapper, only at the `full` detail level.
+
+    Installed capacity is deliberately awkward to reach: it is not the number the
+    forecast uses, so a caller has to ask for it by name rather than meet it by default.
+    """
+    if str(detail) != "full":
+        return None
+    installed = installed_capacity_kw(loc)
+    return {"installed_capacity_kW": installed} if installed is not None else None

@@ -255,10 +255,12 @@ class StorageClient(models.StorageInterface):
                     ),
                 ]
             case _, None:
-                # No type filter — return a mix of dummy locations
+                # No type filter — return a mix of dummy locations. These use loc_uuid,
+                # not a fresh uuid4(), so that a lookup filtered by location_uuid gets
+                # that UUID back; callers filter on it and a fresh one never matches.
                 locations = [
                     models.Location(
-                        uuid=uuid4(),
+                        uuid=loc_uuid,
                         name="Dummy GSP",
                         latitude=26,
                         longitude=76,
@@ -275,6 +277,10 @@ class StorageClient(models.StorageInterface):
                         location_type=models.LocationType.DNO,
                     ),
                 ]
+                if location_uuid is not None:
+                    locations = [
+                        loc for loc in locations if loc.uuid == location_uuid
+                    ]
             case _:
                 raise NotImplementedError(
                     f"DummyDB client does not support {location_type} locations"

@@ -6,11 +6,12 @@ import datetime as dt
 import json
 import typing
 from collections.abc import AsyncGenerator
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import ASGITransport, AsyncClient
@@ -20,7 +21,7 @@ from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES, FM, RegionTypeConfig
-from .helpers import resolve_forecast_model
+from .helpers import api_facing_model_errors, resolve_forecast_model
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -85,6 +86,99 @@ class NullLocationsForUUIDClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
+class ForeignRegionClient(StorageClient):
+    """A region that exists, but is not enclosed by the country in the path.
+
+    Models the cross-country case: the DP knows the UUID, so an unscoped lookup finds
+    it, but it is not among the nation's regions. Only the enclosing-filtered lookup
+    can tell the two apart, which is the whole point of the check.
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if enclosing_location_uuid is not None and location_uuid is not None:
+            return []
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
+class SiteBearingClient(StorageClient):
+    """Returns sites and substations alongside GSPs for an untyped lookup.
+
+    Mirrors the platform, whose enclosing filter is transitive: a lookup under GB's
+    nation returns 337 GSPs but also 589 primary substations and 64 sites. Only the
+    GSP is a region this API exposes.
+    """
+
+    SITE_UUID = UUID("00000000-0000-0000-0000-0000000000aa")
+    GSP_UUID = UUID("00000000-0000-0000-0000-0000000000bb")
+    NATION_UUID = UUID("00000000-0000-0000-0000-0000000000dd")
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.NATION:
+            # dummydb mints a fresh UUID per call, so the nation resolved by the route
+            # would not match the one it then filters by.
+            return [
+                models.Location(
+                    uuid=self.NATION_UUID, name="uk", latitude=54.0, longitude=-2.0,
+                    capacity_kilowatts=15000000,
+                    location_type=models.LocationType.NATION,
+                ),
+            ]
+        # Any untyped lookup, with or without an enclosing filter: the platform
+        # returns whatever that UUID or name is, region or not.
+        if location_type is None:
+            locs = [
+                models.Location(
+                    uuid=self.GSP_UUID, name="a_real_gsp", latitude=51.0, longitude=-1.0,
+                    capacity_kilowatts=76000, location_type=models.LocationType.GSP,
+                ),
+                models.Location(
+                    uuid=self.SITE_UUID, name="zaks_house_isnt_here", latitude=51.0,
+                    longitude=-1.0, capacity_kilowatts=4,
+                    location_type=models.LocationType.SITE,
+                ),
+                models.Location(
+                    uuid=UUID("00000000-0000-0000-0000-0000000000cc"), name="durham_rd",
+                    latitude=51.0, longitude=-1.0, capacity_kilowatts=900,
+                    location_type=models.LocationType.SUBSTATION,
+                ),
+            ]
+            if location_uuid is not None:
+                locs = [x for x in locs if x.uuid == location_uuid]
+            if location_names:
+                wanted = {n.lower() for n in location_names}
+                locs = [x for x in locs if x.name.lower() in wanted]
+            return locs
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+            location_names=location_names,
         )
 
 
@@ -196,6 +290,23 @@ def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
 
 
 @pytest_asyncio.fixture
+async def isolated_cache() -> AsyncGenerator[None, None]:
+    """Give a test its own cache, so a cached response cannot cross test boundaries.
+
+    Two things have to happen. `FastAPICache.init` is a no-op once any other test has
+    initialised it, so the cache must be reset first. And `InMemoryBackend._store` is a
+    *class* attribute, shared by every instance — so constructing a new backend isolates
+    nothing on its own and the store has to be emptied too.
+    """
+    InMemoryBackend._store.clear()
+    FastAPICache.reset()
+    FastAPICache.init(InMemoryBackend(), prefix="test-isolated")
+    yield
+    FastAPICache.reset()
+    InMemoryBackend._store.clear()
+
+
+@pytest_asyncio.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with DummyDB backend and GB read access."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
@@ -232,6 +343,26 @@ async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
+async def foreign_region_client() -> AsyncGenerator[AsyncClient, None]:
+    """Client whose regions are never enclosed by the requested country's nation."""
+    app = _make_app(ForeignRegionClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def site_bearing_client() -> AsyncGenerator[AsyncClient, None]:
+    """Client whose nation encloses sites and substations as well as GSPs."""
+    app = _make_app(SiteBearingClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
 async def intraday_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with GB intraday-only permission."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
@@ -258,6 +389,44 @@ async def trial_client() -> AsyncGenerator[AsyncClient, None]:
 _FIXED_NL_PROVINCE_UUID = uuid4()
 _NL_PROVINCE_INTERNAL_NAME = "nl_region_2_friesland"
 _NL_PROVINCE_DISPLAY_NAME = "friesland"
+
+
+class ReverseOrderGSPClient(StorageClient):
+    """DummyDB variant returning GSPs in reverse-alphabetical order.
+
+    The data platform gives no ordering guarantee, so the API must impose one.
+    """
+
+    _GSP_NAMES = ("CHARLIE", "BRAVO", "ALPHA")
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=uuid4(),
+                    name=name,
+                    latitude=51.5,
+                    longitude=-0.1,
+                    capacity_kilowatts=1000,
+                    location_type=models.LocationType.GSP,
+                )
+                for name in self._GSP_NAMES
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
 
 
 class NLProvinceClient(NationNameStorageClient):
@@ -715,7 +884,7 @@ async def test_get_generation_period_invalid_observer_returns_400(
     client: AsyncClient,
 ) -> None:
     resp = await client.get(
-        "/v1/GB/solar/generation/period?region_type=gsp&observer=unknown_obs",
+        "/v1/GB/solar/generation/period?region_type=gsp&observer_name=unknown_obs",
     )
     assert resp.status_code == 422
 
@@ -910,6 +1079,48 @@ async def test_get_regions_no_filter_returns_all(client: AsyncClient) -> None:
     regions = resp.json()
     assert isinstance(regions, list)
     assert len(regions) >= 1
+
+
+@pytest.mark.anyio
+async def test_get_regions_sorted_by_type_level_then_name(isolated_cache: None) -> None:  # noqa: ARG001
+    """Unfiltered regions sort by region type level first, then by name.
+
+    The GSP names here all sort ahead of the nation name alphabetically, so the nation
+    only comes first if the level is the primary sort key.
+    """
+    app = _make_app(ReverseOrderGSPClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get("/v1/GB/solar/regions")
+
+    assert resp.status_code == 200
+    regions = resp.json()
+
+    # national is level 0, so it sorts ahead of the GSPs despite "uk" > "alpha"
+    assert regions[0]["type"] == "national"
+
+    levels = {rt.type: rt.level for rt in COUNTRIES["GB"].region_types}
+    keys = [(levels.get(r["type"], 10_000), r["name"].lower()) for r in regions]
+    assert keys == sorted(keys), keys
+
+
+@pytest.mark.anyio
+async def test_get_regions_sorted_when_backend_returns_unordered(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Regions arriving from the backend out of order are sorted before being returned."""
+    app = _make_app(ReverseOrderGSPClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get("/v1/GB/solar/regions?region_type=gsp")
+
+    assert resp.status_code == 200
+    names = [r["name"] for r in resp.json()]
+    assert names == ["ALPHA", "BRAVO", "CHARLIE"], names
 
 
 @pytest.mark.anyio
@@ -1147,6 +1358,214 @@ async def test_get_region_generation_day_after_observer(client: AsyncClient) -> 
 
 
 @pytest.mark.anyio
+async def test_get_region_generation_observer_name_param(client: AsyncClient) -> None:
+    """observer_name is the current spelling of the observer param."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_observer_alias_agrees(client: AsyncClient) -> None:
+    """The deprecated `observer` alias and `observer_name` may both be sent if they agree."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation"
+        "?observer=pvlive_day_after&observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_day_after"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_observer_alias_conflict_400(
+    client: AsyncClient,
+) -> None:
+    """Conflicting observer / observer_name is a 400, not a silent preference."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation"
+        "?observer=pvlive_in_day&observer_name=pvlive_day_after",
+    )
+    assert resp.status_code == 400
+    assert "observer_name" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_defaults_observer(client: AsyncClient) -> None:
+    """With no observer at all, the country's first configured observer is used."""
+    region_id = str(uuid4())
+    resp = await client.get(f"/v1/GB/solar/regions/{region_id}/generation")
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "pvlive_in_day"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_nl_defaults_to_its_own_observer(
+    nl_client: AsyncClient,
+) -> None:
+    """The default observer is per-country — NL has no PV Live, so it must not be assumed."""
+    region_id = str(uuid4())
+    resp = await nl_client.get(f"/v1/NL/solar/regions/{region_id}/generation")
+    assert resp.status_code == 200
+    assert resp.json()["observer_name"] == "ned_nl"
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_far_future_end_utc_422(client: AsyncClient) -> None:
+    """An end_utc years ahead is a mistyped year or an epoch, not a real request."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?end_utc=3026-01-01T00:00:00Z",
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_near_future_end_utc_ok(client: AsyncClient) -> None:
+    """An end_utc inside the next year is still accepted — the cap must not be too tight."""
+    region_id = str(uuid4())
+    end = quote((dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=14)).isoformat())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/generation?end_utc={end}",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_uuid_outside_country_404(
+    foreign_region_client: AsyncClient,
+) -> None:
+    """A region UUID that exists but is not in the path country must not resolve."""
+    region_id = str(uuid4())
+    resp = await foreign_region_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast",
+    )
+    assert resp.status_code == 404
+    assert "GB" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_region_national_slug_still_resolves(
+    foreign_region_client: AsyncClient,
+) -> None:
+    """The nation is not enclosed by itself, so `national` must bypass the check."""
+    resp = await foreign_region_client.get("/v1/GB/solar/regions/national/forecast")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_parent_listing_excludes_sites_and_substations(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """`?parent=national` must not expose sites or substations as regions."""
+    resp = await site_bearing_client.get(
+        "/v1/GB/solar/regions?parent=national",
+    )
+    assert resp.status_code == 200
+    names = {r["name"] for r in resp.json()}
+    assert names == {"a_real_gsp"}, names
+    assert all(r["type"] is not None for r in resp.json())
+
+
+@pytest.mark.anyio
+async def test_site_name_does_not_resolve_as_a_region(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """A site name must not resolve on the per-region routes."""
+    resp = await site_bearing_client.get(
+        "/v1/GB/solar/regions/zaks_house_isnt_here/forecast",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_site_uuid_does_not_resolve_as_a_region(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """Nor must a site UUID, which passes the country check on its own."""
+    resp = await site_bearing_client.get(
+        f"/v1/GB/solar/regions/{SiteBearingClient.SITE_UUID}/forecast",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_gsp_name_still_resolves(site_bearing_client: AsyncClient) -> None:
+    """The filter must not take real regions with it."""
+    resp = await site_bearing_client.get("/v1/GB/solar/regions/a_real_gsp/forecast")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_negative_horizon_minutes_422(client: AsyncClient) -> None:
+    """A negative horizon reached the platform and came back as a 500."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?horizon_minutes=-5",
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_snapshot_time_utc_is_floored(client: AsyncClient) -> None:
+    """An off-the-half-hour time_utc matched nothing and returned an empty snapshot."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc=2026-09-15T12:17:00Z",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time_utc"] == "2026-09-15T12:00:00Z"
+
+
+@pytest.mark.anyio
+async def test_unknown_region_name_on_period_400(client: AsyncClient) -> None:
+    """An unmatched region_names used to come back as a 200 with nothing in it."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/period?region_type=gsp&region_names=nope_zz",
+    )
+    assert resp.status_code in (400, 503)
+    if resp.status_code == 400:
+        assert "nope_zz" in resp.json()["detail"]
+
+
+def test_pinned_version_error_names_the_api_model() -> None:
+    """The 404 must name `blend`, not the internal `blend_adjust` behind it."""
+    rt = COUNTRIES["GB"].get_region_type("national")
+    raiser = HTTPException(
+        status_code=404,
+        detail="Forecast model 'blend_adjust' has no version '9.9.9'.",
+    )
+    with pytest.raises(HTTPException) as excinfo, api_facing_model_errors(
+        "blend_adjust", rt,
+    ):
+        raise raiser
+    assert "'blend'" in excinfo.value.detail
+    assert "blend_adjust" not in excinfo.value.detail
+
+
+@pytest.mark.anyio
+async def test_fetch_api_region_rejects_a_site_on_its_own() -> None:
+    """The fetch gate must hold without relying on resolution having checked first."""
+    from .helpers import fetch_api_region
+
+    db = SiteBearingClient()
+    cfg = COUNTRIES["GB"]
+    region = await fetch_api_region(
+        SiteBearingClient.GSP_UUID, cfg, models.EnergyType.SOLAR, db,
+    )
+    assert region.name == "a_real_gsp"
+
+    with pytest.raises(HTTPException) as excinfo:
+        await fetch_api_region(
+            SiteBearingClient.SITE_UUID, cfg, models.EnergyType.SOLAR, db,
+        )
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.anyio
 async def test_get_region_generation_time_window(client: AsyncClient) -> None:
     """Explicit start_utc + end_utc window is forwarded — endpoint returns 200."""
     region_id = str(uuid4())
@@ -1163,10 +1582,10 @@ async def test_get_region_generation_time_window(client: AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_get_region_generation_invalid_observer_422(client: AsyncClient) -> None:
-    """observer not matching the allowed pattern returns 422."""
+    """observer_name not matching the allowed pattern returns 422."""
     region_id = str(uuid4())
     resp = await client.get(
-        f"/v1/GB/solar/regions/{region_id}/generation?observer=not_a_real_observer",
+        f"/v1/GB/solar/regions/{region_id}/generation?observer_name=not_a_real_observer",
     )
     assert resp.status_code == 422
 
@@ -1274,9 +1693,9 @@ async def test_get_generation_snapshot_explicit_timestamp(client: AsyncClient) -
 async def test_get_generation_snapshot_invalid_observer_422(
     client: AsyncClient,
 ) -> None:
-    """observer not matching the allowed pattern returns 422."""
+    """observer_name not matching the allowed pattern returns 422."""
     resp = await client.get(
-        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer=bogus",
+        "/v1/GB/solar/generation/snapshot?region_type=gsp&observer_name=bogus",
     )
     assert resp.status_code == 422
 
@@ -1567,6 +1986,25 @@ async def test_intraday_user_requesting_intraday_model_200(
         f"/v1/GB/solar/regions/{region_id}/forecast?model={intraday_model}",
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_intraday_user_forecast_period_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """The period matrix serves the blend only, so an intraday-only user gets 403."""
+    resp = await intraday_client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    assert resp.status_code == 403
+    assert "intraday-only" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_intraday_user_generation_period_not_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """Generation has no model tiering, so the intraday restriction must not leak to it."""
+    resp = await intraday_client.get("/v1/GB/solar/generation/period?region_type=gsp")
+    assert resp.status_code != 403
 
 
 @pytest.mark.anyio
@@ -2232,3 +2670,469 @@ def test_retired_nl_names_still_resolve(
 ) -> None:
     """Every pre-rename NL name keeps resolving to the same DP forecaster."""
     assert resolve_forecast_model(legacy_name, _NL_NATIONAL_RT, False) == expected_internal
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("param", ["model_name", "model"])
+async def test_region_forecast_accepts_model_name_and_deprecated_model(
+    nation_response_client: AsyncClient,
+    param: str,
+) -> None:
+    """`model_name` is the current param; `model` still resolves to the same thing."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?{param}=ecmwf",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model_name"] == "ecmwf"
+
+
+@pytest.mark.anyio
+async def test_region_forecast_conflicting_model_params_400(
+    nation_response_client: AsyncClient,
+) -> None:
+    """Supplying both names with different values is rejected, not silently resolved."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=ecmwf&model=mo",
+    )
+    assert resp.status_code == 400
+    assert "deprecated" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_region_forecast_matching_model_params_200(
+    nation_response_client: AsyncClient,
+) -> None:
+    """The same value under both names is not a conflict."""
+    region_id = str(uuid4())
+    resp = await nation_response_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=ecmwf&model=ecmwf",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_forecast_last_updated_accepts_model_name(
+    client: AsyncClient,
+) -> None:
+    """last-updated takes `model_name` alongside the deprecated `model`."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast/last-updated?model_name=blend",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_forecast_model_version_param(client: AsyncClient) -> None:
+    """`model_version` is accepted on the per-region forecast route."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=blend&model_version=1.2.3",
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_forecasts_snapshot_accepts_deprecated_model_alias(
+    client: AsyncClient,
+) -> None:
+    """The snapshot route accepts `model` too, so one param name works everywhere."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&model=blend",
+    )
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Run metadata — latest run across the response, not the first value's
+# ---------------------------------------------------------------------------
+
+_RUN_TIMES = [
+    dt.datetime(2026, 4, 17, 3, 0, tzinfo=dt.UTC),
+    dt.datetime(2026, 4, 17, 6, 0, tzinfo=dt.UTC),
+    dt.datetime(2026, 4, 17, 5, 0, tzinfo=dt.UTC),
+]
+
+
+def _pgv(
+    created: dt.datetime,
+    *,
+    location_uuid: UUID | None = None,
+    valid: dt.datetime | None = None,
+    capacity: float = 1000.0,
+) -> models.PredictedGenerationValue:
+    """A forecast value whose run timestamps are offset from `created` by 30 minutes."""
+    return models.PredictedGenerationValue(
+        power_kilowatts=100.0,
+        valid_timestamp=valid or created + dt.timedelta(hours=1),
+        location_uuid=location_uuid or uuid4(),
+        capacity_kilowatts=capacity,
+        # Deliberately out of order, and not in the order the keys sort by name
+        # either, so a fix that only reverses or only sorts as strings still fails.
+        plevels_kilowatts={"p90": 240.0, "p10": 180.0, "p2": 90.0},
+        forecaster_name="blend",
+        forecaster_version="1.0.0",
+        created_timestamp=created,
+        init_timestamp=created - dt.timedelta(minutes=30),
+        metadata={
+            "app_version": '{"blend": "1.2.22", "pvnet_v2": "3.0.1"}',
+            "nwp_last_updated": "2026-09-06T23:12:33+00:00",
+        },
+    )
+
+
+class MultiRunForecastClient(StorageClient):
+    """Returns forecast values spanning several model runs, oldest run first.
+
+    The data platform stitches the latest-run value for each target time, so a real
+    response spans many runs in no particular order. `reverse=True` returns the same
+    values back-to-front to prove the result does not depend on ordering.
+    """
+
+    def __init__(self, *, reverse: bool = False) -> None:
+        super().__init__()
+        self._reverse = reverse
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        """Three GSPs, so a snapshot spans more than one run."""
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=uuid4(),
+                    name=f"GSP {i}",
+                    latitude=54.0,
+                    longitude=-2.0,
+                    capacity_kilowatts=1000.0,
+                    location_type=models.LocationType.GSP,
+                )
+                for i in range(len(_RUN_TIMES))
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+    def _values(self, location_uuid: UUID) -> list[models.PredictedGenerationValue]:
+        values = [
+            _pgv(
+                created,
+                location_uuid=location_uuid,
+                valid=dt.datetime(2026, 4, 17, 12 + i, tzinfo=dt.UTC),
+                capacity=1000.0 + 100 * i,
+            )
+            for i, created in enumerate(_RUN_TIMES)
+        ]
+        return list(reversed(values)) if self._reverse else values
+
+    async def get_predicted_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        return self._values(UUID(str(location_uuid)))
+
+    async def get_predicted_generation_snapshot(  # type: ignore[override]
+        self,
+        location_uuids: list[UUID],
+        snapshot_timestamp_utc: dt.datetime,
+        energy_type: models.EnergyType,
+        authdata: dict[str, str],
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        """One value per region, each from a different run — mirrors `snapshot[0]` risk."""
+        values = [
+            _pgv(created, location_uuid=uuid, valid=snapshot_timestamp_utc)
+            for uuid, created in zip(location_uuids, _RUN_TIMES, strict=True)
+        ]
+        return list(reversed(values)) if self._reverse else values
+
+
+async def _get(db: models.StorageInterface, url: str) -> dict:
+    app = _make_app(db, ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get(url)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+_LATEST_RUN = "2026-04-17T06:00:00Z"
+_LATEST_INIT = "2026-04-17T05:30:00Z"
+
+
+@pytest.mark.anyio
+async def test_forecast_reports_latest_run_not_first_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A forecast spanning several runs reports the most recent run's timestamps."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert body["last_updated_utc"] == _LATEST_RUN
+    assert body["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_forecast_run_metadata_independent_of_value_order(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Reversing the order the backend returns values in changes nothing."""
+    forward = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    reverse = await _get(
+        MultiRunForecastClient(reverse=True),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert forward["last_updated_utc"] == reverse["last_updated_utc"] == _LATEST_RUN
+    assert forward["latest_init_utc"] == reverse["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_snapshot_run_metadata_independent_of_region_order(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`ListLocations` guarantees no ordering, so the first region must not decide this."""
+    url = "/v1/GB/solar/forecasts/snapshot?region_type=gsp"
+    forward = await _get(MultiRunForecastClient(), url)
+    reverse = await _get(MultiRunForecastClient(reverse=True), url)
+    assert forward["last_updated_utc"] == reverse["last_updated_utc"] == _LATEST_RUN
+    assert forward["latest_init_utc"] == reverse["latest_init_utc"] == _LATEST_INIT
+
+
+@pytest.mark.anyio
+async def test_forecast_capacity_from_latest_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Hoisted capacity comes from the latest target time, not whichever value is first."""
+    forward = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    reverse = await _get(
+        MultiRunForecastClient(reverse=True),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert forward["capacity_kW"] == reverse["capacity_kW"] == 1200.0
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_values_omits_per_value_metadata(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The default response carries only the value itself."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    value = body["values"][0]
+    assert set(value) == {"time_utc", "power_kW", "plevels_kW"}
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_runs_promotes_run_per_value(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`detail=runs` reports each value's own run, not the response-wide latest."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=runs",
+    )
+    runs = [v["last_updated_utc"] for v in body["values"]]
+    assert runs == [t.isoformat().replace("+00:00", "Z") for t in _RUN_TIMES]
+    assert body["last_updated_utc"] == _LATEST_RUN  # hoisted field still the latest
+    assert body["values"][0]["capacity_kW"] == 1000.0
+    assert "metadata" not in body["values"][0]
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_full_parses_app_version(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """`detail=full` adds the forecaster metadata, with `app_version` as an object."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=full",
+    )
+    metadata = body["values"][0]["metadata"]
+    assert metadata["app_version"] == {"blend": "1.2.22", "pvnet_v2": "3.0.1"}
+    assert metadata["nwp_last_updated"] == "2026-09-06T23:12:33+00:00"
+
+
+@pytest.mark.anyio
+async def test_forecast_detail_is_part_of_the_cache_key(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A default response must not be served to a request that asked for runs."""
+    app = _make_app(MultiRunForecastClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        default = await ac.get("/v1/GB/solar/regions/national/forecast")
+        runs = await ac.get("/v1/GB/solar/regions/national/forecast?detail=runs")
+
+    assert "last_updated_utc" not in default.json()["values"][0]
+    assert "last_updated_utc" in runs.json()["values"][0]
+
+
+@pytest.mark.anyio
+async def test_generation_detail_adds_per_value_capacity(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Observed values have no run, so `detail` only promotes capacity."""
+    default = await _get(
+        StorageClient(),
+        "/v1/GB/solar/regions/national/generation",
+    )
+    runs = await _get(
+        StorageClient(),
+        "/v1/GB/solar/regions/national/generation?detail=runs",
+    )
+    assert "capacity_kW" not in default["values"][0]
+    assert runs["values"][0]["capacity_kW"] is not None
+
+
+@pytest.mark.anyio
+async def test_forecast_plevels_ordered_by_percentile(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Probability levels come back lowest percentile first, whatever order the DP used."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    assert list(body["values"][0]["plevels_kW"]) == ["p2", "p10", "p90"]
+
+
+@pytest.mark.anyio
+async def test_snapshot_plevels_ordered_by_percentile(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The same ordering applies to the snapshot's per-region values."""
+    body = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp",
+    )
+    assert list(body["values"][0]["plevels_kW"]) == ["p2", "p10", "p90"]
+
+
+def test_plevel_sort_key_keeps_unrecognised_names() -> None:
+    """An unexpected key sorts last rather than raising, so it is never dropped."""
+    from .helpers import sort_plevels
+
+    ordered = sort_plevels({"p90": 1.0, "median": 2.0, "p10": 3.0})
+    assert list(ordered) == ["p10", "p90", "median"]
+
+
+class InstalledCapacityClient(MultiRunForecastClient):
+    """Locations carry `capacity_no_degradation_kw`, as GB's do on the platform."""
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        locations = await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+        for loc in locations:
+            loc.metadata = {**loc.metadata, "capacity_no_degradation_kw": 23_963_209.0}
+        return locations
+
+
+@pytest.mark.anyio
+async def test_region_exposes_installed_capacity_in_metadata(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The undegraded figure is reachable, but a level down from `capacity_kW`."""
+    regions = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions?region_type=national",
+    )
+    region = regions[0]
+    assert region["metadata"]["installed_capacity_kW"] == 23_963_209.0
+    assert region["capacity_kW"] != region["metadata"]["installed_capacity_kW"]
+
+
+@pytest.mark.anyio
+async def test_region_omits_installed_capacity_when_platform_has_none(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """No key at all rather than echoing the effective capacity under another name."""
+    regions = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions?region_type=national",
+    )
+    assert "installed_capacity_kW" not in regions[0].get("metadata", {})
+
+
+@pytest.mark.anyio
+async def test_forecast_installed_capacity_requires_detail_full(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """It has to be asked for by name — the default response never mentions it."""
+    default = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    runs = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=runs",
+    )
+    full = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=full",
+    )
+    assert "metadata" not in default
+    assert "metadata" not in runs
+    assert full["metadata"]["installed_capacity_kW"] == 23_963_209.0
+
+
+@pytest.mark.anyio
+async def test_generation_installed_capacity_requires_detail_full(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Same gate on the generation wrapper."""
+    default = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/generation",
+    )
+    full = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/generation?detail=full",
+    )
+    assert "metadata" not in default
+    assert full["metadata"]["installed_capacity_kW"] == 23_963_209.0

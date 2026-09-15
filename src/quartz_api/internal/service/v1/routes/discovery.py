@@ -12,6 +12,8 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from ..cache import key_builder
 from ..country_config import COUNTRIES
 from ..endpoint_types import (
+    AUTH_RESPONSES,
+    SNAPSHOT_RESPONSES,
     Centroid,
     CountryDetail,
     CountryParam,
@@ -25,7 +27,12 @@ from ..endpoint_types import (
 router = APIRouter(tags=["Discovery"])
 
 
-@router.get("/sources", status_code=status.HTTP_200_OK, response_model=list[Source])
+@router.get(
+    "/sources",
+    responses=AUTH_RESPONSES,
+    status_code=status.HTTP_200_OK,
+    response_model=list[Source],
+)
 @cache(key_builder=key_builder, expire=60)
 async def get_sources(
     request: Request,
@@ -43,6 +50,7 @@ async def get_sources(
 
 @router.get(
     "/countries",
+    responses=AUTH_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[CountryDetail],
 )
@@ -56,11 +64,11 @@ async def get_countries(
 
     Returns one entry per country the API has data for. Each entry includes:
 
-    - **region_types** — the region granularities available for that country (e.g. national,
+    - **region_types**: the region granularities available for that country (e.g. national,
       GSP), including the forecast models valid for each type.
-    - **generation_sources** — the observed-generation observers available (e.g.
+    - **generation_sources**: the observed-generation observers available (e.g.
       `pvlive_in_day`, `pvlive_day_after`).
-    - **capacity_kW** and **centroid** — installed capacity and geographic centre.
+    - **capacity_kW** and **centroid**: installed capacity and geographic centre.
 
     Use the `country` value (e.g. `GB`, `NL`) as the `{country}` path segment in all other
     v1 routes.
@@ -109,6 +117,7 @@ async def get_countries(
 
 @router.get(
     "/{country}/{source}/region-types",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[RegionType],
 )
@@ -122,14 +131,14 @@ async def get_region_types(
     """List available region types for a country and energy source.
 
     Region types define the geographic granularity at which forecasts and generation
-    data are available — for example `national` or `gsp` for Great Britain.
+    data are available, for example `national` or `gsp` for Great Britain.
 
     Each entry includes:
 
-    - **type** — the slug used as the `region_type` query parameter throughout the API.
-    - **level** — hierarchical depth (lower = coarser; 0 = national).
-    - **forecast_models** — the models available for that region type, with the model
-      `name` used as the `model` parameter on forecast endpoints. The first listed model
+    - **type**: the slug used as the `region_type` query parameter throughout the API.
+    - **level**: hierarchical depth (lower = coarser; 0 = national).
+    - **forecast_models**: the models available for that region type, with the model
+      `name` used as the `model_name` parameter on forecast endpoints. The first listed model
       is the default.
     """
     return [
@@ -150,6 +159,7 @@ async def get_region_types(
 
 @router.get(
     "/{country}/{source}/generation-sources",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[GenerationSource],
 )
@@ -163,8 +173,8 @@ async def get_generation_sources(
     """List available observed-generation sources for a country and energy source.
 
     Generation sources represent the different observers that produce actual (measured)
-    generation data — for example PV_Live in-day estimates vs finalised day-after values.
-    Use the `name` field as the `observer` parameter on generation endpoints.
+    generation data, for example PV_Live in-day estimates vs finalised day-after values.
+    Use the `name` field as the `observer_name` parameter on generation endpoints.
     """
     return [
         GenerationSource(source=s.source, name=s.api_name, label=s.label)
