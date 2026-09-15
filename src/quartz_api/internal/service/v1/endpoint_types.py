@@ -225,7 +225,7 @@ ValidRegion = Annotated[
     str,
     Path(
         description=(
-            "Region identifier — `national`, or region_name (case-insensitive). "
+            "Region identifier — `national`, a region `name` (case-insensitive), or a UUID. "
             "Use `GET /{country}/{source}/regions` to browse available regions."
         ),
         min_length=2,

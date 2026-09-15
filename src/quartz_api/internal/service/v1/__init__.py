@@ -5,7 +5,7 @@ data across multiple countries, powered by Open Climate Fix.
 
 - **Discovery** — list available energy sources, countries, region types, and
   generation sources per country, as well as browse locations by type (national, GSP, province, …).
-  Each region carries a `region_name` identifier used across all other endpoints.
+  Each region carries a `name`, which is what every other endpoint identifies it by.
 - **Forecasts** — per-region time series, filterable all-region snapshots for a point in time,
   and a limited, filterable matrix of all-region data over a rolling ±2-day window.
 - **Generation** — observed PV output via the same three shapes: per-region,
@@ -28,7 +28,9 @@ request in these docs, or at [app.quartz.solar](https://app.quartz.solar) to get
 
 - Power values are in **kW** throughout.
 - All timestamps are **UTC ISO 8601** (`2020-01-01T12:00:00Z`).
-- Region IDs are unique **strings** — obtain them from the `/regions` endpoints.
+- Regions are identified by **name** (case-insensitive) — browse them with the
+  `/regions` endpoints. A region's UUID is accepted anywhere a name is, but names
+  are stable and readable, so prefer them.
 """
 
 from .router import router
