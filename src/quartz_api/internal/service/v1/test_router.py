@@ -116,6 +116,70 @@ class ForeignRegionClient(StorageClient):
         )
 
 
+class SiteBearingClient(StorageClient):
+    """Returns sites and substations alongside GSPs for an untyped lookup.
+
+    Mirrors the platform, whose enclosing filter is transitive: a lookup under GB's
+    nation returns 337 GSPs but also 589 primary substations and 64 sites. Only the
+    GSP is a region this API exposes.
+    """
+
+    SITE_UUID = UUID("00000000-0000-0000-0000-0000000000aa")
+    GSP_UUID = UUID("00000000-0000-0000-0000-0000000000bb")
+    NATION_UUID = UUID("00000000-0000-0000-0000-0000000000dd")
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.NATION:
+            # dummydb mints a fresh UUID per call, so the nation resolved by the route
+            # would not match the one it then filters by.
+            return [
+                models.Location(
+                    uuid=self.NATION_UUID, name="uk", latitude=54.0, longitude=-2.0,
+                    capacity_kilowatts=15000000,
+                    location_type=models.LocationType.NATION,
+                ),
+            ]
+        if location_type is None and enclosing_location_uuid is not None:
+            locs = [
+                models.Location(
+                    uuid=self.GSP_UUID, name="a_real_gsp", latitude=51.0, longitude=-1.0,
+                    capacity_kilowatts=76000, location_type=models.LocationType.GSP,
+                ),
+                models.Location(
+                    uuid=self.SITE_UUID, name="zaks_house_isnt_here", latitude=51.0,
+                    longitude=-1.0, capacity_kilowatts=4,
+                    location_type=models.LocationType.SITE,
+                ),
+                models.Location(
+                    uuid=UUID("00000000-0000-0000-0000-0000000000cc"), name="durham_rd",
+                    latitude=51.0, longitude=-1.0, capacity_kilowatts=900,
+                    location_type=models.LocationType.SUBSTATION,
+                ),
+            ]
+            if location_uuid is not None:
+                locs = [x for x in locs if x.uuid == location_uuid]
+            if location_names:
+                wanted = {n.lower() for n in location_names}
+                locs = [x for x in locs if x.name.lower() in wanted]
+            return locs
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+            location_names=location_names,
+        )
+
+
 class NationResponseClient(StorageClient):
     """Returns a NATION-type location for untyped lookups with a specific UUID.
 
@@ -280,6 +344,16 @@ async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
 async def foreign_region_client() -> AsyncGenerator[AsyncClient, None]:
     """Client whose regions are never enclosed by the requested country's nation."""
     app = _make_app(ForeignRegionClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def site_bearing_client() -> AsyncGenerator[AsyncClient, None]:
+    """Client whose nation encloses sites and substations as well as GSPs."""
+    app = _make_app(SiteBearingClient(), ["read:gb"])
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
@@ -1379,6 +1453,80 @@ async def test_region_national_slug_still_resolves(
     """The nation is not enclosed by itself, so `national` must bypass the check."""
     resp = await foreign_region_client.get("/v1/GB/solar/regions/national/forecast")
     assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_parent_listing_excludes_sites_and_substations(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """`?parent=national` must not expose sites or substations as regions."""
+    resp = await site_bearing_client.get(
+        "/v1/GB/solar/regions?parent=national",
+    )
+    assert resp.status_code == 200
+    names = {r["name"] for r in resp.json()}
+    assert names == {"a_real_gsp"}, names
+    assert all(r["type"] is not None for r in resp.json())
+
+
+@pytest.mark.anyio
+async def test_site_name_does_not_resolve_as_a_region(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """A site name must not resolve on the per-region routes."""
+    resp = await site_bearing_client.get(
+        "/v1/GB/solar/regions/zaks_house_isnt_here/forecast",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_site_uuid_does_not_resolve_as_a_region(
+    site_bearing_client: AsyncClient,
+) -> None:
+    """Nor must a site UUID, which passes the country check on its own."""
+    resp = await site_bearing_client.get(
+        f"/v1/GB/solar/regions/{SiteBearingClient.SITE_UUID}/forecast",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_gsp_name_still_resolves(site_bearing_client: AsyncClient) -> None:
+    """The filter must not take real regions with it."""
+    resp = await site_bearing_client.get("/v1/GB/solar/regions/a_real_gsp/forecast")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_negative_horizon_minutes_422(client: AsyncClient) -> None:
+    """A negative horizon reached the platform and came back as a 500."""
+    region_id = str(uuid4())
+    resp = await client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?horizon_minutes=-5",
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_snapshot_time_utc_is_floored(client: AsyncClient) -> None:
+    """An off-the-half-hour time_utc matched nothing and returned an empty snapshot."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc=2026-09-15T12:17:00Z",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time_utc"] == "2026-09-15T12:00:00Z"
+
+
+@pytest.mark.anyio
+async def test_unknown_region_name_on_period_400(client: AsyncClient) -> None:
+    """An unmatched region_names used to come back as a 200 with nothing in it."""
+    resp = await client.get(
+        "/v1/GB/solar/forecasts/period?region_type=gsp&region_names=nope_zz",
+    )
+    assert resp.status_code in (400, 503)
+    if resp.status_code == 400:
+        assert "nope_zz" in resp.json()["detail"]
 
 
 @pytest.mark.anyio

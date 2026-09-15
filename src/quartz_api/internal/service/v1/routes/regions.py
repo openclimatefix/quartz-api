@@ -20,6 +20,7 @@ from ..endpoint_types import (
 from ..helpers import (
     check_country_access,
     check_region_type,
+    is_api_region,
     location_to_detail,
     resolve_nation,
     resolve_region_id,
@@ -85,8 +86,14 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=parent_uuid,
         )
+        # Without a region_type the platform returns every descendant, which includes
+        # primary substations and individual sites as well as regions.
         return _filter_and_sort(
-            [location_to_detail(loc, country) for loc in locs],
+            [
+                location_to_detail(loc, country)
+                for loc in locs
+                if is_api_region(loc, country)
+            ],
             name,
             country,
         )

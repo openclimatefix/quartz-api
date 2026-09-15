@@ -111,6 +111,20 @@ def location_to_detail(
     )
 
 
+def is_api_region(loc: models.Location, cfg: CountryConfig) -> bool:
+    """Whether a platform location is a region this country's API exposes.
+
+    The platform's enclosing filter is transitive, so a lookup under a nation returns
+    everything beneath it: GSPs, but also primary substations and individual sites. Only
+    the location types a country configures a region type for are part of its API
+    surface, and anything else has to be dropped before it reaches a caller or is
+    accepted as a region id.
+    """
+    if loc.location_type is None:
+        return False
+    return cfg.location_type_to_region_type(loc.location_type) is not None
+
+
 def installed_capacity_kw(loc: models.Location) -> float | None:
     """Return the location's capacity before degradation, if the platform has one.
 
@@ -284,8 +298,13 @@ async def resolve_region_id(
             location_uuid=candidate,
         )
         # Confirmed client-side rather than trusting the response to be empty, for the
-        # same reason the name search below re-checks its own filter.
-        if any(to_uuid(loc.uuid) == candidate for loc in within):
+        # same reason the name search below re-checks its own filter. The region type
+        # check matters as much as the country one: the enclosing filter reaches sites
+        # and substations, which are not regions this API exposes.
+        if any(
+            to_uuid(loc.uuid) == candidate and is_api_region(loc, cfg)
+            for loc in within
+        ):
             return candidate
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -319,8 +338,16 @@ async def resolve_region_id(
         enclosing_location_uuid=to_uuid(nation.uuid),
         location_names=[search_name],
     )
-    # Client-side confirmation: DP may not filter by name server-side yet.
-    match = next((loc for loc in locs if loc.name.lower() == search_name.lower()), None)
+    # Client-side confirmation: DP may not filter by name server-side yet, and the
+    # enclosing filter reaches sites and substations that are not API regions.
+    match = next(
+        (
+            loc
+            for loc in locs
+            if loc.name.lower() == search_name.lower() and is_api_region(loc, cfg)
+        ),
+        None,
+    )
     if match is not None:
         return match.uuid
     raise HTTPException(
