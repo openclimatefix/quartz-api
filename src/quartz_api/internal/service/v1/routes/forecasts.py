@@ -12,6 +12,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import eclipse, models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -427,8 +428,24 @@ async def get_forecasts_period(
 
     Model and horizon filters are **not** supported on this endpoint — use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
+
+    Not available to intraday-only subscriptions: this endpoint serves the pre-warmed
+    blend, and there is no intraday equivalent to fall back to.
     """
-    check_country_access(auth, country)
+    # Every other forecast route downgrades an intraday-only caller to the intraday
+    # models. This one serves one pre-warmed model per region type, so there is nothing
+    # to downgrade to — the only honest answers are the blend or a 403.
+    if not check_country_access(auth, country):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This endpoint serves the blend model only, which is not included in "
+                "intraday-only subscriptions. Use "
+                f"GET /{country.code}/{source.name.lower()}/regions/{{region}}/forecast "
+                f"to request an intraday model per region, or contact {SUPPORT_EMAIL} "
+                "to upgrade."
+            ),
+        )
 
     rt = country.get_region_type(region_type)
     _sub_national = [

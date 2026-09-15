@@ -1724,6 +1724,25 @@ async def test_intraday_user_requesting_intraday_model_200(
 
 
 @pytest.mark.anyio
+async def test_intraday_user_forecast_period_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """The period matrix serves the blend only, so an intraday-only user gets 403."""
+    resp = await intraday_client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    assert resp.status_code == 403
+    assert "intraday-only" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_intraday_user_generation_period_not_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """Generation has no model tiering, so the intraday restriction must not leak to it."""
+    resp = await intraday_client.get("/v1/GB/solar/generation/period?region_type=gsp")
+    assert resp.status_code != 403
+
+
+@pytest.mark.anyio
 async def test_intraday_user_requesting_non_intraday_model_403(
     intraday_client: AsyncClient,
 ) -> None:
