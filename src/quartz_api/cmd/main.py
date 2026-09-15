@@ -762,10 +762,18 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     )
     server.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     server.add_middleware(SlowAPIMiddleware)
+    cors_origins = [
+        o.strip() for o in conf.get_string("api.origins").split(",") if o.strip()
+    ]
     server.add_middleware(
         CORSMiddleware,
-        allow_origins=conf.get_string("api.origins").split(","),
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        # Credentialed CORS cannot be combined with a wildcard: Starlette echoes the
+        # requesting origin back and sets Allow-Credentials, so any site would get
+        # credentialed access. This API authenticates with a bearer token, which a
+        # browser never attaches on its own, so nothing needs the flag while origins
+        # are open. Naming origins explicitly turns it back on.
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
