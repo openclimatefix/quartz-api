@@ -89,6 +89,33 @@ class NullLocationsForUUIDClient(StorageClient):
         )
 
 
+class ForeignRegionClient(StorageClient):
+    """A region that exists, but is not enclosed by the country in the path.
+
+    Models the cross-country case: the DP knows the UUID, so an unscoped lookup finds
+    it, but it is not among the nation's regions. Only the enclosing-filtered lookup
+    can tell the two apart, which is the whole point of the check.
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        if enclosing_location_uuid is not None and location_uuid is not None:
+            return []
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+
+
 class NationResponseClient(StorageClient):
     """Returns a NATION-type location for untyped lookups with a specific UUID.
 
@@ -245,6 +272,16 @@ async def no_perm_client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def foreign_region_client() -> AsyncGenerator[AsyncClient, None]:
+    """Client whose regions are never enclosed by the requested country's nation."""
+    app = _make_app(ForeignRegionClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test",
     ) as ac:
         yield ac
 
@@ -1319,6 +1356,28 @@ async def test_get_region_generation_near_future_end_utc_ok(client: AsyncClient)
     resp = await client.get(
         f"/v1/GB/solar/regions/{region_id}/generation?end_utc={end}",
     )
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_region_uuid_outside_country_404(
+    foreign_region_client: AsyncClient,
+) -> None:
+    """A region UUID that exists but is not in the path country must not resolve."""
+    region_id = str(uuid4())
+    resp = await foreign_region_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast",
+    )
+    assert resp.status_code == 404
+    assert "GB" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_region_national_slug_still_resolves(
+    foreign_region_client: AsyncClient,
+) -> None:
+    """The nation is not enclosed by itself, so `national` must bypass the check."""
+    resp = await foreign_region_client.get("/v1/GB/solar/regions/national/forecast")
     assert resp.status_code == 200
 
 

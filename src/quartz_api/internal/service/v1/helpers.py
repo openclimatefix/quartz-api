@@ -241,17 +241,23 @@ async def resolve_region_id(
     """Resolve a region path param to an internal UUID.
 
     Resolution order:
-    1. "national" slug → nation UUID
-    2. Nation display name or internal name → nation UUID
-    3. Mapped display name (e.g. "friesland") → reverse-lookup to DP internal name, then search
-    4. Anything else → case-insensitive name search across all region types
+    1. A UUID → confirmed to sit within this country, then used as-is
+    2. "national" slug → nation UUID
+    3. Nation display name or internal name → nation UUID
+    4. Mapped display name (e.g. "friesland") → reverse-lookup to DP internal name, then search
+    5. Anything else → case-insensitive name search across all region types
+
+    A UUID is checked against the country like every other form. It used to be returned
+    the moment it parsed, which let a region UUID from one country resolve under another
+    country's path — the country permission is checked against the path, so that was the
+    one step between a single-country subscription and another country's data.
     """
     try:
-        return UUID(region_id)
+        candidate: UUID | None = UUID(region_id)
     except ValueError:
-        pass
+        candidate = None
 
-    # Need the nation for both "national" resolution and name search.
+    # Needed by every branch: the UUID check, "national", and the name search.
     nations = await db.get_locations(
         energy_type=energy_type,
         location_type=models.LocationType.NATION,
@@ -265,6 +271,25 @@ async def resolve_region_id(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"National region for '{cfg.nation_name}' not found.",
+        )
+
+    if candidate is not None:
+        if candidate == to_uuid(nation.uuid):
+            return candidate
+        within = await db.get_locations(
+            energy_type=energy_type,
+            location_type=None,
+            authdata={},
+            enclosing_location_uuid=to_uuid(nation.uuid),
+            location_uuid=candidate,
+        )
+        # Confirmed client-side rather than trusting the response to be empty, for the
+        # same reason the name search below re-checks its own filter.
+        if any(to_uuid(loc.uuid) == candidate for loc in within):
+            return candidate
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region '{region_id}' not found in {cfg.code}.",
         )
 
     if region_id == "national":
