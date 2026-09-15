@@ -45,6 +45,7 @@ from ..endpoint_types import (
     ValidWindowStart,
 )
 from ..helpers import (
+    api_facing_model_errors,
     check_country_access,
     internal_to_api_name,
     latest_capacity,
@@ -149,21 +150,22 @@ async def get_forecast(
     win_end = end_utc or now + dt.timedelta(days=2)
     validate_window(win_start, win_end)
     pgvs: list = []
-    for chunk_start, chunk_end in window_chunks(win_start, win_end):
-        pgvs.extend(
-            await db.get_predicted_generation(
-                location_uuid=resolved_id,
-                window_start=chunk_start,
-                window_end=chunk_end,
-                energy_type=source,
-                location_type=location_type,
-                authdata={},  # TODO: add auth when loosed on DP side
-                created_cutoff=creation_limit_utc,
-                forecast_horizon_minutes=horizon_minutes or 0,
-                forecaster_name=model_name,
-                forecaster_version=model_version,
-            ),
-        )
+    with api_facing_model_errors(model_name, rt):
+        for chunk_start, chunk_end in window_chunks(win_start, win_end):
+            pgvs.extend(
+                await db.get_predicted_generation(
+                    location_uuid=resolved_id,
+                    window_start=chunk_start,
+                    window_end=chunk_end,
+                    energy_type=source,
+                    location_type=location_type,
+                    authdata={},  # TODO: add auth when loosed on DP side
+                    created_cutoff=creation_limit_utc,
+                    forecast_horizon_minutes=horizon_minutes or 0,
+                    forecaster_name=model_name,
+                    forecaster_version=model_version,
+                ),
+            )
 
     if location_type == models.LocationType.NATION:
         pgvs = eclipse.adjust_predicted_generation(pgvs, country.code)
@@ -260,16 +262,17 @@ async def get_forecast_last_updated_timestamp(
     model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
     now = dt.datetime.now(tz=dt.UTC)
-    pgvs = await db.get_predicted_generation(
-        location_uuid=resolved_id,
-        window_start=now - dt.timedelta(minutes=30),
-        window_end=now + dt.timedelta(minutes=30),
-        energy_type=source,
-        location_type=location_type,
-        authdata={},  # TODO: add auth when loosed on DP side
-        forecaster_name=model_name,
-        forecaster_version=model_version,
-    )
+    with api_facing_model_errors(model_name, rt):
+        pgvs = await db.get_predicted_generation(
+            location_uuid=resolved_id,
+            window_start=now - dt.timedelta(minutes=30),
+            window_end=now + dt.timedelta(minutes=30),
+            energy_type=source,
+            location_type=location_type,
+            authdata={},  # TODO: add auth when loosed on DP side
+            forecaster_name=model_name,
+            forecaster_version=model_version,
+        )
     if not pgvs:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

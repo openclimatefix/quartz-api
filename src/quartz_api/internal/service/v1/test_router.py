@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import ASGITransport, AsyncClient
@@ -21,7 +21,7 @@ from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES, FM, RegionTypeConfig
-from .helpers import resolve_forecast_model
+from .helpers import api_facing_model_errors, resolve_forecast_model
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -1527,6 +1527,21 @@ async def test_unknown_region_name_on_period_400(client: AsyncClient) -> None:
     assert resp.status_code in (400, 503)
     if resp.status_code == 400:
         assert "nope_zz" in resp.json()["detail"]
+
+
+def test_pinned_version_error_names_the_api_model() -> None:
+    """The 404 must name `blend`, not the internal `blend_adjust` behind it."""
+    rt = COUNTRIES["GB"].get_region_type("national")
+    raiser = HTTPException(
+        status_code=404,
+        detail="Forecast model 'blend_adjust' has no version '9.9.9'.",
+    )
+    with pytest.raises(HTTPException) as excinfo, api_facing_model_errors(
+        "blend_adjust", rt,
+    ):
+        raise raiser
+    assert "'blend'" in excinfo.value.detail
+    assert "blend_adjust" not in excinfo.value.detail
 
 
 @pytest.mark.anyio

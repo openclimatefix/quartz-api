@@ -5,6 +5,7 @@
 import contextlib
 import datetime as dt
 import json
+from collections.abc import Iterator
 from uuid import UUID
 
 import pandas as pd
@@ -454,6 +455,33 @@ def internal_to_api_name(
         return internal_name
     fm = rt.get_model_by_internal_name(internal_name)
     return fm.api_name if fm else internal_name
+
+
+@contextlib.contextmanager
+def api_facing_model_errors(
+    internal_name: str | None,
+    rt: RegionTypeConfig | None,
+) -> Iterator[None]:
+    """Rewrite an internal forecaster name in a 404 detail to the name the caller used.
+
+    Pinning an unknown `model_version` is only caught by the platform, which raises
+    naming the forecaster it was given. That is the internal name, so asking for
+    `model_name=blend` came back as "Forecast model 'blend_adjust' has no version",
+    naming something the caller cannot pass back. The backend keeps the internal name
+    because v0 has no separate user-facing one.
+    """
+    try:
+        yield
+    except HTTPException as e:
+        if (
+            e.status_code == status.HTTP_404_NOT_FOUND
+            and internal_name
+            and isinstance(e.detail, str)
+        ):
+            api_name = internal_to_api_name(internal_name, rt)
+            if api_name and api_name != internal_name:
+                e.detail = e.detail.replace(f"'{internal_name}'", f"'{api_name}'")
+        raise
 
 
 def timeseries_window(
