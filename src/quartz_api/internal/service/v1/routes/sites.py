@@ -10,7 +10,6 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
-
 from quartz_api.internal.service.sites.endpoint_types import (
     ActualPower,
     PredictedPower,
