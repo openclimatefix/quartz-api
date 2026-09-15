@@ -93,6 +93,7 @@ async def get_forecast(
     ),
     horizon_minutes: int | None = Query(
         None,
+        ge=0,
         description=(
             "Forecast horizon filter in minutes. For example, `60` returns only "
             "the 1-hour-ahead forecast value for each target timestep."
@@ -116,7 +117,8 @@ async def get_forecast(
     Returns a time series of forecast values (power in kW at 30-minute resolution)
     along with model metadata (name, version, creation time, initialisation time).
 
-    By default the window runs from **now** to **48 hours ahead**. Use `start_utc` /
+    By default the window runs from **now** to **up to 48 hours ahead**, though a
+    response reaches only as far as the latest model run does. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
     """
     model_name = resolve_model_param(model_name, model)
@@ -137,7 +139,9 @@ async def get_forecast(
     region = locs[0]
     location_type = region.location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    validate_model(model_name, rt, location_type.name)
+    # The region type slug the caller knows, not the internal LocationType enum
+    # name, which reads 'GSP' where the API says 'gsp'.
+    validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
     model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
     now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
@@ -250,7 +254,9 @@ async def get_forecast_last_updated_timestamp(
         )
     location_type = locs[0].location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
-    validate_model(model_name, rt, location_type.name)
+    # The region type slug the caller knows, not the internal LocationType enum
+    # name, which reads 'GSP' where the API says 'gsp'.
+    validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
     model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
     now = dt.datetime.now(tz=dt.UTC)
@@ -300,7 +306,11 @@ async def get_forecasts_at_time(
     ),
     time_utc: dt.datetime | None = Query(
         None,
-        description="Forecast target time (UTC). Defaults to now floored to 30 minutes.",
+        description=(
+            "Forecast target time (UTC). Rounded down to the half hour, since that is "
+            "the resolution forecasts are published at; the `time_utc` in the response "
+            "is the timestamp actually used. Defaults to now."
+        ),
     ),
 ) -> ForecastSnapshot:
     """Get forecasts for all regions of a given type at a specific time.
@@ -344,7 +354,11 @@ async def get_forecasts_at_time(
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
-    snapshot_time = time_utc or pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    # Floored whether supplied or defaulted: values exist only on the half hour, so an
+    # unfloored timestamp matched nothing and came back as an empty snapshot.
+    snapshot_time = (
+        pd.Timestamp(time_utc) if time_utc is not None else pd.Timestamp.utcnow()
+    ).floor("30min").to_pydatetime()
     if snapshot_time.tzinfo is None:
         snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
 
@@ -505,6 +519,21 @@ async def get_forecasts_period(
             if r.name.lower() in name_set
             or location_display_name(r, country).lower() in name_set
         ]
+        # A name that matches nothing used to be dropped silently, so a typo came back
+        # as a 200 with fewer regions than were asked for, or none at all.
+        found = {r.name.lower() for r in regions} | {
+            location_display_name(r, country).lower() for r in regions
+        }
+        unknown = sorted(n for n in region_names if n.lower() not in found)
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"No {region_type} region in {country.code} named: "
+                    f"{unknown}. Use GET /{country.code}/{source.name.lower()}/regions"
+                    f"?region_type={region_type} to list them."
+                ),
+            )
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []

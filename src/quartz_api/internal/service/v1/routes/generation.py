@@ -32,7 +32,7 @@ from ..endpoint_types import (
     RegionGeneration,
     RegionGenerationMatrix,
     RegionGenerationValue,
-    ValidDetail,
+    ValidGenerationDetail,
     ValidObserver,
     ValidPeriodRegionType,
     ValidRegion,
@@ -74,7 +74,7 @@ async def get_generation(
     auth: AuthDependency,
     observer_name: ValidObserver = None,
     observer: DeprecatedObserver = None,
-    detail: ValidDetail = DetailLevel.values,
+    detail: ValidGenerationDetail = DetailLevel.values,
     start_utc: ValidWindowStart = None,
     end_utc: ValidWindowEnd = None,
 ) -> GenerationResponse:
@@ -170,8 +170,10 @@ async def get_generation_at_timestamp(
     time_utc: dt.datetime | None = Query(
         None,
         description=(
-            "Observation target time (UTC). Defaults to the most recent available "
-            "timestamp within the last 6 hours."
+            "Observation target time (UTC). Rounded down to the half hour, since that "
+            "is the resolution observations are published at; the `time_utc` in the "
+            "response is the timestamp actually used. Defaults to the most recent "
+            "available timestamp within the last 6 hours."
         ),
     ),
 ) -> GenerationSnapshot:
@@ -216,7 +218,13 @@ async def get_generation_at_timestamp(
         )
 
     if time_utc is not None:
-        snapshot_time = time_utc if time_utc.tzinfo else time_utc.replace(tzinfo=dt.UTC)
+        # Floored for the same reason as the forecast snapshot: observations exist only
+        # on the half hour, so an unfloored timestamp matched nothing.
+        snapshot_time = (
+            pd.Timestamp(time_utc).tz_localize(dt.UTC)
+            if time_utc.tzinfo is None
+            else pd.Timestamp(time_utc)
+        ).floor("30min").to_pydatetime()
     else:
         # Probe a single region to find the latest available timestamp (up to 6h back).
         # Pick the region with the highest gsp_id (most likely to have recent data) or
@@ -376,6 +384,21 @@ async def get_generation_period(
             if r.name.lower() in name_set
             or location_display_name(r, country).lower() in name_set
         ]
+        # A name that matches nothing used to be dropped silently, so a typo came back
+        # as a 200 with fewer regions than were asked for, or none at all.
+        found = {r.name.lower() for r in regions} | {
+            location_display_name(r, country).lower() for r in regions
+        }
+        unknown = sorted(n for n in region_names if n.lower() not in found)
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"No {region_type} region in {country.code} named: "
+                    f"{unknown}. Use GET /{country.code}/{source.name.lower()}/regions"
+                    f"?region_type={region_type} to list them."
+                ),
+            )
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []
