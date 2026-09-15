@@ -49,6 +49,7 @@ from ..helpers import (
     location_display_name,
     parse_forecast_metadata,
     plevel_sort_key,
+    region_metadata,
     resolve_forecast_model,
     resolve_model_param,
     resolve_nation,
@@ -173,6 +174,7 @@ async def get_forecast(
         last_updated_utc=last_updated,
         latest_init_utc=latest_init,
         horizon_minutes=horizon_minutes,
+        metadata=region_metadata(region, detail),
         values=[_forecast_value(v, rt, detail) for v in pgvs],
     )
 

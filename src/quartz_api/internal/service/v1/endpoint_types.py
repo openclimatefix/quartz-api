@@ -383,6 +383,9 @@ class ForecastResponse(BaseModel):
             "Effective capacity at the last target time in the response. Capacity varies "
             "over time, so on a long window earlier values may have had a different one — "
             "use `detail=runs` for per-value capacity."
+            "N.B. this is now `effective` rather than the `installed` that was provided "
+            "through the v0 API; this is still available if needed through metadata, but "
+            "prefer this value as this is what we use internally to train and normalize by."
         ),
     )
     model_name: str | None = Field(
@@ -407,6 +410,17 @@ class ForecastResponse(BaseModel):
     horizon_minutes: int | None = Field(
         default=None,
         description="Echo of the requested `horizon_minutes` filter, if any.",
+    )
+    metadata: dict | None = Field(
+        default=None,
+        description=(
+            "Region-level extras, returned only when `detail=full`. Carries "
+            "`installed_capacity_kW` where the platform has one: the capacity before "
+            "degradation, which is what v0 reported as `installedCapacityMw` and what "
+            "PV Live publishes. It is a few percent higher than `capacity_kW` (effective) "
+            "and is **not** what the forecast is normalised against — prefer `capacity_kW`. "
+            "Retained for convenient reference and migration from v0."
+        ),
     )
     values: list[ForecastValue]
 
@@ -437,6 +451,17 @@ class GenerationResponse(BaseModel):
     observer_name: str | None = Field(
         default=None,
         description="Observer the values were recorded by, e.g. `pvlive_in_day`.",
+    )
+    metadata: dict | None = Field(
+        default=None,
+        description=(
+            "Region-level extras, returned only when `detail=full`. Carries "
+            "`installed_capacity_kW` where the platform has one: the capacity before "
+            "degradation, which is what v0 reported as `installedCapacityMw` and what "
+            "PV Live publishes. It is a few percent higher than `capacity_kW` and is "
+            "**not** what the forecast is normalised against — prefer `capacity_kW`. "
+            "Retained for migration from v0."
+        ),
     )
     values: list[GenerationValue]
 

@@ -98,13 +98,30 @@ def location_to_detail(
     )
     # Filter for explicitly permitted properties
     allowed = rt.metadata_fields if rt else ()
+    metadata: dict = {k: v for k, v in loc.metadata.items() if k in allowed}
+    installed = installed_capacity_kw(loc)
+    if installed is not None:
+        metadata["installed_capacity_kW"] = installed
     return RegionDetail(
         name=location_display_name(loc, country_cfg),
         type=rt.type if rt else None,
         capacity_kW=loc.capacity_kilowatts,
         centroid=Centroid(lat=loc.latitude, lng=loc.longitude),
-        metadata={k: v for k, v in loc.metadata.items() if k in allowed},
+        metadata=metadata,
     )
+
+
+def installed_capacity_kw(loc: models.Location) -> float | None:
+    """Return the location's capacity before degradation, if the platform has one.
+
+    This is what v0 reported as `installedCapacityMw` and what PV Live publishes. It is
+    not what the forecast is normalised against — `capacity_kW` is — and it is a few
+    percent higher, so it is kept out of the top level and named explicitly. Returns
+    `None` where the platform has no such figure, rather than quietly falling back to
+    the effective capacity and reporting one number as the other.
+    """
+    raw = loc.metadata.get("capacity_no_degradation_kw")
+    return float(raw) if isinstance(raw, (int, float)) else None
 
 
 def to_uuid(val: str | UUID) -> UUID:
@@ -462,3 +479,15 @@ def sort_plevels(plevels: dict) -> dict:
     keep insertion order, so ordering them here is what the caller sees.
     """
     return {k: plevels[k] for k in sorted(plevels, key=plevel_sort_key)}
+
+
+def region_metadata(loc: models.Location, detail: object) -> dict | None:
+    """Region-level extras for a time-series wrapper, only at the `full` detail level.
+
+    Installed capacity is deliberately awkward to reach: it is not the number the
+    forecast uses, so a caller has to ask for it by name rather than meet it by default.
+    """
+    if str(detail) != "full":
+        return None
+    installed = installed_capacity_kw(loc)
+    return {"installed_capacity_kW": installed} if installed is not None else None

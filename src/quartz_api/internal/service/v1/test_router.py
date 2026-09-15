@@ -2708,3 +2708,90 @@ def test_plevel_sort_key_keeps_unrecognised_names() -> None:
     ordered = sort_plevels({"p90": 1.0, "median": 2.0, "p10": 3.0})
     assert list(ordered) == ["p10", "p90", "median"]
 
+
+class InstalledCapacityClient(MultiRunForecastClient):
+    """Locations carry `capacity_no_degradation_kw`, as GB's do on the platform."""
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+    ) -> list[models.Location]:
+        locations = await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+        )
+        for loc in locations:
+            loc.metadata = {**loc.metadata, "capacity_no_degradation_kw": 23_963_209.0}
+        return locations
+
+
+@pytest.mark.anyio
+async def test_region_exposes_installed_capacity_in_metadata(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The undegraded figure is reachable, but a level down from `capacity_kW`."""
+    regions = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions?region_type=national",
+    )
+    region = regions[0]
+    assert region["metadata"]["installed_capacity_kW"] == 23_963_209.0
+    assert region["capacity_kW"] != region["metadata"]["installed_capacity_kW"]
+
+
+@pytest.mark.anyio
+async def test_region_omits_installed_capacity_when_platform_has_none(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """No key at all rather than echoing the effective capacity under another name."""
+    regions = await _get(
+        MultiRunForecastClient(),
+        "/v1/GB/solar/regions?region_type=national",
+    )
+    assert "installed_capacity_kW" not in regions[0].get("metadata", {})
+
+
+@pytest.mark.anyio
+async def test_forecast_installed_capacity_requires_detail_full(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """It has to be asked for by name — the default response never mentions it."""
+    default = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast",
+    )
+    runs = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=runs",
+    )
+    full = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/forecast?detail=full",
+    )
+    assert "metadata" not in default
+    assert "metadata" not in runs
+    assert full["metadata"]["installed_capacity_kW"] == 23_963_209.0
+
+
+@pytest.mark.anyio
+async def test_generation_installed_capacity_requires_detail_full(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """Same gate on the generation wrapper."""
+    default = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/generation",
+    )
+    full = await _get(
+        InstalledCapacityClient(),
+        "/v1/GB/solar/regions/national/generation?detail=full",
+    )
+    assert "metadata" not in default
+    assert full["metadata"]["installed_capacity_kW"] == 23_963_209.0

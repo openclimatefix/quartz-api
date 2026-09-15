@@ -42,6 +42,7 @@ from ..helpers import (
     check_country_access,
     latest_capacity,
     location_display_name,
+    region_metadata,
     resolve_nation,
     resolve_region_id,
     timeseries_window,
@@ -132,6 +133,7 @@ async def get_generation(
         region_name=location_display_name(region, country),
         capacity_kW=latest_capacity(agvs),
         observer_name=observer,
+        metadata=region_metadata(region, detail),
         values=[
             GenerationValue(
                 time_utc=v.valid_timestamp,
