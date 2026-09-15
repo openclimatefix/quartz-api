@@ -15,6 +15,7 @@ from starlette import status
 from quartz_api.internal import eclipse, models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
     forecast_cache_warming,
     forecast_period_base_key,
@@ -544,7 +545,7 @@ async def refresh_forecasts_cache(
 
     Requires the `ocf:admin` permission scope.
     """
-    if "ocf:admin" not in auth.get("permissions", []):
+    if ADMIN_PERMISSION not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}"
     if forecast_cache_warming.get(flag_key):

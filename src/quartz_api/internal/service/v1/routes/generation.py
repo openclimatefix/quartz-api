@@ -15,6 +15,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
     generation_cache_warming,
     generation_period_base_key,
@@ -430,7 +431,7 @@ async def refresh_generation_cache(
 
     Requires the `ocf:admin` permission scope.
     """
-    if "ocf:admin" not in auth.get("permissions", []):
+    if ADMIN_PERMISSION not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     dp_observer = country.resolve_observer(observer)
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{dp_observer}"
