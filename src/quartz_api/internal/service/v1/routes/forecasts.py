@@ -47,6 +47,7 @@ from ..endpoint_types import (
 from ..helpers import (
     api_facing_model_errors,
     check_country_access,
+    fetch_api_region,
     internal_to_api_name,
     latest_capacity,
     latest_run_timestamps,
@@ -126,18 +127,7 @@ async def get_forecast(
     is_intraday_only = not check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
-    locs = await db.get_locations(
-        energy_type=source,
-        location_type=None,
-        authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=resolved_id,
-    )
-    if len(locs) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{resolved_id}' not found.",
-        )
-    region = locs[0]
+    region = await fetch_api_region(resolved_id, country, source, db)
     location_type = region.location_type or models.LocationType.NATION
     rt = country.location_type_to_region_type(location_type)
     # The region type slug the caller knows, not the internal LocationType enum

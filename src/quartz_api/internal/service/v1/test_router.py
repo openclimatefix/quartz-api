@@ -147,7 +147,9 @@ class SiteBearingClient(StorageClient):
                     location_type=models.LocationType.NATION,
                 ),
             ]
-        if location_type is None and enclosing_location_uuid is not None:
+        # Any untyped lookup, with or without an enclosing filter: the platform
+        # returns whatever that UUID or name is, region or not.
+        if location_type is None:
             locs = [
                 models.Location(
                     uuid=self.GSP_UUID, name="a_real_gsp", latitude=51.0, longitude=-1.0,
@@ -1542,6 +1544,25 @@ def test_pinned_version_error_names_the_api_model() -> None:
         raise raiser
     assert "'blend'" in excinfo.value.detail
     assert "blend_adjust" not in excinfo.value.detail
+
+
+@pytest.mark.anyio
+async def test_fetch_api_region_rejects_a_site_on_its_own() -> None:
+    """The fetch gate must hold without relying on resolution having checked first."""
+    from .helpers import fetch_api_region
+
+    db = SiteBearingClient()
+    cfg = COUNTRIES["GB"]
+    region = await fetch_api_region(
+        SiteBearingClient.GSP_UUID, cfg, models.EnergyType.SOLAR, db,
+    )
+    assert region.name == "a_real_gsp"
+
+    with pytest.raises(HTTPException) as excinfo:
+        await fetch_api_region(
+            SiteBearingClient.SITE_UUID, cfg, models.EnergyType.SOLAR, db,
+        )
+    assert excinfo.value.status_code == 404
 
 
 @pytest.mark.anyio

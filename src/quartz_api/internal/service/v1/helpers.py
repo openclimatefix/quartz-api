@@ -247,6 +247,35 @@ def validate_model(
         )
 
 
+async def fetch_api_region(
+    region_uuid: UUID,
+    cfg: CountryConfig,
+    energy_type: models.EnergyType,
+    db: models.StorageInterface,
+) -> models.Location:
+    """Fetch a region by UUID, 404ing if it is not a region this country exposes.
+
+    The type check is deliberately repeated here rather than left to
+    `resolve_region_id`. Both are lookups by UUID with no location type, and the
+    platform will happily return a site or a substation for one. Keeping the check at
+    the point of fetch means a new caller cannot reintroduce the hole by resolving an
+    id some other way, and it is the same single call either way.
+    """
+    locs = await db.get_locations(
+        energy_type=energy_type,
+        location_type=None,
+        authdata={},  # TODO: add auth when loosed on DP side
+        location_uuid=region_uuid,
+    )
+    region = next((loc for loc in locs if is_api_region(loc, cfg)), None)
+    if region is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Region '{region_uuid}' not found in {cfg.code}.",
+        )
+    return region
+
+
 async def resolve_region_id(
     region_id: str,
     cfg: CountryConfig,

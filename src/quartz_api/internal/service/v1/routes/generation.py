@@ -43,6 +43,7 @@ from ..endpoint_types import (
 )
 from ..helpers import (
     check_country_access,
+    fetch_api_region,
     latest_capacity,
     location_display_name,
     region_metadata,
@@ -101,18 +102,7 @@ async def get_generation(
     )
     resolved_id = await resolve_region_id(region, country, source, db)
 
-    locs = await db.get_locations(
-        energy_type=source,
-        location_type=None,
-        authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=resolved_id,
-    )
-    if len(locs) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{resolved_id}' not found.",
-        )
-    region = locs[0]
+    region = await fetch_api_region(resolved_id, country, source, db)
     location_type = region.location_type or models.LocationType.NATION
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()

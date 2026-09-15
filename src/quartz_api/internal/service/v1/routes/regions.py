@@ -20,6 +20,7 @@ from ..endpoint_types import (
 from ..helpers import (
     check_country_access,
     check_region_type,
+    fetch_api_region,
     is_api_region,
     location_to_detail,
     resolve_nation,
@@ -191,15 +192,5 @@ async def get_region(
     check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
-    locs = await db.get_locations(
-        energy_type=source,
-        location_type=None,
-        authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=resolved_id,
-    )
-    if len(locs) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{resolved_id}' not found.",
-        )
-    return location_to_detail(locs[0], country)
+    region = await fetch_api_region(resolved_id, country, source, db)
+    return location_to_detail(region, country)
