@@ -675,6 +675,7 @@ class RegionGenerationMatrix(BaseModel):
 
 class BaseSiteMetadata(BaseModel):
     """Fields common to every source for now its empty might be added later."""
+
     model_config = ConfigDict(extra="allow")
 
 
