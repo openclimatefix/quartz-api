@@ -18,6 +18,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import (
+    COUNTRIES,
     CountryConfig,
     ForecastModel,
     RegionTypeConfig,
@@ -594,6 +595,62 @@ def latest_capacity(values: list) -> float:
     return max(values, key=lambda v: v.valid_timestamp).capacity_kilowatts
 
 
+def _build_internal_to_api_model_names() -> dict[str, str]:
+    """Map every internal DP forecaster name to the name the API exposes it under.
+
+    Derived from the model registry rather than written out, so a model added to
+    `country_config` is covered without a second list to keep in step. Both the plain
+    and `_adjust` internal names map to the same API name, which is what the adjuster
+    being a parameter means.
+    """
+    mapping: dict[str, str] = {}
+    for cfg in COUNTRIES.values():
+        for rt in cfg.region_types:
+            for fm in rt.forecast_models:
+                for internal in (fm.name, fm.adjust_name):
+                    if internal:
+                        mapping[internal] = fm.api_name
+    return mapping
+
+
+_INTERNAL_TO_API_MODEL_NAMES = _build_internal_to_api_model_names()
+
+
+def _translate_model_names_in(metadata: dict) -> dict:
+    """Translate the model names in one dict, recursing into what it holds."""
+    renamed = {k: _INTERNAL_TO_API_MODEL_NAMES.get(k, k) for k in metadata}
+    # Two internal names can share one API name (a model and its `_adjust` variant).
+    # Renaming both would drop one entry, so where a target is not unique within
+    # this dict, those keys keep the names the forecaster gave them.
+    counts: dict[str, int] = {}
+    for target in renamed.values():
+        counts[target] = counts.get(target, 0) + 1
+    return {
+        (target if counts[target] == 1 else key): _translate_model_names(val)
+        for (key, val), target in zip(metadata.items(), renamed.values(), strict=True)
+    }
+
+
+def _translate_model_names(value: object) -> object:
+    """Rewrite internal forecaster names to their API names, anywhere in the metadata.
+
+    The forecaster writes its own metadata, so it uses the platform's names: `blend`'s
+    `app_version` is keyed by the models that contributed to it, under names like
+    `pvnet_day_ahead`. Those are not names a caller can pass back to us, which is the
+    same leak as naming the internal forecaster in an error.
+
+    Applied to keys and to string values, and only on an exact match against a known
+    name, so anything else passes through untouched.
+    """
+    if isinstance(value, dict):
+        return _translate_model_names_in(value)
+    if isinstance(value, list):
+        return [_translate_model_names(v) for v in value]
+    if isinstance(value, str):
+        return _INTERNAL_TO_API_MODEL_NAMES.get(value, value)
+    return value
+
+
 def parse_forecast_metadata(metadata: dict) -> dict | None:
     """Return the forecaster's metadata dict with `app_version` parsed into an object.
 
@@ -610,7 +667,7 @@ def parse_forecast_metadata(metadata: dict) -> dict | None:
     if isinstance(raw, str):
         with contextlib.suppress(json.JSONDecodeError):
             parsed["app_version"] = json.loads(raw)
-    return parsed
+    return _translate_model_names_in(parsed)
 
 
 def plevel_sort_key(name: str) -> tuple[int, str]:
