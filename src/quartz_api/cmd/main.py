@@ -434,22 +434,52 @@ def _create_v1_app(
             custom_css="""
                       /* override theme colours */
                       :root .dark-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
                       }
                       :root .light-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
                       }
                       /* target the authorize button specifically */
                       .dark-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
                         background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
+                        color: #000 !important;
                         border-color: transparent !important;
                       }
                       .light-mode .scalar-button:not(.scalar-button-ghost),
                       .show-api-client-button {
                         background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
+                        color: #000 !important;
                         border-color: transparent !important;
+                      }
+                      /* Scalar has no logo option (`x-logo` is Redoc-only), so the
+                         logo is drawn above the sidebar search. The sidebar is a
+                         flex column, so this sits as its first item. */
+                      aside.t-doc__sidebar::before {
+                        content: "";
+                        display: block;
+                        flex-shrink: 0;
+                        height: 32px;
+                        margin: 20px 20px 8px;
+                        background: url("/static/logo-ocf.svg") left center / contain
+                          no-repeat;
                       }
                       /* hide "Open in API Client" Scalar link in Sidebar */
                       aside a.open-api-client-button {
