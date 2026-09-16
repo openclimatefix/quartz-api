@@ -21,7 +21,7 @@ from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES, FM, RegionTypeConfig
-from .helpers import api_facing_model_errors, resolve_forecast_model
+from .helpers import api_facing_model_errors, parse_forecast_metadata, resolve_forecast_model
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -1565,6 +1565,75 @@ async def test_fetch_api_region_rejects_a_site_on_its_own() -> None:
     assert excinfo.value.status_code == 404
 
 
+def test_metadata_model_names_are_translated() -> None:
+    """Internal forecaster names in the metadata are rewritten to their API names."""
+    md = parse_forecast_metadata({
+        "app_version": json.dumps({
+            "pvnet_v2": "2.3.1",
+            "pvnet_day_ahead": "1.0.4",
+            "blend": "4.1.0",
+            "not_a_model": "x",
+        }),
+        "forecaster": "pvnet_sat_only",
+        "nwp_last_updated": "2026-09-15T04:00:00Z",
+    })
+    assert md is not None
+    assert md["app_version"] == {
+        "ecmwf_mo_sat_8h": "2.3.1",
+        "ecmwf_mo": "1.0.4",
+        "blend": "4.1.0",
+        "not_a_model": "x",
+    }
+    # string values too, not just keys
+    assert md["forecaster"] == "sat_8h"
+    # anything that is not a model name is left exactly as the forecaster wrote it
+    assert md["nwp_last_updated"] == "2026-09-15T04:00:00Z"
+
+
+def test_metadata_translation_keeps_colliding_names() -> None:
+    """A model and its `_adjust` variant share one API name, so neither is dropped."""
+    md = parse_forecast_metadata(
+        {"app_version": json.dumps({"pvnet_v2": "1", "pvnet_v2_adjust": "2"})},
+    )
+    assert md is not None
+    assert md["app_version"] == {"pvnet_v2": "1", "pvnet_v2_adjust": "2"}
+
+
+def test_metadata_translation_survives_odd_shapes() -> None:
+    """Nested and non-string values must not trip the walk."""
+    md = parse_forecast_metadata({
+        "app_version": json.dumps({"models": ["pvnet_ecmwf", "blend"], "runs": 3}),
+        "ratio": 0.5,
+        "flag": True,
+    })
+    assert md is not None
+    assert md["app_version"] == {"models": ["ecmwf", "blend"], "runs": 3}
+    assert md["ratio"] == 0.5
+    assert md["flag"] is True
+
+
+def test_metadata_translation_covers_every_configured_model() -> None:
+    """No internal name should reach a caller. Guards a model added without a mapping."""
+    internal = {
+        name
+        for cfg in COUNTRIES.values()
+        for rt in cfg.region_types
+        for fm in rt.forecast_models
+        for name in (fm.name, fm.adjust_name)
+        if name
+    }
+    api_names = {
+        fm.api_name
+        for cfg in COUNTRIES.values()
+        for rt in cfg.region_types
+        for fm in rt.forecast_models
+    }
+    for name in internal:
+        md = parse_forecast_metadata({"forecaster": name})
+        assert md is not None
+        assert md["forecaster"] in api_names, f"{name} was not translated"
+
+
 @pytest.mark.anyio
 async def test_get_region_generation_time_window(client: AsyncClient) -> None:
     """Explicit start_utc + end_utc window is forwarded — endpoint returns 200."""
@@ -2980,7 +3049,10 @@ async def test_forecast_detail_full_parses_app_version(
         "/v1/GB/solar/regions/national/forecast?detail=full",
     )
     metadata = body["values"][0]["metadata"]
-    assert metadata["app_version"] == {"blend": "1.2.22", "pvnet_v2": "3.0.1"}
+    # `pvnet_v2` is the platform's name for the model the API calls `ecmwf_mo_sat_8h`.
+    # The forecaster writes its own metadata, so it uses platform names; they are
+    # translated on the way out, since a caller cannot pass them back.
+    assert metadata["app_version"] == {"blend": "1.2.22", "ecmwf_mo_sat_8h": "3.0.1"}
     assert metadata["nwp_last_updated"] == "2026-09-06T23:12:33+00:00"
 
 

@@ -470,10 +470,13 @@ class ForecastValue(BaseModel):
     metadata: dict | None = Field(
         default=None,
         description=(
-            "Passthrough of the forecaster's own metadata, including when each input "
-            "data source was last ingested. Keys vary by model and are not a stable "
-            "contract, and will be replaced by a typed structure once all models run "
-            "through one pipeline. Returned only when `detail=full`."
+            "The forecaster's own metadata, including when each input data source was "
+            "last ingested. Keys vary by model and are not a stable contract, and will "
+            "be replaced by a typed structure once all models run through one pipeline. "
+            "Passed through as the forecaster wrote it, with two exceptions: "
+            "`app_version` is parsed from the string the pipeline emits into an object, "
+            "and any model name is given as the name this API uses for it rather than "
+            "the platform's internal one. Returned only when `detail=full`."
         ),
     )
 

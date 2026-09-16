@@ -393,7 +393,21 @@ def _create_v1_app(
         # already allow as a callback, so it needs no new registration.
         page_auth = copy.deepcopy(scalar_auth)
         if page_auth:
-            redirect_uri = str(request.url.replace(query="", fragment=""))
+            # X-Forwarded-Proto, not request.url.scheme. Behind the load balancer TLS
+            # is terminated upstream and the app is spoken to over http, so the scheme
+            # on the request is http even though the browser is on https. gunicorn's
+            # UvicornWorker only honours the forwarded header from `forwarded_allow_ips`,
+            # which defaults to loopback, so it is ignored in a deployment and correct
+            # by accident locally, where there is no proxy at all.
+            #
+            # The value has to be the URL the browser is actually on: Auth0 matches it
+            # against the registered callback, and it is what the token exchange is
+            # checked against.
+            forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0]
+            page_url = request.url.replace(query="", fragment="")
+            if forwarded_proto in ("http", "https"):
+                page_url = page_url.replace(scheme=forwarded_proto)
+            redirect_uri = str(page_url)
             # Merged into the flow rather than assigned over it: the same block carries
             # the client id and the pre-ticked scopes, and replacing it drops both.
             flow = page_auth["securitySchemes"]["oauth2"]["flows"]["authorizationCode"]
