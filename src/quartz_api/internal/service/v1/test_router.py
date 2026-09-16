@@ -2199,6 +2199,32 @@ async def test_nl_forecast_snapshot(nl_client: AsyncClient) -> None:
     assert "values" in resp.json()
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind", ["forecasts", "generation"])
+async def test_nl_snapshot_keeps_quarter_hours(nl_client: AsyncClient, kind: str) -> None:
+    """NL is quarter-hourly; a GB-style half-hour floor turned 12:45 into 12:30."""
+    resp = await nl_client.get(
+        f"/v1/NL/solar/{kind}/snapshot?region_type=national&time_utc=2026-09-15T12:52:00Z",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time_utc"] == "2026-09-15T12:45:00Z"
+
+
+@pytest.mark.parametrize(
+    ("code", "given", "expected"),
+    [
+        ("GB", dt.datetime(2026, 9, 15, 12, 47, tzinfo=dt.UTC), "12:30"),
+        ("NL", dt.datetime(2026, 9, 15, 12, 47, tzinfo=dt.UTC), "12:45"),
+        ("NL", dt.datetime(2026, 9, 15, 12, 14), "12:00"),  # noqa: DTZ001 - naive on purpose
+    ],
+)
+def test_floor_to_time_step(code: str, given: dt.datetime, expected: str) -> None:
+    floored = COUNTRIES[code].floor_to_time_step(given)
+    assert floored.tzinfo is not None
+    assert floored.utcoffset() == dt.timedelta(0)
+    assert floored.strftime("%H:%M") == expected
+
+
 # ---------------------------------------------------------------------------
 # Config invariants
 

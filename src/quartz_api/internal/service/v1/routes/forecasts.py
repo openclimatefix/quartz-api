@@ -120,8 +120,8 @@ async def get_forecast(
 ) -> ForecastResponse:
     """Get the solar generation forecast for a specific region.
 
-    Returns a time series of forecast values (power in kW at 30-minute resolution)
-    along with model metadata (name, version, creation time, initialisation time).
+    Returns a time series of forecast values (power in kW) along with model metadata
+    (name, version, creation time, initialisation time).
 
     By default the window runs from **now** to **up to 48 hours ahead**, though a
     response reaches only as far as the latest model run does. Use `start_utc` /
@@ -306,9 +306,9 @@ async def get_forecasts_at_time(
     time_utc: dt.datetime | None = Query(
         None,
         description=(
-            "Forecast target time (UTC). Rounded down to the half hour, since that is "
-            "the resolution forecasts are published at; the `time_utc` in the response "
-            "is the timestamp actually used. Defaults to now."
+            "Forecast target time (UTC). Rounded down to the country's time step "
+            "(e.g. 30 minutes for GB, 15 for NL); the `time_utc` in the response is "
+            "the timestamp actually used. Defaults to now."
         ),
     ),
 ) -> ForecastSnapshot:
@@ -353,13 +353,11 @@ async def get_forecasts_at_time(
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
 
-    # Floored whether supplied or defaulted: values exist only on the half hour, so an
-    # unfloored timestamp matched nothing and came back as an empty snapshot.
-    snapshot_time = (
-        pd.Timestamp(time_utc) if time_utc is not None else pd.Timestamp.utcnow()
-    ).floor("30min").to_pydatetime()
-    if snapshot_time.tzinfo is None:
-        snapshot_time = snapshot_time.replace(tzinfo=dt.UTC)
+    # Floored whether supplied or defaulted: values exist only on the country's time
+    # step, so an unfloored timestamp matched nothing and came back as an empty snapshot.
+    snapshot_time = country.floor_to_time_step(
+        time_utc if time_utc is not None else dt.datetime.now(tz=dt.UTC),
+    )
 
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[to_uuid(r.uuid) for r in regions],

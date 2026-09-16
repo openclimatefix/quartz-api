@@ -165,10 +165,10 @@ async def get_generation_at_timestamp(
     time_utc: dt.datetime | None = Query(
         None,
         description=(
-            "Observation target time (UTC). Rounded down to the half hour, since that "
-            "is the resolution observations are published at; the `time_utc` in the "
-            "response is the timestamp actually used. Defaults to the most recent "
-            "available timestamp within the last 6 hours."
+            "Observation target time (UTC). Rounded down to the country's time step "
+            "(e.g. 30 minutes for GB, 15 for NL); the `time_utc` in the response is "
+            "the timestamp actually used. Defaults to the most recent available "
+            "timestamp within the last 6 hours."
         ),
     ),
 ) -> GenerationSnapshot:
@@ -214,12 +214,8 @@ async def get_generation_at_timestamp(
 
     if time_utc is not None:
         # Floored for the same reason as the forecast snapshot: observations exist only
-        # on the half hour, so an unfloored timestamp matched nothing.
-        snapshot_time = (
-            pd.Timestamp(time_utc).tz_localize(dt.UTC)
-            if time_utc.tzinfo is None
-            else pd.Timestamp(time_utc)
-        ).floor("30min").to_pydatetime()
+        # on the country's time step, so an unfloored timestamp matched nothing.
+        snapshot_time = country.floor_to_time_step(time_utc)
     else:
         # Probe a single region to find the latest available timestamp (up to 6h back).
         # Pick the region with the highest gsp_id (most likely to have recent data) or
@@ -241,10 +237,7 @@ async def get_generation_at_timestamp(
         snapshot_time = (
             probe_vals[-1].valid_timestamp
             if probe_vals
-            else pd.Timestamp.utcnow()
-            .floor("30min")
-            .to_pydatetime()
-            .replace(tzinfo=dt.UTC)
+            else country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
         )
 
     snapshot = await db.get_actual_generation_snapshot(
