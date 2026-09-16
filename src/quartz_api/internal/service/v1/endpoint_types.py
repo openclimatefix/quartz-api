@@ -10,6 +10,7 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     BeforeValidator,
+    ConfigDict,
     Field,
     WithJsonSchema,
     field_validator,
@@ -667,6 +668,24 @@ class RegionGenerationMatrix(BaseModel):
     regions: list[RegionGeneration]
 
 
+class BaseSiteMetadata(BaseModel):
+    """Fields common to every source for now its empty might be added later."""
+    model_config = ConfigDict(extra="allow")
+
+
+class SolarMetadata(BaseSiteMetadata):
+    """Solar's physical attributes."""
+
+    orientation: float | None = Field(None, ge=0, le=360)
+    tilt: float | None = Field(None, ge=0, le=90)
+    module_capacity_kW: float | None = Field(None, ge=0)
+    inverter_capacity_kW: float | None = Field(None, ge=0)
+
+
+class WindMetadata(BaseSiteMetadata):
+    """Wind's physical attributes. will be added later."""
+
+
 class SiteInput(BaseModel):
     """Fields a client can set when creating or updating a site."""
 
@@ -678,7 +697,7 @@ class SiteInput(BaseModel):
     )
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
-    metadata: dict[str, str | int | float] | None = None
+    metadata: SolarMetadata | WindMetadata | None = None
 
 
 class SiteDetail(SiteInput):
@@ -686,7 +705,7 @@ class SiteDetail(SiteInput):
 
     site_id: UUID
     capacity_kW: float
-    metadata: dict[str, str | int | float] = Field(default_factory=dict)
+    metadata: SolarMetadata | WindMetadata = Field(default_factory=SolarMetadata)
 
 
 class SiteList(BaseModel):
