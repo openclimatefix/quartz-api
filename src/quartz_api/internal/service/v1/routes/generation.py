@@ -274,7 +274,7 @@ async def get_generation_at_timestamp(
     "/{country}/{source}/generation/period",
     responses=PERIOD_RESPONSES,
     status_code=status.HTTP_200_OK,
-    summary="Get Generation for Period",
+    summary="Get Generation for Current Period",
 )
 async def get_generation_period(
     source: ValidSource,

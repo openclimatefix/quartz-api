@@ -398,7 +398,7 @@ async def get_forecasts_at_time(
     "/{country}/{source}/forecasts/period",
     responses=PERIOD_RESPONSES,
     status_code=status.HTTP_200_OK,
-    summary="Get Forecasts for Period",
+    summary="Get Forecasts for Current Period",
 )
 async def get_forecasts_period(
     source: ValidSource,
