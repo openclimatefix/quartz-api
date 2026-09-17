@@ -461,11 +461,7 @@ def _create_v1_app(
                         --scalar-button-1-color: black;
                       }
                       /* target the authorize button specifically */
-                      .dark-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
-                        background-color: var(--scalar-color-2) !important;
-                        color: #000 !important;
-                        border-color: transparent !important;
-                      }
+                      .dark-mode .scalar-button:not(.scalar-button-ghost),
                       .light-mode .scalar-button:not(.scalar-button-ghost),
                       .show-api-client-button {
                         background-color: var(--scalar-color-2) !important;
