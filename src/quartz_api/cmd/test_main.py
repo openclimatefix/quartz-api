@@ -1,5 +1,10 @@
 """Tests for the server assembly in main.py."""
 
+import json
+import os
+import subprocess
+import sys
+
 import grpc
 import pytest
 from fastapi import FastAPI
@@ -66,3 +71,86 @@ def test_grpc_error_repr_never_reaches_the_caller() -> None:
     resp = TestClient(_app_raising(grpc.StatusCode.NOT_FOUND)).get("/boom")
     assert "debug_error_string" not in resp.text
     assert "AioRpcError" not in resp.text
+
+
+# The v1 country filter runs when country_config is imported, and main.py builds the
+# server on import, so each case needs its own interpreter.
+_BOOT_PROBE = """
+import json
+from fastapi.testclient import TestClient
+from quartz_api.cmd.main import server
+client = TestClient(server)
+spec = client.get("/v1/openapi.json").json()
+print(json.dumps({
+    "enums": sorted({
+        tuple(sorted(p["schema"]["enum"]))
+        for path in spec["paths"].values()
+        for op in path.values()
+        for p in op.get("parameters", [])
+        if p["name"] == "country"
+    }),
+    "status": {
+        code: client.get(f"/v1/{code}/solar/region-types").status_code
+        for code in ("GB", "NL", "DE")
+    },
+}))
+"""
+
+
+def _boot(countries: str, stage: str) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "ROUTERS": "v1",
+        "SOURCE": "dummydb",
+        "V1_COUNTRIES": countries,
+        "V1_STAGE": stage,
+    }
+    return subprocess.run(
+        [sys.executable, "-c", _BOOT_PROBE],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+
+@pytest.mark.parametrize(
+    ("countries", "stage", "served"),
+    [
+        ("GB,NL", "prod", ["GB", "NL"]),
+        ("NL", "prod", ["NL"]),
+        # DE is dev-only, so allowlisting it on prod serves nothing extra.
+        ("NL,DE", "prod", ["NL"]),
+        ("GB,NL,DE", "dev", ["DE", "GB", "NL"]),
+    ],
+)
+def test_server_boots_serving_only_the_deployment_countries(
+    countries: str,
+    stage: str,
+    served: list[str],
+) -> None:
+    result = _boot(countries, stage)
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout.strip().splitlines()[-1])
+    assert out["enums"] == [served]
+    assert out["status"] == {
+        code: 200 if code in served else 422 for code in ("GB", "NL", "DE")
+    }
+
+
+@pytest.mark.parametrize(
+    ("countries", "stage", "message"),
+    [
+        ("GB,GD", "prod", "V1_COUNTRIES has unknown codes ['GD']"),
+        ("GB", "production", "V1_STAGE must be one of"),
+    ],
+)
+def test_server_refuses_to_boot_on_bad_deployment_config(
+    countries: str,
+    stage: str,
+    message: str,
+) -> None:
+    result = _boot(countries, stage)
+    assert result.returncode != 0
+    assert message in result.stderr
