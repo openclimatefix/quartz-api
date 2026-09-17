@@ -210,10 +210,12 @@ class CountryConfig:
     def floor_to_time_step(self, ts: dt.datetime) -> dt.datetime:
         """Floor a timestamp to this country's time step, as UTC.
 
-        A naive timestamp is taken to be UTC already.
+        A naive timestamp is taken to be UTC already. Any other offset is converted
+        first, so the floor falls on the UTC grid: a +05:45 time floored locally lands
+        on :15 or :45 UTC.
         """
         stamp = pd.Timestamp(ts)
-        stamp = stamp.tz_localize(dt.UTC) if stamp.tzinfo is None else stamp
+        stamp = stamp.tz_localize(dt.UTC) if stamp.tzinfo is None else stamp.tz_convert(dt.UTC)
         return stamp.floor(f"{self.time_step_minutes}min").to_pydatetime()
 
 

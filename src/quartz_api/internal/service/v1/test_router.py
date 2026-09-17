@@ -2210,12 +2210,17 @@ async def test_nl_snapshot_keeps_quarter_hours(nl_client: AsyncClient, kind: str
     assert resp.json()["time_utc"] == "2026-09-15T12:45:00Z"
 
 
+_NEPAL = dt.timezone(dt.timedelta(hours=5, minutes=45))
+
+
 @pytest.mark.parametrize(
     ("code", "given", "expected"),
     [
         ("GB", dt.datetime(2026, 9, 15, 12, 47, tzinfo=dt.UTC), "12:30"),
         ("NL", dt.datetime(2026, 9, 15, 12, 47, tzinfo=dt.UTC), "12:45"),
         ("NL", dt.datetime(2026, 9, 15, 12, 14), "12:00"),  # noqa: DTZ001 - naive on purpose
+        # 18:32+05:45 is 12:47 UTC; floored locally it would come out as 12:15 UTC
+        ("GB", dt.datetime(2026, 9, 15, 18, 32, tzinfo=_NEPAL), "12:30"),
     ],
 )
 def test_floor_to_time_step(code: str, given: dt.datetime, expected: str) -> None:
