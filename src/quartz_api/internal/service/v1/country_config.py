@@ -4,7 +4,10 @@ Maps URL country codes to data platform nation names and defines the available
 region types, models, generation sources etc. per country.
 """
 
+import datetime as dt
 from dataclasses import dataclass
+
+import pandas as pd
 
 from quartz_api.internal.models import LocationType
 
@@ -152,6 +155,11 @@ class CountryConfig:
     nation_name: str  # internal DP location name — used only for DB lookups
     display_name: str  # user-facing nation name returned in API responses
     region_types: tuple[RegionTypeConfig, ...]
+    # Minutes between consecutive values, forecast and observed alike. Snapshot times
+    # are floored to it, so it must match the data: too coarse and valid times can
+    # never be requested, too fine and a request matches nothing. No default, so a
+    # new country has to state it.
+    time_step_minutes: int
     generation_sources: tuple[GenerationSource, ...] = ()
     permission: str = ""
     intraday_permission: str | None = None
@@ -198,6 +206,17 @@ class CountryConfig:
             if gs.api_name == api_name:
                 return gs.name
         return api_name
+
+    def floor_to_time_step(self, ts: dt.datetime) -> dt.datetime:
+        """Floor a timestamp to this country's time step, as UTC.
+
+        A naive timestamp is taken to be UTC already. Any other offset is converted
+        first, so the floor falls on the UTC grid: a +05:45 time floored locally lands
+        on :15 or :45 UTC.
+        """
+        stamp = pd.Timestamp(ts)
+        stamp = stamp.tz_localize(dt.UTC) if stamp.tzinfo is None else stamp.tz_convert(dt.UTC)
+        return stamp.floor(f"{self.time_step_minutes}min").to_pydatetime()
 
 
 class FM:
@@ -303,6 +322,7 @@ COUNTRIES: dict[str, CountryConfig] = {
         code="GB",  # used for path params / country-level differentiation
         nation_name="uk",  # maps to DP region name
         display_name="Great Britain",
+        time_step_minutes=30,
         permission="read:gb",
         intraday_permission="read:uk-intraday",
         region_types=(
@@ -348,6 +368,7 @@ COUNTRIES: dict[str, CountryConfig] = {
         code="NL",
         nation_name="nl_national",
         display_name="Nederland",
+        time_step_minutes=15,
         permission="read:nl",
         region_types=(
             RegionTypeConfig(

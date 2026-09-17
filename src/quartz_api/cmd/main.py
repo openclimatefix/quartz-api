@@ -434,22 +434,80 @@ def _create_v1_app(
             custom_css="""
                       /* override theme colours */
                       :root .dark-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
+                        --scalar-color-2: #d8cfca;
+                        --scalar-text-decoration-color: var(--scalar-color-accent);
+                        --scalar-text-decoration-color-hover: var(--scalar-color-accent);
                       }
                       :root .light-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
                       }
                       /* target the authorize button specifically */
-                      .dark-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
-                        background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
-                        border-color: transparent !important;
-                      }
+                      .dark-mode .scalar-button:not(.scalar-button-ghost),
                       .light-mode .scalar-button:not(.scalar-button-ghost),
                       .show-api-client-button {
-                        background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
+                        background-color: var(--scalar-color-2) !important;
+                        color: #000 !important;
                         border-color: transparent !important;
+                      }
+                      @supports (color:color-mix(in lab, red, red)) {
+                        .scalar-app .markdown a {
+                          -webkit-text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent);
+                          text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent);
+                        }
+                        .scalar-app .markdown a:hover {
+                          -webkit-text-decoration-color: var(--scalar-color-accent, currentColor);
+                          text-decoration-color: var(--scalar-color-accent, currentColor);
+                          color: var(--scalar-link-color-hover, var(--scalar-color-accent));
+                          -webkit-text-decoration: var(--scalar-text-decoration-hover);
+                          text-decoration-line: var(--scalar-text-decoration-hover);
+                        }
+                        .download-button span {
+                          -webkit-text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent)
+                            !important;
+                          text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent)
+                            !important;
+                        }
+                        .download-button span:hover {
+                          -webkit-text-decoration-color:
+                            var(--scalar-color-accent, currentColor) !important;
+                          text-decoration-color:
+                            var(--scalar-color-accent, currentColor) !important;
+                        }
+                      }
+                      /* Scalar has no logo option (`x-logo` is Redoc-only), so the
+                         logo is drawn above the sidebar search. The sidebar is a
+                         flex column, so this sits as its first item. */
+                      aside.t-doc__sidebar::before {
+                        content: "";
+                        display: block;
+                        flex-shrink: 0;
+                        height: 32px;
+                        margin: 20px 20px 8px;
+                        background: url("/static/logo-ocf.svg") left center / contain
+                          no-repeat;
                       }
                       /* hide "Open in API Client" Scalar link in Sidebar */
                       aside a.open-api-client-button {
