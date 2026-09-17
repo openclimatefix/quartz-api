@@ -6,7 +6,6 @@ import asyncio
 import datetime as dt
 import json
 
-import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
@@ -139,7 +138,7 @@ async def get_forecast(
     validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
     model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
 
-    now = pd.Timestamp.utcnow().floor("30min").to_pydatetime()
+    now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
     validate_window(win_start, win_end)
