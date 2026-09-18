@@ -91,9 +91,25 @@ _OAUTH_SCOPES: dict[str, str] = {
 }
 
 
+# v0 keeps its original Quartz contact details; v1 is branded OCF Energy and takes
+# the support address from SUPPORT_EMAIL. Passed in per app rather than hardcoded so
+# the two can diverge while _custom_openapi stays shared.
+_V0_CONTACT = {
+    "name": "Quartz API by Open Climate Fix",
+    "url": "https://www.quartz.solar",
+    "email": "support@quartz.solar",
+}
+_V1_CONTACT = {
+    "name": "support@ocf.energy",
+    "url": "https://openclimatefix.org",
+    "email": SUPPORT_EMAIL,
+}
+
+
 def _custom_openapi(
     server: FastAPI,
     auth_config: dict[str, str] | None = None,
+    contact: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
@@ -103,11 +119,7 @@ def _custom_openapi(
         title=server.title,
         version=server.version,
         description=server.description,
-        contact={
-            "name": "Quartz API by Open Climate Fix",
-            "url": "https://www.quartz.solar",
-            "email": SUPPORT_EMAIL,
-        },
+        contact=contact or _V0_CONTACT,
         routes=server.routes,
     )
 
@@ -385,7 +397,7 @@ def _create_v1_app(
         }
 
     v1_app = FastAPI(
-        title="Quartz API Documentation",
+        title="OCF Energy API Documentation",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
         docs_url=None,
@@ -399,7 +411,9 @@ def _create_v1_app(
     v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
-    v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
+    v1_app.openapi = lambda: _custom_openapi(
+        v1_app, auth_openapi_config, contact=_V1_CONTACT,
+    )
 
     @v1_app.get("/docs", include_in_schema=False)
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
@@ -436,6 +450,7 @@ def _create_v1_app(
             title=v1_app.title,
             authentication=page_auth,
             persist_auth=True,
+            with_default_fonts=False,
             theme=Theme.ALTERNATE,
             dark_mode=True,
             scalar_favicon_url="/static/favicon.ico",
@@ -451,6 +466,62 @@ def _create_v1_app(
             order_schema_properties_by=("preserve"),
             hide_client_button=(True),
             custom_css="""
+                      /* Matter XH is the product's face, self-hosted here the same
+                         way the frontend does it. `with_default_fonts=False` below
+                         stops Scalar fetching Inter and JetBrains Mono from Google,
+                         which nothing then uses. The weights are the three the
+                         frontend ships; anything else synthesises from the nearest.
+                         `swap` so the text is readable while the file loads.
+                         These are served from the root app's /static mount, not the
+                         v1 sub-app, which is why the paths have no /v1 prefix — same
+                         as the favicon and the sidebar logo. */
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHLight.woff2") format("woff2");
+                        font-weight: 300;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHRegular.woff2") format("woff2");
+                        font-weight: 400;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHMedium.woff2") format("woff2");
+                        font-weight: 500;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter SemiMono";
+                        src: url("/static/fonts/MatterSemiMonoRegular.woff2")
+                          format("woff2");
+                        font-weight: 400;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter SemiMono";
+                        src: url("/static/fonts/MatterSemiMonoMedium.woff2")
+                          format("woff2");
+                        font-weight: 500;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      /* Scalar reads both of these for every surface it renders, so
+                         setting them is enough — no per-element font rules. */
+                      :root,
+                      :root .dark-mode,
+                      :root .light-mode {
+                        --scalar-font: "Matter XH", ui-sans-serif, system-ui,
+                          sans-serif;
+                        --scalar-font-code: "Matter SemiMono", ui-monospace,
+                          SFMono-Regular, monospace;
+                      }
                       /* override theme colours */
                       :root .dark-mode {
                         --scalar-color-accent: #ff4901;
@@ -584,6 +655,92 @@ def _create_v1_app(
                         color: var(--scalar-color-3);
                         white-space: nowrap;
                         pointer-events: none;
+                      }
+
+                      /* The introduction renders in the same narrow column as an
+                         endpoint description, which leaves the prose cramped while
+                         the cards beside it have room to spare. Scalar has no option
+                         for this — checked against 1.69.0, the current release — so
+                         rebalance the flex columns it already emits: the text takes
+                         the free space, the cards keep a fixed, comfortable width.
+                         Deliberately nothing here depends on how many sections the
+                         description has, what heading levels it uses, or what order
+                         they come in, so editing the markdown cannot break it. */
+                      .introduction-section .section-columns > .section-column:has(
+                          .introduction-description
+                        ) {
+                        flex: 1 1 0;
+                        min-width: 0;
+                      }
+                      .introduction-section .section-columns > .section-column:has(
+                          .sticky-cards
+                        ) {
+                        flex: 0 0 22rem;
+                        min-width: 0;
+                      }
+
+                      /* Scalar splits the header row evenly, so the title gets
+                         half the width and wraps while the contact link sits in a
+                         mostly empty column. Give the title two thirds.
+                         Only above 1100px: Scalar drops this row to a single column
+                         at narrow widths via a container query, and a plain rule of
+                         higher specificity would win there too and break it. Below
+                         this width its own behaviour is left alone. */
+                      @media (min-width: 1100px) {
+                        .introduction-section .section-header-wrapper {
+                          grid-template-columns: 2fr 1fr;
+                        }
+                      }
+
+                      /* The introduction reads a size larger than it needs to:
+                         Scalar sets 16px body text here, which put the h2 level at
+                         the same size as the page title. Scale the whole section down
+                         from one base size — the headings below are in `em`, so this
+                         is the only number to change. */
+                      .introduction-section .introduction-description,
+                      .introduction-section .introduction-description .markdown {
+                        font-size: 14px;
+                        line-height: 1.6;
+                      }
+                      .introduction-section
+                        .introduction-description
+                        .markdown
+                        :is(p, li, blockquote, td, th) {
+                        font-size: inherit;
+                      }
+
+                      /* Scalar renders every heading level in the description the
+                         same — h2 and h3 are both 20px/600 in the same colour — so a
+                         nested heading reads as another top-level one.*/
+                      .introduction-section .section-header h1 {
+                          font-size: 1.5em;
+                          font-weight: 300;
+                          letter-spacing: 0.5px;
+                      }
+                      .introduction-section .introduction-description h2 {
+                        font-size: 1.35em;
+                        line-height: 1.3;
+                        margin-top: 1.5rem;
+                        margin-bottom: 0.5rem;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid var(--scalar-border-color);
+                        color: var(--scalar-color-1);
+                      }
+                      .introduction-section .introduction-description h3 {
+                        font-size: 1.1em;
+                        line-height: 1.4;
+                        margin-top: 0.25rem;
+                        margin-bottom: 0.5rem;
+                        color: var(--scalar-color-2);
+                      }
+                      .introduction-section .introduction-description h4 {
+                        font-size: 0.85em;
+                        letter-spacing: 0.04em;
+                        text-transform: uppercase;
+                        color: var(--scalar-color-3);
+                      }
+                      section.section.introduction-section {
+                        padding-top: 2.5rem;
                       }
                     """,
         )

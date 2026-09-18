@@ -1,15 +1,20 @@
-"""The Quartz API provides renewable generation forecasts and observed
-data across multiple countries, powered by Open Climate Fix.
+"""
+Renewable generation forecasts and observed data across multiple countries.
+<br/>
 
 ## Resources
 
-- **Discovery**: list available energy sources, countries, region types, and
-  generation sources per country, as well as browse locations by type (national, GSP, province, …).
-  Each region carries a `name`, which is what every other endpoint identifies it by.
-- **Forecasts**: per-region time series, filterable all-region snapshots for a point in time,
-  and a limited, filterable matrix of all-region data over a rolling ±2-day window.
-- **Generation**: observed PV output via the same three shapes (per-region,
-  snapshot, and period matrix).
+### Discovery
+List available energy sources, countries, region types, and
+generation sources per country, as well as browse locations by type (national, GSP, province, …).
+Each region carries a `name`, which is what every other endpoint identifies it by.
+
+### Forecasts
+Per-region time series, filterable all-region snapshots for a point in time,
+and a limited, filterable matrix of all-region data over a rolling ±2-day window.
+
+### Generation
+Observed PV output via the same three shapes (per-region, snapshot, and period matrix).
 
 ## Authentication
 
@@ -18,11 +23,11 @@ at the top of this page to log in interactively; your token is then injected
 into every request you send from here.
 
 For programmatic access (scripts, integrations), see the
-[Quartz API authentication guide](https://www.notion.so/openclimatefix/API-Access-2d8d2f64215d4432be830cbcc9220012)
+[OCF Energy API authentication guide](https://www.notion.so/openclimatefix/API-Access-2d8d2f64215d4432be830cbcc9220012)
 for copy-paste examples in Python, curl, and JavaScript.
 
 A free trial is available. Sign up through the `Authorize` button at the top or on any
-request in these docs, or at [app.quartz.solar](https://app.quartz.solar) to get started.
+request in these docs, or at [app.ocf.energy](https://app.ocf.energy) to get started.
 
 ## Rate limits
 
@@ -30,7 +35,7 @@ Requests are limited to **20 per second** and **3,600 per hour**, counted per us
 per route. Over either limit the response is a **429** carrying a `Retry-After` header
 with the number of seconds to wait.
 
-## Units & conventions
+## Units & Conventions
 
 - Power values are in **kW** throughout.
 - All timestamps are **UTC ISO 8601** (`2020-01-01T12:00:00Z`).
