@@ -411,7 +411,8 @@ def _create_v1_app(
     v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
-    v1_app.openapi = lambda: _custom_openapi(
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    v1_app.openapi = lambda: _custom_openapi(  # ty: ignore[invalid-assignment]
         v1_app, auth_openapi_config, contact=_V1_CONTACT,
     )
 
@@ -744,7 +745,8 @@ def _create_v1_app(
                       }
                     """,
         )
-        html = page.body.decode()
+        # Response.body is typed bytes | memoryview; HTMLResponse always gives bytes.
+        html = bytes(page.body).decode()
         if "</body>" not in html:
             return page
         return HTMLResponse(
@@ -1003,7 +1005,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     server.description = description
 
     # Customize the OpenAPI schema (after auth config is resolved)
-    server.openapi = lambda: _custom_openapi(server)
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    server.openapi = lambda: _custom_openapi(server)  # ty: ignore[invalid-assignment]
 
     # Mount v1 as a sub-app (after auth config is resolved so v1 gets OAuth2 config)
     if "v1" in conf.get_string("api.routers").split(","):
