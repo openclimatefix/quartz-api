@@ -46,6 +46,7 @@ dependencies = [
     "xarray>=2026.4.0",
     "timezonefinder>=8.2.4",
     "astral>=3.2",
+    "pvlib>=0.15.2",
 ]
 
 [dependency-groups]
