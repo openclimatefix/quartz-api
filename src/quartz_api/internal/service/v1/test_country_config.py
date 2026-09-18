@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 import pytest
+from fastapi import HTTPException
 
 from quartz_api.internal.models import LocationType
 
@@ -13,9 +14,16 @@ from .country_config import (
     RegionTypeConfig,
     filter_for_deployment,
 )
+from .helpers import validate_model
 
 _PROD_MODEL = ForecastModel(name="prod_model", label="Prod")
-_DEV_MODEL = ForecastModel(name="dev_model", label="Dev", stage="dev")
+_DEV_MODEL = ForecastModel(
+    name="dev_model",
+    label="Dev",
+    slug="dev",
+    aliases=("old_dev",),
+    stage="dev",
+)
 
 _NATIONAL = RegionTypeConfig(
     type="national",
@@ -98,6 +106,29 @@ def test_hidden_intraday_default_fails() -> None:
     catalogue = {"AA": replace(_country("AA"), region_types=(rt,))}
     with pytest.raises(ValueError, match="intraday default model 'dev_model'"):
         filter_for_deployment(catalogue, None, "prod")
+
+
+def test_dev_only_model_is_unrequestable_on_prod() -> None:
+    """A dev model inside a prod region type is hidden and rejected, not silently served."""
+    rt = filter_for_deployment(_CATALOGUE, "AA", "prod")["AA"].region_types[0]
+
+    assert rt.get_model_by_api_name("dev") is None
+    assert rt.get_model_by_api_name("old_dev") is None
+    assert rt.get_model_by_internal_name("dev_model") is None
+
+    with pytest.raises(HTTPException) as exc:
+        validate_model("dev", rt, rt.label)
+    assert exc.value.status_code == 400
+    # The 400 lists what is available, so it must not leak the hidden name either.
+    assert "dev" not in exc.value.detail.split("Available: ")[1]
+
+
+def test_dev_only_model_is_requestable_on_dev() -> None:
+    rt = filter_for_deployment(_CATALOGUE, "AA", "dev")["AA"].region_types[0]
+
+    assert rt.get_model_by_api_name("dev") == _DEV_MODEL
+    assert rt.get_model_by_api_name("old_dev") == _DEV_MODEL
+    validate_model("dev", rt, rt.label)
 
 
 @pytest.mark.parametrize("stage", ["dev", "prod"])
