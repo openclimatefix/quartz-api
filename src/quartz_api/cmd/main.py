@@ -580,6 +580,74 @@ def _create_v1_app(
                         white-space: nowrap;
                         pointer-events: none;
                       }
+
+                      /* The introduction renders in the same narrow column as an
+                         endpoint description, which leaves the prose cramped while
+                         the cards beside it have room to spare. Scalar has no option
+                         for this — checked against 1.69.0, the current release — so
+                         rebalance the flex columns it already emits: the text takes
+                         the free space, the cards keep a fixed, comfortable width.
+                         Deliberately nothing here depends on how many sections the
+                         description has, what heading levels it uses, or what order
+                         they come in, so editing the markdown cannot break it. */
+                      .introduction-section .section-columns > .section-column:has(
+                          .introduction-description
+                        ) {
+                        flex: 1 1 0;
+                        min-width: 0;
+                      }
+                      .introduction-section .section-columns > .section-column:has(
+                          .sticky-cards
+                        ) {
+                        flex: 0 0 22rem;
+                        min-width: 0;
+                      }
+
+                      /* The introduction reads a size larger than it needs to:
+                         Scalar sets 16px body text here, which put the h2 level at
+                         the same size as the page title. Scale the whole section down
+                         from one base size — the headings below are in `em`, so this
+                         is the only number to change. */
+                      .introduction-section .introduction-description,
+                      .introduction-section .introduction-description .markdown {
+                        font-size: 14px;
+                        line-height: 1.6;
+                      }
+                      .introduction-section
+                        .introduction-description
+                        .markdown
+                        :is(p, li, blockquote, td, th) {
+                        font-size: inherit;
+                      }
+
+                      /* Scalar renders every heading level in the description the
+                         same — h2 and h3 are both 20px/600 in the same colour — so a
+                         nested heading reads as another top-level one.*/
+                      .introduction-section .introduction-description h2 {
+                        font-size: 1.35em;
+                        line-height: 1.3;
+                        margin-top: 1.5rem;
+                        margin-bottom: 0.5rem;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid var(--scalar-border-color);
+                        color: var(--scalar-color-1);
+                      }
+                      .introduction-section .introduction-description h3 {
+                        font-size: 1.1em;
+                        line-height: 1.4;
+                        margin-top: 0.25rem;
+                        margin-bottom: 0.5rem;
+                        color: var(--scalar-color-2);
+                      }
+                      .introduction-section .introduction-description h4 {
+                        font-size: 0.85em;
+                        letter-spacing: 0.04em;
+                        text-transform: uppercase;
+                        color: var(--scalar-color-3);
+                      }
+                      section.section.introduction-section {
+                        padding-top: 2.5rem;
+                      }
                     """,
         )
         html = page.body.decode()

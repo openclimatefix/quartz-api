@@ -1,14 +1,20 @@
-"""Renewable generation forecasts and observed data across multiple countries.
+"""
+Renewable generation forecasts and observed data across multiple countries.
+<br/>
 
 ## Resources
 
-- **Discovery**: list available energy sources, countries, region types, and
-  generation sources per country, as well as browse locations by type (national, GSP, province, …).
-  Each region carries a `name`, which is what every other endpoint identifies it by.
-- **Forecasts**: per-region time series, filterable all-region snapshots for a point in time,
-  and a limited, filterable matrix of all-region data over a rolling ±2-day window.
-- **Generation**: observed PV output via the same three shapes (per-region,
-  snapshot, and period matrix).
+### Discovery
+List available energy sources, countries, region types, and
+generation sources per country, as well as browse locations by type (national, GSP, province, …).
+Each region carries a `name`, which is what every other endpoint identifies it by.
+
+### Forecasts
+Per-region time series, filterable all-region snapshots for a point in time,
+and a limited, filterable matrix of all-region data over a rolling ±2-day window.
+
+### Generation
+Observed PV output via the same three shapes (per-region, snapshot, and period matrix).
 
 ## Authentication
 
@@ -29,7 +35,7 @@ Requests are limited to **20 per second** and **3,600 per hour**, counted per us
 per route. Over either limit the response is a **429** carrying a `Retry-After` header
 with the number of seconds to wait.
 
-## Units & conventions
+## Units & Conventions
 
 - Power values are in **kW** throughout.
 - All timestamps are **UTC ISO 8601** (`2020-01-01T12:00:00Z`).
