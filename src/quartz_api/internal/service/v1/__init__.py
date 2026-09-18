@@ -1,5 +1,4 @@
-"""The Quartz API provides renewable generation forecasts and observed
-data across multiple countries, powered by Open Climate Fix.
+"""Renewable generation forecasts and observed data across multiple countries.
 
 ## Resources
 
@@ -18,11 +17,11 @@ at the top of this page to log in interactively; your token is then injected
 into every request you send from here.
 
 For programmatic access (scripts, integrations), see the
-[Quartz API authentication guide](https://www.notion.so/openclimatefix/API-Access-2d8d2f64215d4432be830cbcc9220012)
+[OCF Energy API authentication guide](https://www.notion.so/openclimatefix/API-Access-2d8d2f64215d4432be830cbcc9220012)
 for copy-paste examples in Python, curl, and JavaScript.
 
 A free trial is available. Sign up through the `Authorize` button at the top or on any
-request in these docs, or at [app.quartz.solar](https://app.quartz.solar) to get started.
+request in these docs, or at [app.ocf.energy](https://app.ocf.energy) to get started.
 
 ## Rate limits
 

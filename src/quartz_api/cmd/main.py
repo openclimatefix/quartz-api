@@ -91,9 +91,25 @@ _OAUTH_SCOPES: dict[str, str] = {
 }
 
 
+# v0 keeps its original Quartz contact details; v1 is branded OCF Energy and takes
+# the support address from SUPPORT_EMAIL. Passed in per app rather than hardcoded so
+# the two can diverge while _custom_openapi stays shared.
+_V0_CONTACT = {
+    "name": "Quartz API by Open Climate Fix",
+    "url": "https://www.quartz.solar",
+    "email": "support@quartz.solar",
+}
+_V1_CONTACT = {
+    "name": "support@ocf.energy",
+    "url": "https://openclimatefix.org",
+    "email": SUPPORT_EMAIL,
+}
+
+
 def _custom_openapi(
     server: FastAPI,
     auth_config: dict[str, str] | None = None,
+    contact: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
@@ -103,11 +119,7 @@ def _custom_openapi(
         title=server.title,
         version=server.version,
         description=server.description,
-        contact={
-            "name": "Quartz API by Open Climate Fix",
-            "url": "https://www.quartz.solar",
-            "email": SUPPORT_EMAIL,
-        },
+        contact=contact or _V0_CONTACT,
         routes=server.routes,
     )
 
@@ -366,7 +378,7 @@ def _create_v1_app(
         }
 
     v1_app = FastAPI(
-        title="Quartz API Documentation",
+        title="OCF Energy API",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
         docs_url=None,
@@ -380,7 +392,9 @@ def _create_v1_app(
     v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
-    v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
+    v1_app.openapi = lambda: _custom_openapi(
+        v1_app, auth_openapi_config, contact=_V1_CONTACT,
+    )
 
     @v1_app.get("/docs", include_in_schema=False)
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
