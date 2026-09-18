@@ -718,3 +718,26 @@ class SiteList(BaseModel):
     """Envelope for the site list endpoint."""
 
     sites: list[SiteDetail]
+
+
+class SiteClearskyResponse(BaseModel):
+    """Clear-sky generation estimate for one site."""
+
+    site_id: UUID
+    capacity_kW: float
+    values: list[GenerationValue]
+
+
+class SitePowerSeries(BaseModel):
+    """One site's row in a multi-site matrix; `power_kW` lines up with `times_utc`."""
+
+    site_id: UUID
+    capacity_kW: float
+    power_kW: list[float]
+
+
+class SiteClearskyMatrix(BaseModel):
+    """Clear-sky estimates for several sites over one shared set of times."""
+
+    times_utc: list[dt.datetime]
+    sites: list[SitePowerSeries]
