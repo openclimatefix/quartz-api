@@ -526,6 +526,18 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
 
 
 
+def parse_stage(value: str) -> Stage:
+    """Validate a raw stage string from the environment into a `Stage`.
+
+    Returns the matching `STAGES` member rather than `value` itself, so the
+    narrowing from `str` is something the type checker can follow.
+    """
+    for stage in STAGES:
+        if value == stage:
+            return stage
+    raise ValueError(f"V1_STAGE must be one of {list(STAGES)}, got '{value}'")
+
+
 def _visible(entry: ForecastModel | RegionTypeConfig | CountryConfig, stage: Stage) -> bool:
     return stage == "dev" or entry.stage == "prod"
 
@@ -560,8 +572,7 @@ def filter_for_deployment(
     is `dev`. Raises ValueError on a bad value, so a misconfigured deployment
     fails at startup.
     """
-    if stage not in STAGES:
-        raise ValueError(f"V1_STAGE must be one of {list(STAGES)}, got '{stage}'")
+    checked_stage = parse_stage(stage)
     codes = [c.strip().upper() for c in (countries or "").split(",") if c.strip()]
     unknown = sorted(set(codes) - catalogue.keys())
     if unknown:
@@ -573,13 +584,13 @@ def filter_for_deployment(
         cfg.code: replace(
             cfg,
             region_types=tuple(
-                _filter_region_type(rt, stage)
+                _filter_region_type(rt, checked_stage)
                 for rt in cfg.region_types
-                if _visible(rt, stage)
+                if _visible(rt, checked_stage)
             ),
         )
         for cfg in selected
-        if _visible(cfg, stage)
+        if _visible(cfg, checked_stage)
     }
 
 
