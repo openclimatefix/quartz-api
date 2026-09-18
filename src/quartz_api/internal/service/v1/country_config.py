@@ -5,11 +5,17 @@ region types, models, generation sources etc. per country.
 """
 
 import datetime as dt
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, replace
+from typing import Literal
 
 import pandas as pd
 
 from quartz_api.internal.models import LocationType
+
+# `dev` entries are served only where V1_STAGE=dev. Promoting one to prod is done through a PR.
+Stage = Literal["dev", "prod"]
+STAGES: tuple[Stage, ...] = ("dev", "prod")
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,7 @@ class ForecastModel:
     adjust_name: str | None = None
     aliases: tuple[str, ...] = ()
     adjust_aliases: tuple[str, ...] = ()
+    stage: Stage = "prod"
 
     @property
     def api_name(self) -> str:
@@ -76,6 +83,7 @@ class RegionTypeConfig:
     # Maps internal DP location names to user-facing display names.
     # Entries not listed fall back to loc.name unchanged.
     location_name_map: tuple[tuple[str, str], ...] = ()
+    stage: Stage = "prod"
 
     def get_display_name(self, internal_name: str) -> str | None:
         """Return the user-facing display name for a DP location name, or None if unmapped."""
@@ -163,6 +171,7 @@ class CountryConfig:
     generation_sources: tuple[GenerationSource, ...] = ()
     permission: str = ""
     intraday_permission: str | None = None
+    stage: Stage = "prod"
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -293,6 +302,44 @@ class FM:
         aliases=("ecmwf_mo_sat_uncurtailed",),
         adjust_aliases=("ecmwf_mo_sat_uncurtailed_adjust",),
     )
+    # DE — slugs follow the GB/NL input-set naming. No blend yet, so the full
+    # input set is the default.
+    DE_ECMWF_MO_PV_SAT = ForecastModel(
+        name="de_ecmwf_pv_mo_sat",
+        label="ECMWF + Met Office + PV + Satellite",
+        slug="ecmwf_mo_pv_sat",
+        adjust_name="de_ecmwf_pv_mo_sat_adjust",
+    )
+    DE_ECMWF_PV = ForecastModel(
+        name="de_ecmwf_pv",
+        label="ECMWF + PV",
+        slug="ecmwf_pv",
+        adjust_name="de_ecmwf_pv_adjust",
+    )
+    DE_ECMWF = ForecastModel(
+        name="de_ecmwf_only",
+        label="ECMWF",
+        slug="ecmwf",
+        adjust_name="de_ecmwf_only_adjust",
+    )
+    DE_MO = ForecastModel(
+        name="de_mo_only",
+        label="Met Office",
+        slug="mo",
+        adjust_name="de_mo_only_adjust",
+    )
+    DE_SAT = ForecastModel(
+        name="de_sat_only",
+        label="Satellite (8h)",
+        slug="sat_8h",
+        adjust_name="de_sat_only_adjust",
+    )
+    DE_PV = ForecastModel(
+        name="de_pv_only",
+        label="PV",
+        slug="pv",
+        adjust_name="de_pv_only_adjust",
+    )
 
 
 _GB_NATIONAL_FORECAST_MODELS = (
@@ -317,7 +364,17 @@ _NL_NATIONAL_FORECAST_MODELS = (
 
 _NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_UNCURTAILED)
 
-COUNTRIES: dict[str, CountryConfig] = {
+_DE_FORECAST_MODELS = (
+    FM.DE_ECMWF_MO_PV_SAT,
+    FM.DE_ECMWF_PV,
+    FM.DE_ECMWF,
+    FM.DE_MO,
+    FM.DE_SAT,
+    FM.DE_PV,
+)
+
+# Every country the API knows about. Only `COUNTRIES` below is served.
+ALL_COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         code="GB",  # used for path params / country-level differentiation
         nation_name="uk",  # maps to DP region name
@@ -419,6 +476,134 @@ COUNTRIES: dict[str, CountryConfig] = {
             ),
         ),
     ),
+    "DE": CountryConfig(
+        code="DE",
+        nation_name="de_national",
+        display_name="Deutschland",
+        time_step_minutes=15,
+        permission="read:de",
+        stage="dev",
+        region_types=(
+            RegionTypeConfig(
+                type="national",
+                label="National",
+                level=0,
+                location_type=LocationType.NATION,
+                source_types=("solar",),
+                forecast_models=_DE_FORECAST_MODELS,
+                default_model="de_ecmwf_pv_mo_sat",
+                supports_adjusted=True,
+            ),
+            RegionTypeConfig(
+                type="tso",
+                label="Transmission System Operator",
+                level=10,
+                # Assumed to be stored as STATE in the DP, like the NL provinces.
+                location_type=LocationType.REGION,
+                source_types=("solar",),
+                forecast_models=_DE_FORECAST_MODELS,
+                default_model="de_ecmwf_pv_mo_sat",
+                # No `_adjust` forecasts exist at TSO level, only national.
+                supports_adjusted=False,
+                # Same rule as NL: once deployed, existing names must not change.
+                location_name_map=(
+                    ("de_50hertz", "50hertz"),
+                    ("de_amprion", "amprion"),
+                    ("de_tennet", "tennet"),
+                    ("de_transnetbw", "transnetbw"),
+                ),
+            ),
+        ),
+        generation_sources=(
+            GenerationSource(
+                source="solar",
+                name="entsoe_de",
+                label="ENTSO-E DE",
+            ),
+        ),
+    ),
 }
+
+
+
+def parse_stage(value: str) -> Stage:
+    """Validate a raw stage string from the environment into a `Stage`.
+
+    Returns the matching `STAGES` member rather than `value` itself, so the
+    narrowing from `str` is something the type checker can follow.
+    """
+    for stage in STAGES:
+        if value == stage:
+            return stage
+    raise ValueError(f"V1_STAGE must be one of {list(STAGES)}, got '{value}'")
+
+
+def _visible(entry: ForecastModel | RegionTypeConfig | CountryConfig, stage: Stage) -> bool:
+    return stage == "dev" or entry.stage == "prod"
+
+
+def _filter_region_type(rt: RegionTypeConfig, stage: Stage) -> RegionTypeConfig:
+    models = tuple(fm for fm in rt.forecast_models if _visible(fm, stage))
+    intraday = tuple(fm for fm in rt.intraday_models if _visible(fm, stage))
+    names = {fm.name for fm in models}
+    # A hidden default would make every request without `model_name` fail at the DP.
+    if rt.default_model is not None and rt.default_model not in names:
+        raise ValueError(
+            f"Region type '{rt.type}': default model '{rt.default_model}' "
+            f"is not visible at stage '{stage}'",
+        )
+    if rt.intraday_default_model is not None and rt.intraday_default_model not in intraday:
+        raise ValueError(
+            f"Region type '{rt.type}': intraday default model "
+            f"'{rt.intraday_default_model.name}' is not visible at stage '{stage}'",
+        )
+    return replace(rt, forecast_models=models, intraday_models=intraday)
+
+
+def filter_for_deployment(
+    catalogue: dict[str, CountryConfig],
+    countries: str | None,
+    stage: str,
+) -> dict[str, CountryConfig]:
+    """Return the countries, region types and models this deployment serves.
+
+    `countries` is a comma-separated allowlist of country codes; None or empty
+    serves every country in the catalogue. `stage` hides `dev` entries unless it
+    is `dev`. Raises ValueError on a bad value, so a misconfigured deployment
+    fails at startup.
+    """
+    checked_stage = parse_stage(stage)
+    codes = [c.strip().upper() for c in (countries or "").split(",") if c.strip()]
+    unknown = sorted(set(codes) - catalogue.keys())
+    if unknown:
+        raise ValueError(
+            f"V1_COUNTRIES has unknown codes {unknown}. Known: {sorted(catalogue)}",
+        )
+    selected = [cfg for code, cfg in catalogue.items() if not codes or code in codes]
+    return {
+        cfg.code: replace(
+            cfg,
+            region_types=tuple(
+                _filter_region_type(rt, checked_stage)
+                for rt in cfg.region_types
+                if _visible(rt, checked_stage)
+            ),
+        )
+        for cfg in selected
+        if _visible(cfg, checked_stage)
+    }
+
+
+# Read from the environment at import time: the OpenAPI enums in endpoint_types
+# are built from COUNTRIES when that module is imported, so this must come first.
+# V1_STAGE defaults to prod so a deployment that forgets it never shows dev entries.
+DEPLOYMENT_COUNTRIES: str | None = os.environ.get("V1_COUNTRIES")
+DEPLOYMENT_STAGE: str = os.environ.get("V1_STAGE", "prod")
+
+COUNTRIES: dict[str, CountryConfig] = filter_for_deployment(
+    ALL_COUNTRIES,
+    DEPLOYMENT_COUNTRIES,
+    DEPLOYMENT_STAGE,
+)
 
 VALID_COUNTRY_CODES: set[str] = set(COUNTRIES.keys())
