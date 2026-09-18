@@ -4,6 +4,7 @@ Registered before the site CRUD router: otherwise `/sites/clearsky` would be tak
 `/sites/{site_id}` and fail as an invalid UUID.
 """
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
@@ -38,7 +39,7 @@ async def get_sites_clearsky(
     source: ValidSource,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    site_ids: list[UUID] | None = Query(None, max_length=10),
+    site_ids: Annotated[list[UUID] | None, Query(max_length=10)] = None,
     start_utc: ValidWindowStart = None,
     end_utc: ValidWindowEnd = None,
 ) -> SiteClearskyMatrix:
