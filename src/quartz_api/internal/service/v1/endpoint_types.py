@@ -668,6 +668,10 @@ class RegionGenerationMatrix(BaseModel):
     regions: list[RegionGeneration]
 
 
+# add this to the feild that are not updatable in sites models
+_NOT_UPDATABLE = {"x-updatable": False}
+
+
 class BaseSiteMetadata(BaseModel):
     """Fields common to every source for now its empty might be added later."""
 
@@ -677,8 +681,8 @@ class BaseSiteMetadata(BaseModel):
 class SolarMetadata(BaseSiteMetadata):
     """Solar's physical attributes."""
 
-    orientation: float | None = Field(None, ge=0, le=360)
-    tilt: float | None = Field(None, ge=0, le=90)
+    orientation: float | None = Field(None, ge=0, le=360, json_schema_extra=_NOT_UPDATABLE)
+    tilt: float | None = Field(None, ge=0, le=90, json_schema_extra=_NOT_UPDATABLE)
     module_capacity_kW: float | None = Field(None, ge=0)
     inverter_capacity_kW: float | None = Field(None, ge=0)
 
@@ -696,8 +700,9 @@ class SiteInput(BaseModel):
         None,
         description="One of 'active', 'inactive', 'commissioning'. Unset reads as 'active'.",
     )
-    latitude: float | None = Field(None, ge=-90, le=90)
-    longitude: float | None = Field(None, ge=-180, le=180)
+    latitude: float | None = Field(None, ge=-90, le=90, json_schema_extra=_NOT_UPDATABLE)
+    longitude: float | None = Field(None, ge=-180, le=180, json_schema_extra=_NOT_UPDATABLE)
+    capacity_kW: float | None = Field(None,ge=0)
     metadata: SolarMetadata | WindMetadata | None = None
 
 

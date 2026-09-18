@@ -201,6 +201,16 @@ class StorageInterface(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def set_location_owner(
+        self,
+        location_uuid: UUID,
+        organisation_id: str,
+        authdata: dict[str, str],
+    ) -> None:
+        """Assign a location's owning organisation."""
+        pass
+
+    @abc.abstractmethod
     async def log_api_call(
         self,
         url: str,
