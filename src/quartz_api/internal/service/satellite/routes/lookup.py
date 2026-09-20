@@ -81,11 +81,11 @@ async def get_historic_satellite_data_url(
     )
 
     # not latest -> try cache first
-    if not _bypass_cache(request):
-        cached = await _get_cached_entries(channel)
-        entry = cached.get(timestamp.isoformat()) if cached else None
-        if entry is not None:
-            return HistoricSatelliteData(url=entry["url"])
+    # if not _bypass_cache(request):
+    #     cached = await _get_cached_entries(channel)
+    #     entry = cached.get(timestamp.isoformat()) if cached else None
+    #     if entry is not None:
+    #         return HistoricSatelliteData(url=entry["url"])
 
     # cache miss (or bypassed) -> fall back to live S3
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
