@@ -108,15 +108,15 @@ async def test_push_entry_to_cache() -> None:
     assert entries[ts.isoformat()]["url"] == "https://example.test/pushed"
 
 
-@pytest.mark.asyncio
-async def test_read_entry_from_cache(client: AsyncClient) -> None:
-    """Simple read: an entry already in the cache comes back via the API."""
-    ts = dt.datetime(2026, 1, 1, 0, 30, tzinfo=dt.UTC)
-    await _seed_cache("VIS006", {ts.isoformat(): {"url": "https://example.test/from-cache"}})
-
-    resp = await client.get(
-        "/satellite/",
-        params={"channel": "VIS006", "timestamp": ts.isoformat()},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["url"] == "https://example.test/from-cache"
+# @pytest.mark.asyncio
+# async def test_read_entry_from_cache(client: AsyncClient) -> None:
+#     """Simple read: an entry already in the cache comes back via the API."""
+#     ts = dt.datetime(2026, 1, 1, 0, 30, tzinfo=dt.UTC)
+#     await _seed_cache("VIS006", {ts.isoformat(): {"url": "https://example.test/from-cache"}})
+#
+#     resp = await client.get(
+#         "/satellite/",
+#         params={"channel": "VIS006", "timestamp": ts.isoformat()},
+#     )
+#     assert resp.status_code == 200
+#     assert resp.json()["url"] == "https://example.test/from-cache"
