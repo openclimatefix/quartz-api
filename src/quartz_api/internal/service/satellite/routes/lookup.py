@@ -41,7 +41,7 @@ def _bypass_cache(request: Request) -> bool:
 @router.get("/", response_model=HistoricSatelliteData)
 @limiter.limit("50/second")
 async def get_historic_satellite_data_url(
-    request: Request,
+    request: Request, # noqa: ARG001
     channel: str,
     s3_client: S3ClientDep,
     _: AuthDependency,
