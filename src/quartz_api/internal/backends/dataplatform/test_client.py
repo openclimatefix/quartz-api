@@ -623,7 +623,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             latitude=0.0,
             longitude=0.0,
             capacity_kilowatts=5.0,
-            country_code="GBR",
+            country_code="GB",
             metadata={"tilt": 35.0},
         )
         client = StorageClient.from_dp(client_mock)
@@ -663,7 +663,7 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
         sent_create = client_mock.CreateLocation.call_args.args[0]
         self.assertEqual(sent_create.effective_capacity_watts, 5000)
         self.assertEqual(sent_create.geometry_wkt, "POINT (0.0 0.0)")
-        self.assertEqual(sent_create.country_code, "GBR")
+        self.assertEqual(sent_create.country_code, "GB")
         self.assertEqual(dict(sent_create.metadata)["tilt"], 35.0)
 
     async def test_no_org_access_fast_return(self) -> None:

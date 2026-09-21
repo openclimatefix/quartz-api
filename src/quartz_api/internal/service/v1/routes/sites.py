@@ -137,7 +137,7 @@ async def create_site(
         latitude=site_input.latitude,
         longitude=site_input.longitude,
         capacity_kilowatts=site_input.capacity_kW,
-        country_code=str(country.code_alpha3),
+        country_code=str(country.code),
         metadata=site_input_to_metadata(site_input),
     )
 
