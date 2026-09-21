@@ -41,7 +41,7 @@ def _bypass_cache(request: Request) -> bool:
 @router.get("/", response_model=HistoricSatelliteData)
 @limiter.limit("50/second")
 async def get_historic_satellite_data_url(
-    request: Request,
+    request: Request, # noqa: ARG001
     channel: str,
     s3_client: S3ClientDep,
     _: AuthDependency,
@@ -81,11 +81,11 @@ async def get_historic_satellite_data_url(
     )
 
     # not latest -> try cache first
-    if not _bypass_cache(request):
-        cached = await _get_cached_entries(channel)
-        entry = cached.get(timestamp.isoformat()) if cached else None
-        if entry is not None:
-            return HistoricSatelliteData(url=entry["url"])
+    # if not _bypass_cache(request):
+    #     cached = await _get_cached_entries(channel)
+    #     entry = cached.get(timestamp.isoformat()) if cached else None
+    #     if entry is not None:
+    #         return HistoricSatelliteData(url=entry["url"])
 
     # cache miss (or bypassed) -> fall back to live S3
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
