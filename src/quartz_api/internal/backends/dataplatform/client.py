@@ -619,6 +619,7 @@ class StorageClient(models.StorageInterface):
                 effective_capacity_watts=int(location.capacity_kilowatts * 1000),
                 location_type=location_type_map[location_type],
                 metadata=dict_to_struct(location.metadata),
+                country_code=location.country_code,
             )
             created = await self.dpc.CreateLocation(create_req)
             return models.Location(
@@ -629,6 +630,7 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=_kw(created.effective_capacity_watts),
                 location_type=location_type,
                 energy_type=energy_type,
+                country_code=location.country_code,
                 metadata=location.metadata,
             )
         current = existing[0]

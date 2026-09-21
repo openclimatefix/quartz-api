@@ -74,6 +74,7 @@ class Location:
     capacity_kilowatts: float
     location_type: LocationType | None = None
     energy_type: EnergyType | None = None
+    country_code: str | None = None
     metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 

@@ -171,6 +171,7 @@ class CountryConfig:
     """Configuration for a country."""
 
     code: str
+    code_alpha3: str  # ISO 3166-1 alpha-3, uppercase — the data platform stores this
     nation_name: str  # internal DP location name — used only for DB lookups
     display_name: str  # user-facing nation name returned in API responses
     region_types: tuple[RegionTypeConfig, ...]
@@ -396,6 +397,7 @@ _DE_FORECAST_MODELS = (
 ALL_COUNTRIES: dict[str, CountryConfig] = {
     "GB": CountryConfig(
         code="GB",  # used for path params / country-level differentiation
+        code_alpha3="GBR",
         nation_name="uk",  # maps to DP region name
         display_name="Great Britain",
         time_step_minutes=30,
@@ -449,6 +451,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
     ),
     "NL": CountryConfig(
         code="NL",
+        code_alpha3="NLD",
         nation_name="nl_national",
         display_name="Nederland",
         time_step_minutes=15,
