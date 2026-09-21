@@ -133,7 +133,7 @@ async def create_site(
     new_site_id = uuid4()
     location = models.Location(
         uuid=new_site_id,
-        name=f"site_{new_site_id.hex}",
+        name=f"{country.code.lower()}_{new_site_id.hex}",
         latitude=site_input.latitude,
         longitude=site_input.longitude,
         capacity_kilowatts=site_input.capacity_kW,
