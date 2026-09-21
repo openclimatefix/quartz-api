@@ -13,9 +13,11 @@ import pandas as pd
 
 from quartz_api.internal.models import LocationType
 
-# `dev` entries are served only where V1_STAGE=dev. Promoting one to prod is done through a PR.
-Stage = Literal["dev", "prod"]
-STAGES: tuple[Stage, ...] = ("dev", "prod")
+# `development` entries are served only where V1_STAGE=development. Promoting one to
+# production is done through a PR. The values match `api.environment` so infra can pass
+# the environment name straight through.
+Stage = Literal["development", "production"]
+STAGES: tuple[Stage, ...] = ("development", "production")
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,7 @@ class ForecastModel:
     adjust_name: str | None = None
     aliases: tuple[str, ...] = ()
     adjust_aliases: tuple[str, ...] = ()
-    stage: Stage = "prod"
+    stage: Stage = "production"
 
     @property
     def api_name(self) -> str:
@@ -83,7 +85,7 @@ class RegionTypeConfig:
     # Maps internal DP location names to user-facing display names.
     # Entries not listed fall back to loc.name unchanged.
     location_name_map: tuple[tuple[str, str], ...] = ()
-    stage: Stage = "prod"
+    stage: Stage = "production"
 
     def get_display_name(self, internal_name: str) -> str | None:
         """Return the user-facing display name for a DP location name, or None if unmapped."""
@@ -171,7 +173,7 @@ class CountryConfig:
     generation_sources: tuple[GenerationSource, ...] = ()
     permission: str = ""
     intraday_permission: str | None = None
-    stage: Stage = "prod"
+    stage: Stage = "production"
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -482,7 +484,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
         display_name="Deutschland",
         time_step_minutes=15,
         permission="read:de",
-        stage="dev",
+        stage="development",
         region_types=(
             RegionTypeConfig(
                 type="national",
@@ -539,7 +541,7 @@ def parse_stage(value: str) -> Stage:
 
 
 def _visible(entry: ForecastModel | RegionTypeConfig | CountryConfig, stage: Stage) -> bool:
-    return stage == "dev" or entry.stage == "prod"
+    return stage == "development" or entry.stage == "production"
 
 
 def _filter_region_type(rt: RegionTypeConfig, stage: Stage) -> RegionTypeConfig:
@@ -596,9 +598,9 @@ def filter_for_deployment(
 
 # Read from the environment at import time: the OpenAPI enums in endpoint_types
 # are built from COUNTRIES when that module is imported, so this must come first.
-# V1_STAGE defaults to prod so a deployment that forgets it never shows dev entries.
+# V1_STAGE defaults to production so a deployment that forgets it never shows dev entries.
 DEPLOYMENT_COUNTRIES: str | None = os.environ.get("V1_COUNTRIES")
-DEPLOYMENT_STAGE: str = os.environ.get("V1_STAGE", "prod")
+DEPLOYMENT_STAGE: str = os.environ.get("V1_STAGE", "production")
 
 COUNTRIES: dict[str, CountryConfig] = filter_for_deployment(
     ALL_COUNTRIES,

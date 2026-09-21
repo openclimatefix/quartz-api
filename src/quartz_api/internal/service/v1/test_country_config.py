@@ -22,7 +22,7 @@ _DEV_MODEL = ForecastModel(
     label="Dev",
     slug="dev",
     aliases=("old_dev",),
-    stage="dev",
+    stage="development",
 )
 
 _NATIONAL = RegionTypeConfig(
@@ -40,11 +40,11 @@ _DEV_REGIONAL = RegionTypeConfig(
     location_type=LocationType.REGION,
     forecast_models=(_DEV_MODEL,),
     default_model="dev_model",
-    stage="dev",
+    stage="development",
 )
 
 
-def _country(code: str, stage: str = "prod") -> CountryConfig:
+def _country(code: str, stage: str = "production") -> CountryConfig:
     return CountryConfig(
         code=code,
         nation_name=code.lower(),
@@ -55,11 +55,11 @@ def _country(code: str, stage: str = "prod") -> CountryConfig:
     )
 
 
-_CATALOGUE = {"AA": _country("AA"), "BB": _country("BB"), "DD": _country("DD", "dev")}
+_CATALOGUE = {"AA": _country("AA"), "BB": _country("BB"), "DD": _country("DD", "development")}
 
 
 def test_prod_hides_dev_countries_region_types_and_models() -> None:
-    served = filter_for_deployment(_CATALOGUE, None, "prod")
+    served = filter_for_deployment(_CATALOGUE, None, "production")
     assert sorted(served) == ["AA", "BB"]
     rts = served["AA"].region_types
     assert [rt.type for rt in rts] == ["national"]
@@ -67,50 +67,51 @@ def test_prod_hides_dev_countries_region_types_and_models() -> None:
 
 
 def test_dev_shows_everything() -> None:
-    served = filter_for_deployment(_CATALOGUE, None, "dev")
+    served = filter_for_deployment(_CATALOGUE, None, "development")
     assert served == _CATALOGUE
 
 
 @pytest.mark.parametrize("countries", [None, "", " "])
 def test_no_allowlist_serves_every_country(countries: str | None) -> None:
-    assert sorted(filter_for_deployment(_CATALOGUE, countries, "dev")) == ["AA", "BB", "DD"]
+    assert sorted(filter_for_deployment(_CATALOGUE, countries, "development")) == ["AA", "BB", "DD"]
 
 
 def test_allowlist_is_case_and_space_insensitive() -> None:
-    assert sorted(filter_for_deployment(_CATALOGUE, " bb, dd ", "dev")) == ["BB", "DD"]
+    assert sorted(filter_for_deployment(_CATALOGUE, " bb, dd ", "development")) == ["BB", "DD"]
 
 
 def test_allowlisted_dev_country_is_still_hidden_on_prod() -> None:
-    assert list(filter_for_deployment(_CATALOGUE, "AA,DD", "prod")) == ["AA"]
+    assert list(filter_for_deployment(_CATALOGUE, "AA,DD", "production")) == ["AA"]
 
 
 def test_unknown_country_code_fails() -> None:
     with pytest.raises(ValueError, match="unknown codes \\['ZZ'\\]"):
-        filter_for_deployment(_CATALOGUE, "AA,ZZ", "prod")
+        filter_for_deployment(_CATALOGUE, "AA,ZZ", "production")
 
 
 def test_unknown_stage_fails() -> None:
+    """The short forms are not accepted; the stage values match `api.environment`."""
     with pytest.raises(ValueError, match="V1_STAGE"):
-        filter_for_deployment(_CATALOGUE, None, "production")
+        filter_for_deployment(_CATALOGUE, None, "prod")
 
 
 def test_hidden_default_model_fails() -> None:
     rt = replace(_NATIONAL, default_model="dev_model")
     catalogue = {"AA": replace(_country("AA"), region_types=(rt,))}
     with pytest.raises(ValueError, match="default model 'dev_model'"):
-        filter_for_deployment(catalogue, None, "prod")
+        filter_for_deployment(catalogue, None, "production")
 
 
 def test_hidden_intraday_default_fails() -> None:
     rt = replace(_NATIONAL, intraday_models=(_DEV_MODEL,), intraday_default_model=_DEV_MODEL)
     catalogue = {"AA": replace(_country("AA"), region_types=(rt,))}
     with pytest.raises(ValueError, match="intraday default model 'dev_model'"):
-        filter_for_deployment(catalogue, None, "prod")
+        filter_for_deployment(catalogue, None, "production")
 
 
 def test_dev_only_model_is_unrequestable_on_prod() -> None:
-    """A dev model inside a prod region type is hidden and rejected, not silently served."""
-    rt = filter_for_deployment(_CATALOGUE, "AA", "prod")["AA"].region_types[0]
+    """A development model in a production region type is hidden and rejected."""
+    rt = filter_for_deployment(_CATALOGUE, "AA", "production")["AA"].region_types[0]
 
     assert rt.get_model_by_api_name("dev") is None
     assert rt.get_model_by_api_name("old_dev") is None
@@ -124,14 +125,14 @@ def test_dev_only_model_is_unrequestable_on_prod() -> None:
 
 
 def test_dev_only_model_is_requestable_on_dev() -> None:
-    rt = filter_for_deployment(_CATALOGUE, "AA", "dev")["AA"].region_types[0]
+    rt = filter_for_deployment(_CATALOGUE, "AA", "development")["AA"].region_types[0]
 
     assert rt.get_model_by_api_name("dev") == _DEV_MODEL
     assert rt.get_model_by_api_name("old_dev") == _DEV_MODEL
     validate_model("dev", rt, rt.label)
 
 
-@pytest.mark.parametrize("stage", ["dev", "prod"])
+@pytest.mark.parametrize("stage", ["development", "production"])
 def test_real_catalogue_is_valid_at_every_stage(stage: str) -> None:
     """A dev-tagged default in a prod region type would only fail on deploy."""
     filter_for_deployment(ALL_COUNTRIES, None, stage)

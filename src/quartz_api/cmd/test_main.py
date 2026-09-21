@@ -118,11 +118,11 @@ def _boot(countries: str, stage: str) -> subprocess.CompletedProcess[str]:
 @pytest.mark.parametrize(
     ("countries", "stage", "served"),
     [
-        ("GB,NL", "prod", ["GB", "NL"]),
-        ("NL", "prod", ["NL"]),
-        # DE is dev-only, so allowlisting it on prod serves nothing extra.
-        ("NL,DE", "prod", ["NL"]),
-        ("GB,NL,DE", "dev", ["DE", "GB", "NL"]),
+        ("GB,NL", "production", ["GB", "NL"]),
+        ("NL", "production", ["NL"]),
+        # DE is development-only, so allowlisting it on production serves nothing extra.
+        ("NL,DE", "production", ["NL"]),
+        ("GB,NL,DE", "development", ["DE", "GB", "NL"]),
     ],
 )
 def test_server_boots_serving_only_the_deployment_countries(
@@ -142,8 +142,9 @@ def test_server_boots_serving_only_the_deployment_countries(
 @pytest.mark.parametrize(
     ("countries", "stage", "message"),
     [
-        ("GB,GD", "prod", "V1_COUNTRIES has unknown codes ['GD']"),
-        ("GB", "production", "V1_STAGE must be one of"),
+        ("GB,GD", "production", "V1_COUNTRIES has unknown codes ['GD']"),
+        # The short forms are not accepted; the stage values match api.environment.
+        ("GB", "prod", "V1_STAGE must be one of"),
     ],
 )
 def test_server_refuses_to_boot_on_bad_deployment_config(
