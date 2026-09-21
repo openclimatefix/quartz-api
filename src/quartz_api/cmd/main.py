@@ -350,19 +350,8 @@ def _create_v1_app(
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
     deployment = v1_mod.country_config
-    # Both sides come from the same env vars, so they only differ if a default was
-    # changed in one place and not the other.
-    scope = {
-        "v1_countries": (deployment.DEPLOYMENT_COUNTRIES or ""),
-        "v1_stage": deployment.DEPLOYMENT_STAGE,
-    }
-    for key, resolved in scope.items():
-        configured = conf.get_string(f"api.{key}", resolved)
-        if configured != resolved:
-            raise ValueError(
-                f"api.{key} is '{configured}' in server.conf but country_config "
-                f"resolved '{resolved}'. Keep their defaults in step.",
-            )
+    # V1_COUNTRIES and V1_STAGE are read in country_config, not through `conf`: the
+    # OpenAPI enums are built when that module is imported, before conf is available.
     log.info(
         "v1 serving countries %s at stage '%s'",
         sorted(deployment.COUNTRIES),
