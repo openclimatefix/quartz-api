@@ -154,6 +154,7 @@ def make_location(
         effective_capacity_watts=10_000_000,
         metadata=metadata,
         valid_from_utc=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC),
+        country_code="GBR",
     )
 
     return create_location_request
