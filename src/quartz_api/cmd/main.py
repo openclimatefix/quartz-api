@@ -349,6 +349,14 @@ def _create_v1_app(
 ) -> FastAPI:
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
+    deployment = v1_mod.country_config
+    # V1_COUNTRIES and V1_STAGE are read in country_config, not through `conf`: the
+    # OpenAPI enums are built when that module is imported, before conf is available.
+    log.info(
+        "v1 serving countries %s at stage '%s'",
+        sorted(deployment.COUNTRIES),
+        deployment.DEPLOYMENT_STAGE,
+    )
 
     scalar_auth: dict = {}
     if auth_openapi_config:
@@ -392,7 +400,8 @@ def _create_v1_app(
     v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
-    v1_app.openapi = lambda: _custom_openapi(
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    v1_app.openapi = lambda: _custom_openapi(  # ty: ignore[invalid-assignment]
         v1_app, auth_openapi_config, contact=_V1_CONTACT,
     )
 
@@ -725,7 +734,8 @@ def _create_v1_app(
                       }
                     """,
         )
-        html = page.body.decode()
+        # Response.body is typed bytes | memoryview; HTMLResponse always gives bytes.
+        html = bytes(page.body).decode()
         if "</body>" not in html:
             return page
         return HTMLResponse(
@@ -984,7 +994,8 @@ def _create_server(conf: ConfigTree) -> FastAPI:
     server.description = description
 
     # Customize the OpenAPI schema (after auth config is resolved)
-    server.openapi = lambda: _custom_openapi(server)
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    server.openapi = lambda: _custom_openapi(server)  # ty: ignore[invalid-assignment]
 
     # Mount v1 as a sub-app (after auth config is resolved so v1 gets OAuth2 config)
     if "v1" in conf.get_string("api.routers").split(","):
