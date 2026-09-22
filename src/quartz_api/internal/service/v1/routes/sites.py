@@ -163,7 +163,7 @@ async def create_site(
 )
 async def get_site_detail(
     country: CountryParam,
-    source: ValidSource,  # noqa: ARG001
+    source: ValidSource,
     site_id: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
@@ -172,7 +172,7 @@ async def get_site_detail(
     check_country_access(auth, country)
 
     # fetch site
-    location = await get_site(db, site_id, auth)
+    location = await get_site(db, site_id, auth, source)
 
     return location_to_site_response(location)
 
@@ -192,7 +192,7 @@ async def update_site(
     """Partially update a site. Fields left unset are unchanged."""
     check_country_access(auth, country)
 
-    existing = await get_site(db, site_id, auth)
+    existing = await get_site(db, site_id, auth, source)
     validate_metadata_for_source(site_input, source)
     reject_not_updatable(site_input)
 
