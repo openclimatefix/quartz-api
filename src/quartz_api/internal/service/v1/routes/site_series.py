@@ -66,7 +66,7 @@ async def get_site_forecast(
     validate_window(window_start, window_end)
 
     site_cfg = site_config_for(country, source)
-    site = await get_site(db, site_id, auth, source)
+    site = await get_site(db, site_id, auth, source, str(country.code))
     forecaster_name = resolve_site_forecaster(site, site_cfg)
 
     # fetch forecast values
@@ -136,6 +136,7 @@ async def get_sites_clearsky(
         energy_type=source,
         location_type=models.LocationType.SITE,
         authdata=auth,
+        country_code=str(country.code),
     )
 
     if site_ids is None:
@@ -206,7 +207,7 @@ async def get_site_clearsky(
             "Clearsky is only available for solar sites.",
         )
 
-    site = await get_site(db, site_id, auth, source)
+    site = await get_site(db, site_id, auth, source, str(country.code))
 
     times = clearsky_times(start_utc, end_utc)
     power = site_clearsky_kw(site, times)

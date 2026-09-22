@@ -68,6 +68,7 @@ async def get_sites(
         energy_type=source,
         location_type=models.LocationType.SITE,
         authdata=auth,
+        country_code=str(country.code),
     )
 
     sites = [location_to_site_response(location) for location in locations]
@@ -172,7 +173,7 @@ async def get_site_detail(
     check_country_access(auth, country)
 
     # fetch site
-    location = await get_site(db, site_id, auth, source)
+    location = await get_site(db, site_id, auth, source, str(country.code))
 
     return location_to_site_response(location)
 
@@ -192,7 +193,7 @@ async def update_site(
     """Partially update a site. Fields left unset are unchanged."""
     check_country_access(auth, country)
 
-    existing = await get_site(db, site_id, auth, source)
+    existing = await get_site(db, site_id, auth, source, str(country.code))
     validate_metadata_for_source(site_input, source)
     reject_not_updatable(site_input)
 
