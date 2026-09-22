@@ -1,12 +1,10 @@
-"""Site time series, single-site and multi-site. Only clearsky for now.
+"""Site time series, single-site and multi-site."""
 
-Registered before the site CRUD router: otherwise `/sites/clearsky` would be taken by
-`/sites/{site_id}` and fail as an invalid UUID.
-"""
-
+import datetime as dt
 from typing import Annotated
 from uuid import UUID
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from starlette import status
 
@@ -19,15 +17,95 @@ from ..endpoint_types import (
     GenerationValue,
     SiteClearskyMatrix,
     SiteClearskyResponse,
+    SiteForecastResponse,
     SitePowerSeries,
     ValidSource,
     ValidWindowEnd,
     ValidWindowStart,
 )
-from ..helpers import check_country_access, timeseries_window
-from ..sites_scoping import get_site, require_org_id
+from ..helpers import (
+    check_country_access,
+    latest_run_timestamps,
+    timeseries_window,
+    validate_window,
+    window_chunks,
+)
+from ..sites_scoping import (
+    get_site,
+    require_org_id,
+    resolve_site_forecaster,
+    site_config_for,
+)
 
 router = APIRouter(tags=["Sites"])
+
+
+@router.get(
+    "/{country}/{source}/sites/{site_id}/forecast",
+    response_model=SiteForecastResponse,
+    response_model_exclude_none=True,
+)
+async def get_site_forecast(
+    country: CountryParam,
+    source: ValidSource,
+    site_id: UUID,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    start_utc: ValidWindowStart = None,
+    end_utc: ValidWindowEnd = None,
+    horizon_minutes: Annotated[int | None, Query(ge=0)] = None,
+    creation_limit_utc: Annotated[dt.datetime | None, Query()] = None,
+) -> SiteForecastResponse:
+    """Return the forecast for a site."""
+    check_country_access(auth, country)
+
+    # set forecast window.
+    now = pd.Timestamp.now(tz="UTC").floor("15min").to_pydatetime()
+    window_start = start_utc or now
+    window_end = end_utc or now + dt.timedelta(hours=48)
+    validate_window(window_start, window_end)
+
+    site_cfg = site_config_for(country, source)
+    site = await get_site(db, site_id, auth, source)
+    forecaster_name = resolve_site_forecaster(site, site_cfg)
+
+    # fetch forecast values
+    values: list[models.PredictedGenerationValue] = []
+
+    for chunk_start, chunk_end in window_chunks(window_start, window_end):
+        values.extend(
+            await db.get_predicted_generation(
+                location_uuid=site.uuid,
+                window_start=chunk_start,
+                window_end=chunk_end,
+                energy_type=source,
+                location_type=models.LocationType.SITE,
+                authdata=auth,
+                created_cutoff=creation_limit_utc,
+                forecast_horizon_minutes=horizon_minutes or 0,
+                forecaster_name=forecaster_name,
+            ),
+        )
+
+    # build response metadata
+    first_value = values[0] if values else None
+    last_updated, latest_init = latest_run_timestamps(values)
+
+    return SiteForecastResponse(
+        site_id=site.uuid,
+        capacity_kW=site.capacity_kilowatts,
+        model_name=forecaster_name,
+        model_version=first_value.forecaster_version if first_value else None,
+        last_updated_utc=last_updated,
+        latest_init_utc=latest_init,
+        values=[
+            GenerationValue(
+                time_utc=value.valid_timestamp,
+                power_kW=value.power_kilowatts,
+            )
+            for value in values
+        ],
+    )
 
 
 @router.get(
@@ -128,7 +206,7 @@ async def get_site_clearsky(
             "Clearsky is only available for solar sites.",
         )
 
-    site = await get_site(db, site_id, auth)
+    site = await get_site(db, site_id, auth, source)
 
     times = clearsky_times(start_utc, end_utc)
     power = site_clearsky_kw(site, times)

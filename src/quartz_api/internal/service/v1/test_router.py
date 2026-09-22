@@ -3261,3 +3261,291 @@ async def test_generation_installed_capacity_requires_detail_full(
     )
     assert "metadata" not in default
     assert full["metadata"]["installed_capacity_kW"] == 23_963_209.0
+
+
+# --- Site forecast -------------------------------------------------------------
+
+_SITE_ID = UUID("00000000-0000-0000-0000-00000000f001")
+_WIND_SITE_ID = UUID("00000000-0000-0000-0000-00000000f002")
+_SITE_FORECAST_URL = f"/v1/GB/solar/sites/{_SITE_ID}/forecast"
+
+
+class SiteForecastClient(StorageClient):
+    """One solar site and one wind site, with forecast values and recorded call kwargs."""
+
+    def __init__(
+        self,
+        *,
+        metadata: dict | None = None,
+        values: int = 3,
+        capacity_kw: float = 5.0,
+    ) -> None:
+        super().__init__()
+        self._metadata = metadata or {}
+        self._n_values = values
+        self._capacity_kw = capacity_kw
+        self.calls: list[dict] = []
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType | None,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        location_names: list[str] | None = None,
+    ) -> list[models.Location]:
+        sites = [
+            models.Location(
+                uuid=_SITE_ID, name="gb_testsite", latitude=51.5, longitude=-0.1,
+                capacity_kilowatts=self._capacity_kw,
+                location_type=models.LocationType.SITE,
+                energy_type=models.EnergyType.SOLAR,
+                metadata=self._metadata,
+            ),
+            models.Location(
+                uuid=_WIND_SITE_ID, name="gb_windsite", latitude=51.5, longitude=-0.1,
+                capacity_kilowatts=9.0,
+                location_type=models.LocationType.SITE,
+                energy_type=models.EnergyType.WIND,
+            ),
+        ]
+        # The platform filters on both, so the fake must too or the source scoping
+        # under test would pass for the wrong reason.
+        if energy_type is not None:
+            sites = [s for s in sites if s.energy_type == energy_type]
+        if location_uuid is not None:
+            sites = [s for s in sites if s.uuid == location_uuid]
+        return sites
+
+    async def get_predicted_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+        day_ahead: bool = False,
+        day_ahead_closure_time_local: dt.time | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        self.calls.append(
+            {
+                "location_uuid": location_uuid,
+                "location_type": location_type,
+                "energy_type": energy_type,
+                "forecaster_name": forecaster_name,
+                "created_cutoff": created_cutoff,
+                "forecast_horizon_minutes": forecast_horizon_minutes,
+                "authdata": authdata,
+            },
+        )
+        base = dt.datetime(2026, 4, 17, 12, 0, tzinfo=dt.UTC)
+        return [
+            models.PredictedGenerationValue(
+                power_kilowatts=float(i),
+                valid_timestamp=base + dt.timedelta(minutes=15 * i),
+                location_uuid=_SITE_ID,
+                capacity_kilowatts=99.0,  # deliberately not the site's capacity
+                forecaster_name=forecaster_name or "unset",
+                forecaster_version="1.4.0",
+                created_timestamp=base - dt.timedelta(hours=1),
+                init_timestamp=base - dt.timedelta(hours=2),
+                plevels_kilowatts={"p10": 0.5},  # must not reach the response
+            )
+            for i in range(self._n_values)
+        ]
+
+
+def _site_app(
+    db: models.StorageInterface,
+    *,
+    company: str | None = "co-1",
+    permissions: list[str] | None = None,
+) -> FastAPI:
+    """App whose caller belongs to a company, which every site route requires."""
+    app = FastAPI()
+    app.include_router(router, prefix="/v1")
+    app.dependency_overrides[models.get_storage_client] = lambda: db
+    auth: dict = {"sub": "test|user", "permissions": permissions or ["read:gb"]}
+    if company is not None:
+        auth["app_metadata"] = {"hubspot_company_id": company}
+    app.dependency_overrides[_auth_dep] = lambda: auth
+    return app
+
+
+async def _site_get(
+    db: models.StorageInterface,
+    url: str,
+    *,
+    company: str | None = "co-1",
+    permissions: list[str] | None = None,
+) -> tuple[int, dict]:
+    async with AsyncClient(
+        transport=ASGITransport(app=_site_app(db, company=company, permissions=permissions)),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get(url)
+    return resp.status_code, resp.json()
+
+
+@pytest.mark.anyio
+async def test_site_forecast_shape() -> None:
+    """Values are renamed, and carry neither plevels nor per-value capacity."""
+    db = SiteForecastClient()
+    status_code, body = await _site_get(db, _SITE_FORECAST_URL)
+
+    assert status_code == 200
+    assert body["site_id"] == str(_SITE_ID)
+    assert body["model_name"] == "pv_site_production"
+    assert body["model_version"] == "1.4.0"
+    assert body["last_updated_utc"] == "2026-04-17T11:00:00Z"
+    assert body["latest_init_utc"] == "2026-04-17T10:00:00Z"
+    assert body["values"][0] == {"time_utc": "2026-04-17T12:00:00Z", "power_kW": 0.0}
+    assert len(body["values"]) == 3
+    assert all(set(v) == {"time_utc", "power_kW"} for v in body["values"])
+
+
+@pytest.mark.anyio
+async def test_site_forecast_capacity_is_the_sites_own() -> None:
+    """Not the forecast values' capacity: a stored 0 means deactivated, and must show."""
+    _, body = await _site_get(SiteForecastClient(capacity_kw=5.0), _SITE_FORECAST_URL)
+    assert body["capacity_kW"] == 5.0  # the values carry 99.0
+
+    _, zero = await _site_get(SiteForecastClient(capacity_kw=0.0), _SITE_FORECAST_URL)
+    assert zero["capacity_kW"] == 0.0
+
+
+@pytest.mark.anyio
+async def test_site_forecast_uses_country_default_model() -> None:
+    db = SiteForecastClient()
+    await _site_get(db, _SITE_FORECAST_URL)
+    assert db.calls[0]["forecaster_name"] == "pv_site_production"
+
+
+@pytest.mark.anyio
+async def test_site_forecast_per_site_override_wins() -> None:
+    """metadata['forecast_name'] beats the country default."""
+    db = SiteForecastClient(metadata={"forecast_name": "some_other_model"})
+    _, body = await _site_get(db, _SITE_FORECAST_URL)
+    assert db.calls[0]["forecaster_name"] == "some_other_model"
+    assert body["model_name"] == "some_other_model"
+
+
+@pytest.mark.anyio
+async def test_site_forecast_passes_auth_and_scope_to_storage() -> None:
+    """Site reads must be company-scoped; an empty authdata would return every company."""
+    db = SiteForecastClient()
+    await _site_get(db, _SITE_FORECAST_URL)
+    call = db.calls[0]
+    assert call["location_type"] == models.LocationType.SITE
+    assert call["energy_type"] == models.EnergyType.SOLAR
+    assert call["authdata"]["app_metadata"]["hubspot_company_id"] == "co-1"
+
+
+@pytest.mark.anyio
+async def test_site_forecast_forwards_horizon_and_creation_limit() -> None:
+    db = SiteForecastClient()
+    await _site_get(
+        db,
+        f"{_SITE_FORECAST_URL}?horizon_minutes=60&creation_limit_utc=2026-04-17T00:00:00Z",
+    )
+    call = db.calls[0]
+    assert call["forecast_horizon_minutes"] == 60
+    assert call["created_cutoff"] == dt.datetime(2026, 4, 17, tzinfo=dt.UTC)
+
+
+@pytest.mark.anyio
+async def test_site_forecast_no_values_is_200_not_404() -> None:
+    """A site with no forecast yet is an empty series, not a missing resource."""
+    status_code, body = await _site_get(SiteForecastClient(values=0), _SITE_FORECAST_URL)
+    assert status_code == 200
+    assert body["values"] == []
+    assert body["model_name"] == "pv_site_production"
+    # response_model_exclude_none drops the run fields when there are no values.
+    assert "model_version" not in body
+    assert "last_updated_utc" not in body
+
+
+@pytest.mark.anyio
+async def test_site_forecast_wind_site_under_solar_is_404() -> None:
+    """The URL's source scopes the lookup, so the wrong type is not found."""
+    status_code, body = await _site_get(
+        SiteForecastClient(),
+        f"/v1/GB/solar/sites/{_WIND_SITE_ID}/forecast",
+    )
+    assert status_code == 404
+    assert str(_WIND_SITE_ID) in body["detail"]
+
+
+@pytest.mark.anyio
+async def test_site_forecast_unknown_site_is_404() -> None:
+    unknown = UUID("00000000-0000-0000-0000-0000000000ff")
+    status_code, _ = await _site_get(
+        SiteForecastClient(),
+        f"/v1/GB/solar/sites/{unknown}/forecast",
+    )
+    assert status_code == 404
+
+
+@pytest.mark.anyio
+async def test_site_forecast_unknown_site_and_wrong_type_are_indistinguishable() -> None:
+    """Otherwise a 404's wording tells a stranger which UUIDs are real."""
+    unknown = UUID("00000000-0000-0000-0000-0000000000ff")
+    _, missing = await _site_get(
+        SiteForecastClient(), f"/v1/GB/solar/sites/{unknown}/forecast",
+    )
+    _, wrong_type = await _site_get(
+        SiteForecastClient(), f"/v1/GB/solar/sites/{_WIND_SITE_ID}/forecast",
+    )
+    assert missing["detail"].replace(str(unknown), "X") == wrong_type["detail"].replace(
+        str(_WIND_SITE_ID), "X",
+    )
+
+
+@pytest.mark.anyio
+async def test_site_forecast_caller_without_company_is_403() -> None:
+    status_code, _ = await _site_get(SiteForecastClient(), _SITE_FORECAST_URL, company=None)
+    assert status_code == 403
+
+
+@pytest.mark.anyio
+async def test_site_forecast_country_without_site_config_is_404() -> None:
+    """NL has no site_configs, so the route is not served there.
+
+    The caller is given NL access, or this would be a 403 from the country check and
+    would pass without ever reaching the config lookup under test.
+    """
+    status_code, body = await _site_get(
+        SiteForecastClient(),
+        f"/v1/NL/solar/sites/{_SITE_ID}/forecast",
+        permissions=["read:gb", "read:nl"],
+    )
+    assert status_code == 404
+    assert "not available" in body["detail"]
+
+
+@pytest.mark.anyio
+async def test_site_forecast_bad_window_is_400_before_any_lookup() -> None:
+    """A caller's bad window must not be reported as a config or lookup failure."""
+    db = SiteForecastClient()
+    status_code, body = await _site_get(
+        db,
+        f"{_SITE_FORECAST_URL}?start_utc=2026-04-18T00:00:00Z&end_utc=2026-04-17T00:00:00Z",
+    )
+    assert status_code == 400
+    assert "before end_utc" in body["detail"]
+    assert db.calls == []
+
+
+@pytest.mark.anyio
+async def test_site_forecast_negative_horizon_is_422() -> None:
+    status_code, _ = await _site_get(
+        SiteForecastClient(),
+        f"{_SITE_FORECAST_URL}?horizon_minutes=-1",
+    )
+    assert status_code == 422

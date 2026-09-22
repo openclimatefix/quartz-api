@@ -741,3 +741,15 @@ class SiteClearskyMatrix(BaseModel):
 
     times_utc: list[dt.datetime]
     sites: list[SitePowerSeries]
+
+
+class SiteForecastResponse(BaseModel):
+    """Forecast time series for one site."""
+
+    site_id: UUID
+    capacity_kW: float
+    model_name: str
+    model_version: str | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
+    values: list[GenerationValue]
