@@ -3294,6 +3294,7 @@ class SiteForecastClient(StorageClient):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         sites = [
             models.Location(
@@ -3301,6 +3302,7 @@ class SiteForecastClient(StorageClient):
                 capacity_kilowatts=self._capacity_kw,
                 location_type=models.LocationType.SITE,
                 energy_type=models.EnergyType.SOLAR,
+                country_code="GB",
                 metadata=self._metadata,
             ),
             models.Location(
@@ -3308,12 +3310,15 @@ class SiteForecastClient(StorageClient):
                 capacity_kilowatts=9.0,
                 location_type=models.LocationType.SITE,
                 energy_type=models.EnergyType.WIND,
+                country_code="GB",
             ),
         ]
-        # The platform filters on both, so the fake must too or the source scoping
+        # The platform filters on all of these, so the fake must too or the scoping
         # under test would pass for the wrong reason.
         if energy_type is not None:
             sites = [s for s in sites if s.energy_type == energy_type]
+        if country_code is not None:
+            sites = [s for s in sites if s.country_code == country_code]
         if location_uuid is not None:
             sites = [s for s in sites if s.uuid == location_uuid]
         return sites
@@ -3549,3 +3554,37 @@ async def test_site_forecast_negative_horizon_is_422() -> None:
         f"{_SITE_FORECAST_URL}?horizon_minutes=-1",
     )
     assert status_code == 422
+
+
+@pytest.mark.anyio
+async def test_site_forecast_passes_country_to_storage() -> None:
+    """Without this the URL's country is advisory and never reaches the query, so one
+    country's sites stay reachable under another country's URL.
+    """
+    seen: dict = {}
+
+    class RecordingClient(SiteForecastClient):
+        async def get_locations(  # type: ignore[override]
+            self,
+            energy_type: models.EnergyType | None,
+            location_type: models.LocationType | None,
+            authdata: dict,
+            location_uuid: UUID | None = None,
+            enclosing_location_uuid: UUID | None = None,
+            location_names: list[str] | None = None,
+            country_code: str | None = None,
+        ) -> list[models.Location]:
+            seen["country_code"] = country_code
+            return await super().get_locations(
+                energy_type=energy_type,
+                location_type=location_type,
+                authdata=authdata,
+                location_uuid=location_uuid,
+                enclosing_location_uuid=enclosing_location_uuid,
+                location_names=location_names,
+                country_code=country_code,
+            )
+
+    status_code, _ = await _site_get(RecordingClient(), _SITE_FORECAST_URL)
+    assert status_code == 200
+    assert seen["country_code"] == "GB"

@@ -78,6 +78,7 @@ async def get_site(
     site_id: UUID,
     auth: AuthDependency,
     energy_type: models.EnergyType | None = None,
+    country_code: str | None = None,
 ) -> models.Location:
     """Return the site for the given site_id, or raise 404 if not found."""
     require_org_id(auth)
@@ -86,6 +87,7 @@ async def get_site(
         location_type=models.LocationType.SITE,
         authdata=auth,
         location_uuid=site_id,
+        country_code=country_code,
     )
     if not locs:
         raise HTTPException(

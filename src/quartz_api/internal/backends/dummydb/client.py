@@ -131,6 +131,7 @@ class StorageClient(models.StorageInterface):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         loc_uuid = location_uuid or uuid4()
         match energy_type, location_type:
