@@ -12,7 +12,7 @@ from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.constants import SUPPORT_EMAIL
-from quartz_api.internal import eclipse, models
+from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..auth_scopes import ADMIN_PERMISSION
@@ -159,9 +159,6 @@ async def get_forecast(
                     forecaster_version=model_version,
                 ),
             )
-
-    if location_type == models.LocationType.NATION:
-        pgvs = eclipse.adjust_predicted_generation(pgvs, country.code)
 
     first = pgvs[0] if pgvs else None
     last_updated, latest_init = latest_run_timestamps(pgvs)
@@ -366,9 +363,6 @@ async def get_forecasts_at_time(
         energy_type=source,
         authdata={},
     )
-
-    if location_type == models.LocationType.NATION:
-        snapshot = eclipse.adjust_snapshot(snapshot, country.code)
 
     region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     first = snapshot[0] if snapshot else None
