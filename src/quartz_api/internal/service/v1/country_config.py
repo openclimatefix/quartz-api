@@ -304,13 +304,13 @@ class FM:
         aliases=("ecmwf_mo_sat_uncurtailed",),
         adjust_aliases=("ecmwf_mo_sat_uncurtailed_adjust",),
     )
-    # DE — slugs follow the GB/NL input-set naming. No blend yet, so the full
-    # input set is the default.
-    DE_ECMWF_MO_PV_SAT = ForecastModel(
-        name="de_ecmwf_pv_mo_sat",
-        label="ECMWF + Met Office + PV + Satellite",
-        slug="ecmwf_mo_pv_sat",
-        adjust_name="de_ecmwf_pv_mo_sat_adjust",
+    # DE — slugs follow the GB/NL naming: blend is the default, the rest are
+    # the single/partial input-set models behind it.
+    DE_BLEND = ForecastModel(
+        name="de_blend",
+        label="Blend",
+        slug="blend",
+        adjust_name="de_blend_adjust",
     )
     DE_ECMWF_PV = ForecastModel(
         name="de_ecmwf_pv",
@@ -367,7 +367,7 @@ _NL_NATIONAL_FORECAST_MODELS = (
 _NL_REGIONAL_FORECAST_MODELS = (FM.NL_BLEND, FM.NL_UNCURTAILED)
 
 _DE_FORECAST_MODELS = (
-    FM.DE_ECMWF_MO_PV_SAT,
+    FM.DE_BLEND,
     FM.DE_ECMWF_PV,
     FM.DE_ECMWF,
     FM.DE_MO,
@@ -493,7 +493,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.NATION,
                 source_types=("solar",),
                 forecast_models=_DE_FORECAST_MODELS,
-                default_model="de_ecmwf_pv_mo_sat",
+                default_model="de_blend",
                 supports_adjusted=True,
             ),
             RegionTypeConfig(
@@ -504,7 +504,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
                 location_type=LocationType.REGION,
                 source_types=("solar",),
                 forecast_models=_DE_FORECAST_MODELS,
-                default_model="de_ecmwf_pv_mo_sat",
+                default_model="de_blend",
                 # No `_adjust` forecasts exist at TSO level, only national.
                 supports_adjusted=False,
                 # Same rule as NL: once deployed, existing names must not change.

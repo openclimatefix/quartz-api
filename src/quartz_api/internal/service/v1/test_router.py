@@ -20,7 +20,7 @@ from quartz_api.internal import eclipse, models
 from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .country_config import COUNTRIES, FM, RegionTypeConfig
+from .country_config import ALL_COUNTRIES, COUNTRIES, FM, RegionTypeConfig
 from .helpers import api_facing_model_errors, parse_forecast_metadata, resolve_forecast_model
 from .router import router
 
@@ -2634,6 +2634,28 @@ def test_adjusted_is_noop_for_gsp() -> None:
     for flag in (True, False):
         assert resolve_forecast_model("blend", _GB_GSP_RT, False, flag) == "blend"
         assert resolve_forecast_model(None, _GB_GSP_RT, False, flag) == "blend"
+
+
+def test_adjusted_is_noop_for_de_tso() -> None:
+    """TSO has no adjusted DP variants, so `adjusted=True` must still give the plain name."""
+    de_tso = ALL_COUNTRIES["DE"].get_region_type("tso")
+    assert de_tso is not None
+    assert not de_tso.supports_adjusted
+    for flag in (True, False):
+        assert resolve_forecast_model("blend", de_tso, False, flag) == "de_blend"
+        assert resolve_forecast_model(None, de_tso, False, flag) == "de_blend"
+        assert resolve_forecast_model("sat_8h", de_tso, False, flag) == "de_sat_only"
+    assert de_tso.default_forecaster_name() == "de_blend"
+
+
+def test_de_national_keeps_the_adjusted_blend() -> None:
+    """The national adjuster pass does run, so DE national must still reach `de_blend_adjust`."""
+    de_national = ALL_COUNTRIES["DE"].get_region_type("national")
+    assert de_national is not None
+    assert de_national.supports_adjusted
+    assert resolve_forecast_model(None, de_national, False, True) == "de_blend_adjust"
+    assert resolve_forecast_model("blend", de_national, False, False) == "de_blend"
+    assert de_national.default_forecaster_name() == "de_blend_adjust"
 
 
 def test_cache_warms_the_adjusted_default() -> None:
