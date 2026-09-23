@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from starlette import status
 
 from quartz_api.internal import models
@@ -18,6 +18,8 @@ from ..endpoint_types import (
     SiteClearskyMatrix,
     SiteClearskyResponse,
     SiteForecastResponse,
+    SiteGenerationInput,
+    SiteGenerationResponse,
     SitePowerSeries,
     ValidSource,
     ValidWindowEnd,
@@ -106,6 +108,108 @@ async def get_site_forecast(
             for value in values
         ],
     )
+
+
+@router.get(
+    "/{country}/{source}/sites/{site_id}/generation",
+    response_model=SiteGenerationResponse,
+    response_model_exclude_none=True,
+)
+async def get_site_generation(
+    country: CountryParam,
+    source: ValidSource,
+    site_id: UUID,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    start_utc: ValidWindowStart = None,
+    end_utc: ValidWindowEnd = None,
+) -> SiteGenerationResponse:
+    """Return the generation a site has reported. Defaults to the last 24 hours."""
+    check_country_access(auth, country)
+
+    # set generation window
+    now = pd.Timestamp.now(tz="UTC").floor("15min").to_pydatetime()
+    window_end = end_utc or now
+    window_start = start_utc or window_end - dt.timedelta(hours=24)
+    validate_window(window_start, window_end)
+
+    site_cfg = site_config_for(country, source)
+    site = await get_site(db, site_id, auth, source, str(country.code))
+
+    # fetch observed values
+    values: list[models.ActualGenerationValue] = []
+
+    for chunk_start, chunk_end in window_chunks(window_start, window_end):
+        values.extend(
+            await db.get_actual_generation(
+                location_uuid=site.uuid,
+                window_start=chunk_start,
+                window_end=chunk_end,
+                energy_type=source,
+                location_type=models.LocationType.SITE,
+                authdata=auth,
+                observer_name=site_cfg.observer_name,
+            ),
+        )
+
+    return SiteGenerationResponse(
+        site_id=site.uuid,
+        capacity_kW=site.capacity_kilowatts,
+        observer_name=site_cfg.observer_name,
+        values=[
+            GenerationValue(
+                time_utc=value.valid_timestamp,
+                power_kW=value.power_kilowatts,
+            )
+            for value in values
+        ],
+    )
+
+
+@router.post(
+    "/{country}/{source}/sites/{site_id}/generation",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def post_site_generation(
+    country: CountryParam,
+    source: ValidSource,
+    site_id: UUID,
+    readings: list[SiteGenerationInput],
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+) -> Response:
+    """Upload generation readings for a site. Returns 202 with no body."""
+    check_country_access(auth, country)
+
+    # nothing to save
+    if not readings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No values to save.",
+        )
+
+    site_cfg = site_config_for(country, source)
+    site = await get_site(db, site_id, auth, source, str(country.code))
+
+    # save the readings. The dp rejects timestamps in the future.
+    await db.put_actual_generation(
+        generation_values=[
+            models.ActualGenerationValue(
+                power_kilowatts=reading.power_kW,
+                valid_timestamp=reading.time_utc,
+                location_uuid=site.uuid,
+                capacity_kilowatts=site.capacity_kilowatts,
+                observer_name=site_cfg.observer_name,
+            )
+            for reading in readings
+        ],
+        location_uuid=site.uuid,
+        energy_type=source,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+    )
+
+    return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.get(

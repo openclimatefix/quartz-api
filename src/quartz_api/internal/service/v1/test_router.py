@@ -3588,3 +3588,224 @@ async def test_site_forecast_passes_country_to_storage() -> None:
     status_code, _ = await _site_get(RecordingClient(), _SITE_FORECAST_URL)
     assert status_code == 200
     assert seen["country_code"] == "GB"
+
+
+# --- Site generation (#388) -----------------------------------------------------------
+
+_SITE_GENERATION_URL = f"/v1/GB/solar/sites/{_SITE_ID}/generation"
+
+
+class SiteGenerationClient(SiteForecastClient):
+    """Adds observed generation, and records what reads and writes were asked for."""
+
+    def __init__(self, *, observations: int = 3, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self._n_observations = observations
+        self.read_calls: list[dict] = []
+        self.written: list[models.ActualGenerationValue] = []
+        self.write_calls: list[dict] = []
+
+    async def get_actual_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        observer_name: str | None = None,
+        created_cutoff: dt.datetime | None = None,
+    ) -> list[models.ActualGenerationValue]:
+        self.read_calls.append(
+            {
+                "location_uuid": location_uuid,
+                "window_start": window_start,
+                "window_end": window_end,
+                "observer_name": observer_name,
+                "authdata": authdata,
+            },
+        )
+        base = dt.datetime(2026, 4, 17, 12, 0, tzinfo=dt.UTC)
+        return [
+            models.ActualGenerationValue(
+                power_kilowatts=float(i),
+                valid_timestamp=base + dt.timedelta(minutes=15 * i),
+                location_uuid=_SITE_ID,
+                capacity_kilowatts=99.0,  # deliberately not the site's capacity
+                observer_name=observer_name or "unset",
+            )
+            for i in range(self._n_observations)
+        ]
+
+    async def put_actual_generation(  # type: ignore[override]
+        self,
+        generation_values: list[models.ActualGenerationValue],
+        location_uuid: UUID | str,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+    ) -> None:
+        self.written.extend(generation_values)
+        self.write_calls.append(
+            {
+                "location_uuid": location_uuid,
+                "energy_type": energy_type,
+                "location_type": location_type,
+                "authdata": authdata,
+            },
+        )
+
+
+async def _site_post(
+    db: models.StorageInterface,
+    url: str,
+    body: object,
+    *,
+    company: str | None = "co-1",
+) -> tuple[int, dict | None]:
+    async with AsyncClient(
+        transport=ASGITransport(app=_site_app(db, company=company)),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.post(url, json=body)
+    return resp.status_code, (resp.json() if resp.content else None)
+
+
+@pytest.mark.anyio
+async def test_site_generation_shape() -> None:
+    db = SiteGenerationClient()
+    status_code, body = await _site_get(db, _SITE_GENERATION_URL)
+
+    assert status_code == 200
+    assert body["site_id"] == str(_SITE_ID)
+    assert body["observer_name"] == "pv_actual"
+    assert body["capacity_kW"] == 5.0  # the site's, not the values' 99.0
+    assert body["values"][0] == {"time_utc": "2026-04-17T12:00:00Z", "power_kW": 0.0}
+    assert all(set(v) == {"time_utc", "power_kW"} for v in body["values"])
+
+
+@pytest.mark.anyio
+async def test_site_generation_uses_observer_from_config() -> None:
+    """The observer is not a request parameter; it comes from country config."""
+    db = SiteGenerationClient()
+    await _site_get(db, _SITE_GENERATION_URL)
+    assert db.read_calls[0]["observer_name"] == "pv_actual"
+
+
+@pytest.mark.anyio
+async def test_site_generation_default_window_is_last_24h() -> None:
+    db = SiteGenerationClient()
+    await _site_get(db, _SITE_GENERATION_URL)
+    call = db.read_calls[0]
+    assert call["window_end"] - call["window_start"] == dt.timedelta(hours=24)
+    assert call["window_start"].minute % 15 == 0
+    assert call["window_start"].second == 0
+
+
+@pytest.mark.anyio
+async def test_site_generation_passes_auth_to_storage() -> None:
+    db = SiteGenerationClient()
+    await _site_get(db, _SITE_GENERATION_URL)
+    assert db.read_calls[0]["authdata"]["app_metadata"]["hubspot_company_id"] == "co-1"
+
+
+@pytest.mark.anyio
+async def test_site_generation_empty_is_200() -> None:
+    status_code, body = await _site_get(
+        SiteGenerationClient(observations=0), _SITE_GENERATION_URL,
+    )
+    assert status_code == 200
+    assert body["values"] == []
+
+
+@pytest.mark.anyio
+async def test_site_generation_bad_window_is_400_before_any_lookup() -> None:
+    db = SiteGenerationClient()
+    status_code, body = await _site_get(
+        db,
+        f"{_SITE_GENERATION_URL}?start_utc=2026-04-18T00:00:00Z&end_utc=2026-04-17T00:00:00Z",
+    )
+    assert status_code == 400
+    assert "before end_utc" in body["detail"]
+    assert db.read_calls == []
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_returns_202_with_no_body() -> None:
+    db = SiteGenerationClient()
+    status_code, body = await _site_post(
+        db,
+        _SITE_GENERATION_URL,
+        [{"time_utc": "2026-04-17T12:00:00Z", "power_kW": 1.452}],
+    )
+    assert status_code == 202
+    assert body is None
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_writes_what_was_sent() -> None:
+    db = SiteGenerationClient()
+    await _site_post(
+        db,
+        _SITE_GENERATION_URL,
+        [
+            {"time_utc": "2026-04-17T12:00:00Z", "power_kW": 1.452},
+            {"time_utc": "2026-04-17T12:15:00Z", "power_kW": 2.0},
+        ],
+    )
+    assert [v.power_kilowatts for v in db.written] == [1.452, 2.0]
+    assert db.written[0].valid_timestamp == dt.datetime(2026, 4, 17, 12, 0, tzinfo=dt.UTC)
+    assert all(v.observer_name == "pv_actual" for v in db.written)
+    assert all(v.location_uuid == _SITE_ID for v in db.written)
+    # The site must reach the storage call itself: the DP backend writes to that uuid,
+    # not to whatever the values happen to carry.
+    assert db.write_calls[0]["location_uuid"] == _SITE_ID
+    assert db.write_calls[0]["location_type"] == models.LocationType.SITE
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_empty_list_is_400() -> None:
+    db = SiteGenerationClient()
+    status_code, body = await _site_post(db, _SITE_GENERATION_URL, [])
+    assert status_code == 400
+    assert body["detail"] == "No values to save."
+    assert db.written == []
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_negative_power_is_422() -> None:
+    db = SiteGenerationClient()
+    status_code, _ = await _site_post(
+        db,
+        _SITE_GENERATION_URL,
+        [{"time_utc": "2026-04-17T12:00:00Z", "power_kW": -1.0}],
+    )
+    assert status_code == 422
+    assert db.written == []
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_other_companys_site_is_404() -> None:
+    """A write must be scoped exactly like a read, or one company can write to another."""
+    unknown = UUID("00000000-0000-0000-0000-0000000000ff")
+    db = SiteGenerationClient()
+    status_code, _ = await _site_post(
+        db,
+        f"/v1/GB/solar/sites/{unknown}/generation",
+        [{"time_utc": "2026-04-17T12:00:00Z", "power_kW": 1.0}],
+    )
+    assert status_code == 404
+    assert db.written == []
+
+
+@pytest.mark.anyio
+async def test_post_site_generation_without_company_is_403() -> None:
+    db = SiteGenerationClient()
+    status_code, _ = await _site_post(
+        db,
+        _SITE_GENERATION_URL,
+        [{"time_utc": "2026-04-17T12:00:00Z", "power_kW": 1.0}],
+        company=None,
+    )
+    assert status_code == 403
+    assert db.written == []

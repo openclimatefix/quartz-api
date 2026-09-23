@@ -753,3 +753,19 @@ class SiteForecastResponse(BaseModel):
     last_updated_utc: dt.datetime | None = None
     latest_init_utc: dt.datetime | None = None
     values: list[GenerationValue]
+
+
+class SiteGenerationResponse(BaseModel):
+    """Observed generation time series for one site."""
+
+    site_id: UUID
+    capacity_kW: float
+    observer_name: str
+    values: list[GenerationValue]
+
+
+class SiteGenerationInput(BaseModel):
+    """One reading a client uploads for its own site."""
+
+    time_utc: dt.datetime
+    power_kW: float = Field(ge=0)

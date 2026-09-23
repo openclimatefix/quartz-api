@@ -138,6 +138,7 @@ class StorageInterface(abc.ABC):
     async def put_actual_generation(
         self,
         generation_values: list[ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: EnergyType,
         location_type: LocationType,
         authdata: dict[str, str],
