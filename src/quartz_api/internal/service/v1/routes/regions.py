@@ -11,6 +11,8 @@ from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..cache import key_builder
 from ..endpoint_types import (
+    REGION_RESPONSES,
+    SNAPSHOT_RESPONSES,
     CountryParam,
     OptionalValidRegionType,
     RegionDetail,
@@ -20,6 +22,8 @@ from ..endpoint_types import (
 from ..helpers import (
     check_country_access,
     check_region_type,
+    fetch_api_region,
+    is_api_region,
     location_to_detail,
     resolve_nation,
     resolve_region_id,
@@ -31,6 +35,7 @@ router = APIRouter(tags=["Discovery"])
 
 @router.get(
     "/{country}/{source}/regions",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=list[RegionDetail],
 )
@@ -54,10 +59,10 @@ async def get_country_regions(
     """List regions for a country, optionally filtered by type, parent, and/or name.
 
     Filter behavior:
-    - No filters — returns every region across all configured region types.
-    - `region_type` — restricts results to one granularity level (e.g. `gsp`).
-    - `parent` — returns the direct children of the specified parent region.
-    - `name` — case-insensitive substring search across region names.
+    - No filters: returns every region across all configured region types.
+    - `region_type`: restricts results to one granularity level (e.g. `gsp`).
+    - `parent`: returns the direct children of the specified parent region.
+    - `name`: case-insensitive substring search across region names.
     """
     check_country_access(auth, country)
     nation = await resolve_nation(db, source, country, auth)
@@ -85,15 +90,22 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=parent_uuid,
         )
-        return _apply_name_filter(
-            [location_to_detail(loc, country) for loc in locs],
+        # Without a region_type the platform returns every descendant, which includes
+        # primary substations and individual sites as well as regions.
+        return _filter_and_sort(
+            [
+                location_to_detail(loc, country)
+                for loc in locs
+                if is_api_region(loc, country)
+            ],
             name,
+            country,
         )
 
     if region_type is not None:
         rt = check_region_type(country, region_type, country.code)
         if rt.location_type == models.LocationType.NATION:
-            return _apply_name_filter([location_to_detail(nation, country)], name)
+            return _filter_and_sort([location_to_detail(nation, country)], name, country)
 
         locs = await db.get_locations(
             energy_type=source,
@@ -101,9 +113,10 @@ async def get_country_regions(
             authdata={},
             enclosing_location_uuid=to_uuid(nation.uuid),
         )
-        return _apply_name_filter(
+        return _filter_and_sort(
             [location_to_detail(loc, country) for loc in locs],
             name,
+            country,
         )
 
     # No filters — combine all region types
@@ -126,21 +139,43 @@ async def get_country_regions(
             raise result
         for loc in result:
             out.append(location_to_detail(loc, country))
-    return _apply_name_filter(out, name)
+    return _filter_and_sort(out, name, country)
 
 
-def _apply_name_filter(
+# A location whose LocationType the country has no configured region type for is
+# returned with `type: null` — it still needs somewhere to sort.
+_UNTYPED_LEVEL = 10_000
+
+
+def _filter_and_sort(
     regions: list[RegionDetail],
     name: str | None,
+    country: CountryParam,
 ) -> list[RegionDetail]:
-    if name is None:
-        return regions
-    needle = name.lower()
-    return [r for r in regions if needle in r.name.lower()]
+    """Apply the optional name filter, then impose a deterministic order.
+
+    The data platform gives no ordering guarantee, so without this the same request can
+    return the same regions in a different order each time the 60s cache expires.
+
+    Ordered by region type level, then by name. National types are level 0, so they sort
+    to the top without a special case.
+    """
+    if name is not None:
+        needle = name.lower()
+        regions = [r for r in regions if needle in r.name.lower()]
+
+    levels = {rt.type: rt.level for rt in country.region_types}
+
+    def _sort_key(region: RegionDetail) -> tuple[int, str]:
+        level = _UNTYPED_LEVEL if region.type is None else levels[region.type]
+        return (level, region.name.lower())
+
+    return sorted(regions, key=_sort_key)
 
 
 @router.get(
     "/{country}/{source}/regions/{region}",
+    responses=REGION_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=RegionDetail,
 )
@@ -161,15 +196,5 @@ async def get_region(
     check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
-    locs = await db.get_locations(
-        energy_type=source,
-        location_type=None,
-        authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=resolved_id,
-    )
-    if len(locs) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{resolved_id}' not found.",
-        )
-    return location_to_detail(locs[0], country)
+    region = await fetch_api_region(resolved_id, country, source, db)
+    return location_to_detail(region, country)

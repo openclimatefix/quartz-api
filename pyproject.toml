@@ -82,7 +82,7 @@ quartz-api = "quartz_api.cmd.main:run"
 include-package-data = true
 
 [tool.setuptools.package-data]
-"*" = ["*.conf", "*.ico", "*.png", "*.html", "*.js"]
+"*" = ["*.conf", "*.ico", "*.png", "*.svg", "*.html", "*.js", "*.woff2"]
 
 [tool.setuptools-git-versioning]
 enabled = true

@@ -166,7 +166,7 @@ async def warm_v1_forecast_cache(
                 energy_type=energy_type,
                 location_type=rt.location_type,
                 authdata={},
-                forecaster_name=rt.default_model,
+                forecaster_name=rt.default_forecaster_name(),
             )
             if pgvs:
                 if first_found_pgv is None:

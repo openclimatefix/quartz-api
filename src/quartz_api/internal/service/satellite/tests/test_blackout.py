@@ -1,7 +1,7 @@
 import datetime as dt
 import unittest
 
-from ._blackout import apply_buffer, sun_times
+from .._blackout import apply_buffer, sun_times
 
 # Middle of the UK bounding box used by the ingest.
 UK_LON, UK_LAT = -2.725, 54.9

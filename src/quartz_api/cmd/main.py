@@ -1,6 +1,7 @@
 """API providing access to OCF's Quartz Forecasts."""
 
 import asyncio
+import copy
 import functools
 import importlib
 import importlib.metadata
@@ -18,13 +19,13 @@ from apitally.fastapi import ApitallyMiddleware
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from pydantic import BaseModel
 from pyhocon import ConfigFactory, ConfigTree
 from scalar_fastapi import AgentScalarConfig, Theme, get_scalar_api_reference
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -77,9 +78,38 @@ class GetHealthResponse(BaseModel):
     status: int
 
 
+# Every scope the docs page asks Auth0 for. `offline_access` is what makes Auth0 issue a
+# refresh token; the rest identify the user. Defined once because the same list has to
+# reach three places — the OpenAPI security scheme, the scopes Scalar requests, and the
+# scopes Scalar pre-ticks. A scope that is not ticked at login is not in the token, and
+# the token cannot be refreshed afterwards, so they all default to on.
+_OAUTH_SCOPES: dict[str, str] = {
+    "openid": "OpenID",
+    "profile": "Profile",
+    "email": "Email",
+    "offline_access": "Refresh token",
+}
+
+
+# v0 keeps its original Quartz contact details; v1 is branded OCF Energy and takes
+# the support address from SUPPORT_EMAIL. Passed in per app rather than hardcoded so
+# the two can diverge while _custom_openapi stays shared.
+_V0_CONTACT = {
+    "name": "Quartz API by Open Climate Fix",
+    "url": "https://www.quartz.solar",
+    "email": "support@quartz.solar",
+}
+_V1_CONTACT = {
+    "name": "support@ocf.energy",
+    "url": "https://openclimatefix.org",
+    "email": SUPPORT_EMAIL,
+}
+
+
 def _custom_openapi(
     server: FastAPI,
     auth_config: dict[str, str] | None = None,
+    contact: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Customize the OpenAPI schema for ReDoc."""
     if server.openapi_schema:
@@ -89,16 +119,13 @@ def _custom_openapi(
         title=server.title,
         version=server.version,
         description=server.description,
-        contact={
-            "name": "Quartz API by Open Climate Fix",
-            "url": "https://www.quartz.solar",
-            "email": SUPPORT_EMAIL,
-        },
+        contact=contact or _V0_CONTACT,
         routes=server.routes,
     )
 
     openapi_schema["info"]["x-logo"] = {"url": "/static/logo.png"}
-    openapi_schema["tags"] = server.openapi_tags
+    if server.openapi_tags:
+        openapi_schema["tags"] = server.openapi_tags
 
     if auth_config:
         domain = auth_config["domain"]
@@ -121,11 +148,7 @@ def _custom_openapi(
                     # so Auth0 receives it on the redirect.
                     "authorizationUrl": f"https://{domain}/authorize?audience={audience}",
                     "tokenUrl": f"https://{domain}/oauth/token",
-                    "scopes": {
-                        "openid": "OpenID",
-                        "profile": "Profile",
-                        "email": "Email",
-                    },
+                    "scopes": dict(_OAUTH_SCOPES),
                 },
             },
         }
@@ -145,6 +168,180 @@ def _custom_openapi(
     return openapi_schema
 
 
+# Scalar does not tick an optional parameter when a value is typed into it, so the row
+# is left out of the request and the caller silently gets the default back. Upstream
+# treats that as intended (scalar/scalar#7851); scalar/scalar#2558 asks for this.
+# Scalar already does it for a row added by hand, so this only makes the rows that come
+# from the OpenAPI document behave the same way. Clicks the box rather than setting
+# `checked`, so Scalar's own handler runs and its request state follows. If Scalar
+# renames these classes the listener stops firing and nothing else changes — the
+# greying in `custom_css` still shows which rows are disabled.
+# Scalar renders the Test Request panel in a fixed order that puts Cookies and Headers
+# above Query Parameters, and offers no configuration for it (scalar/scalar exposes only
+# tagsSorter / operationsSorter / orderSchemaPropertiesBy, none of which touch this
+# panel). Query parameters are what callers actually set on this API, so lift them.
+#
+# The sections are flex children of the tabpanel, so `order` moves them. It cannot be
+# pure CSS: the ids are sequential (`scalar-client-0-5`, `-6`, …) and shift by route
+# depending on which sections exist, so neither id nor :nth-child identifies a section
+# reliably — the only stable handle is the header text, which CSS cannot match.
+#
+# If Scalar renames these sections nothing gets an order and the panel falls back to
+# Scalar's own order, which is today's behaviour.
+# Scalar persists the auth block in localStorage, and looks the redirect up with `??`
+# rather than the `||` it uses for every other secret. So a stored empty string counts
+# as a deliberate choice and beats the value we send, while an absent key falls through
+# to it. Deleting just that key is not enough — Scalar rewrites it from its own state —
+# so the whole persisted entry has to go for the config to be read again.
+#
+# Only entries that have nothing worth keeping are removed: the redirect must be empty
+# (the stuck state) and the token empty too, so nobody holding a live token is signed
+# out to fix a cosmetic field. Runs in <head>, before the bundle hydrates. Any change
+# to Scalar's storage shape makes it a no-op rather than a hazard.
+_SCALAR_REDIRECT_REPAIR_JS = """
+<script>
+  (function () {
+    var REDIRECT = 'x-scalar-secret-redirect-uri';
+    var TOKEN = 'x-scalar-secret-token';
+    function stuck(node) {
+      if (!node || typeof node !== 'object') return false;
+      if (node[REDIRECT] === '' && (node[TOKEN] === '' || node[TOKEN] === undefined)) {
+        return true;
+      }
+      for (var k in node) {
+        if (Object.prototype.hasOwnProperty.call(node, k) && stuck(node[k])) return true;
+      }
+      return false;
+    }
+    var doomed = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      try {
+        var name = localStorage.key(i);
+        var raw = localStorage.getItem(name);
+        if (!raw || raw.indexOf(REDIRECT) === -1) continue;
+        if (stuck(JSON.parse(raw))) doomed.push(name);
+      } catch (e) {
+        // A non-JSON entry, or storage blocked: leave it untouched.
+      }
+    }
+    for (var j = 0; j < doomed.length; j++) localStorage.removeItem(doomed[j]);
+  })();
+</script>
+"""
+
+
+_SCALAR_SECTION_ORDER_JS = r"""
+<script>
+  (function () {
+    var ORDER = {
+      'Authentication': 10,
+      'Variables': 20,
+      'Query Parameters': 30,
+      'Request Body': 40,
+      'Headers': 50,
+      'Cookies': 60,
+      'Code Snippet': 90,
+    };
+    function apply() {
+      var panels = document.querySelectorAll(
+        '.request-section-content[role="tabpanel"]',
+      );
+      for (var p = 0; p < panels.length; p++) {
+        var kids = panels[p].children;
+        for (var i = 0; i < kids.length; i++) {
+          var el = kids[i];
+          var head = el.querySelector('button, [role="button"], h2, h3');
+          var label = head ? head.textContent.trim().replace(/\s+/g, ' ') : '';
+          var order = null;
+          for (var name in ORDER) {
+            if (label.indexOf(name) === 0) { order = ORDER[name]; break; }
+          }
+          // A section we do not recognise sits mid-panel rather than jumping to an
+          // end. The unlabelled one is a flex-grow spacer that pins Code Snippet to
+          // the bottom, so it has to stay just above it.
+          if (order === null) order = label ? 45 : 80;
+          var want = String(order);
+          if (el.style.order !== want) el.style.order = want;
+        }
+      }
+    }
+    // The panel is built when the modal opens and rebuilt when the route changes.
+    var queued = false;
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; apply(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    apply();
+  })();
+</script>
+"""
+
+
+_SCALAR_AUTO_ENABLE_JS = """
+<script>
+  (function () {
+    document.addEventListener(
+      'input',
+      function (event) {
+        var target = event.target;
+        if (!target || !target.closest) return;
+        var editor = target.closest('.code-input-lite__editor');
+        if (!editor) return;
+        var row = editor.closest('tr.group');
+        if (!row) return;
+        var box = row.querySelector('td:first-child input[type="checkbox"]');
+        if (!box || box.checked) return;
+        var cells = row.children;
+        var filled = function (cell) {
+          var field = cell && cell.querySelector('.code-input-lite');
+          return !!field && !field.classList.contains('code-input-lite--empty');
+        };
+        // Both halves must be filled, so a nameless parameter is never enabled.
+        if (!filled(cells[1]) || !filled(cells[cells.length - 1])) return;
+        box.click();
+      },
+      true,
+    );
+  })();
+</script>
+"""
+
+
+
+# The data platform answers with gRPC status codes; map the ones that describe the
+# caller's request onto the matching HTTP status so a client sees a normal error.
+_GRPC_TO_HTTP: dict[Any, int] = {
+    grpc.StatusCode.NOT_FOUND: status.HTTP_404_NOT_FOUND,
+    grpc.StatusCode.INVALID_ARGUMENT: status.HTTP_400_BAD_REQUEST,
+    grpc.StatusCode.PERMISSION_DENIED: status.HTTP_403_FORBIDDEN,
+    grpc.StatusCode.UNAUTHENTICATED: status.HTTP_401_UNAUTHORIZED,
+    grpc.StatusCode.ALREADY_EXISTS: status.HTTP_409_CONFLICT,
+    grpc.StatusCode.RESOURCE_EXHAUSTED: status.HTTP_429_TOO_MANY_REQUESTS,
+    grpc.StatusCode.UNAVAILABLE: status.HTTP_503_SERVICE_UNAVAILABLE,
+    grpc.StatusCode.DEADLINE_EXCEEDED: status.HTTP_504_GATEWAY_TIMEOUT,
+}
+
+
+async def _grpc_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Answer an uncaught data platform failure with an HTTP error, not a gRPC repr.
+
+    Uncaught, an AioRpcError reaches the caller as its own repr, carrying
+    debug_error_string and the peer address with it. The platform's `details()` is a
+    short sentence and worth passing on when the caller can act on it; anything that
+    maps to a 5xx is reported generically and left in full in the log.
+    """
+    code = exc.code() if isinstance(exc, grpc.aio.AioRpcError) else None
+    http_status = _GRPC_TO_HTTP.get(code, status.HTTP_502_BAD_GATEWAY)
+    log.error(f"Data platform call to {request.url.path} failed: {exc!r}")
+    if http_status >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        detail = "Upstream request failed. Please try again."
+    else:
+        detail = (exc.details() if isinstance(exc, grpc.aio.AioRpcError) else None) or (
+            "The request was rejected upstream."
+        )
+    return JSONResponse(status_code=http_status, content={"detail": detail})
+
 def _create_v1_app(
     conf: ConfigTree,
     auth_openapi_config: dict[str, str] | None,
@@ -152,19 +349,44 @@ def _create_v1_app(
 ) -> FastAPI:
     """Create and configure the v1 FastAPI sub-application."""
     v1_mod = importlib.import_module(service.__name__ + ".v1")
+    deployment = v1_mod.country_config
+    # V1_COUNTRIES and V1_STAGE are read in country_config, not through `conf`: the
+    # OpenAPI enums are built when that module is imported, before conf is available.
+    log.info(
+        "v1 serving countries %s at stage '%s'",
+        sorted(deployment.COUNTRIES),
+        deployment.DEPLOYMENT_STAGE,
+    )
 
     scalar_auth: dict = {}
     if auth_openapi_config:
+        # Two shapes on purpose. The flat `oauth2` block is what older Scalar builds
+        # read; `securitySchemes` is the current one, and is also where the redirect URI
+        # has to go. `selectedScopes` is the half that matters here: `scopes` only says
+        # what may be requested, so without it the boxes render unticked and the token
+        # comes back without them.
         scalar_auth = {
             "preferredSecurityScheme": "oauth2",
             "oauth2": {
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": " ".join(_OAUTH_SCOPES),
+            },
+            "securitySchemes": {
+                "oauth2": {
+                    "flows": {
+                        "authorizationCode": {
+                            "x-scalar-secret-client-id": conf.get_string(
+                                "auth0.client_id",
+                            ),
+                            "selectedScopes": list(_OAUTH_SCOPES),
+                        },
+                    },
+                },
             },
         }
 
     v1_app = FastAPI(
-        title="Quartz API Documentation",
+        title="OCF Energy API Documentation",
         version=importlib.metadata.version("quartz_api"),
         description=v1_mod.__doc__ or "",
         docs_url=None,
@@ -172,45 +394,200 @@ def _create_v1_app(
     )
 
     v1_app.state.limiter = limiter or ratelimit.limiter
-    v1_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    v1_app.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
+    v1_app.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     v1_app.add_middleware(SlowAPIMiddleware)
     v1_app.include_router(v1_mod.router)
-    v1_app.openapi = lambda: _custom_openapi(v1_app, auth_openapi_config)
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    v1_app.openapi = lambda: _custom_openapi(  # ty: ignore[invalid-assignment]
+        v1_app, auth_openapi_config, contact=_V1_CONTACT,
+    )
 
     @v1_app.get("/docs", include_in_schema=False)
     async def v1_scalar_docs(request: Request) -> HTMLResponse:
         """Serve Scalar API reference for v1."""
         root_path = request.scope.get("root_path", "").rstrip("/")
-        return get_scalar_api_reference(
+        # Scalar defaults the OAuth redirect to the current page, but `persist_auth`
+        # stores the auth block in localStorage — so once the field has been cleared
+        # it stays cleared, and nothing ever refills it. Sending it on every load is
+        # what makes it self-healing. This is the docs page itself, which Auth0 must
+        # already allow as a callback, so it needs no new registration.
+        page_auth = copy.deepcopy(scalar_auth)
+        if page_auth:
+            # X-Forwarded-Proto, not request.url.scheme. Behind the load balancer TLS
+            # is terminated upstream and the app is spoken to over http, so the scheme
+            # on the request is http even though the browser is on https. gunicorn's
+            # UvicornWorker only honours the forwarded header from `forwarded_allow_ips`,
+            # which defaults to loopback, so it is ignored in a deployment and correct
+            # by accident locally, where there is no proxy at all.
+            #
+            # The value has to be the URL the browser is actually on: Auth0 matches it
+            # against the registered callback, and it is what the token exchange is
+            # checked against.
+            forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0]
+            page_url = request.url.replace(query="", fragment="")
+            if forwarded_proto in ("http", "https"):
+                page_url = page_url.replace(scheme=forwarded_proto)
+            redirect_uri = str(page_url)
+            # Merged into the flow rather than assigned over it: the same block carries
+            # the client id and the pre-ticked scopes, and replacing it drops both.
+            flow = page_auth["securitySchemes"]["oauth2"]["flows"]["authorizationCode"]
+            flow["x-scalar-secret-redirect-uri"] = redirect_uri
+        page = get_scalar_api_reference(
             openapi_url=root_path + v1_app.openapi_url,
             title=v1_app.title,
-            authentication=scalar_auth,
+            authentication=page_auth,
             persist_auth=True,
+            with_default_fonts=False,
             theme=Theme.ALTERNATE,
             dark_mode=True,
             scalar_favicon_url="/static/favicon.ico",
             default_open_all_tags=True,
             hide_dark_mode_toggle=True,
             agent=AgentScalarConfig(disabled=True),
+            # Pinned: scalar_fastapi defaults to an unversioned jsdelivr URL, which
+            # tracks latest and can change the docs UI — and the selectors the CSS
+            # below relies on — with no deploy of ours.
+            scalar_js_url=(
+                "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0"
+            ),
+            order_schema_properties_by=("preserve"),
+            hide_client_button=(True),
             custom_css="""
+                      /* Matter XH is the product's face, self-hosted here the same
+                         way the frontend does it. `with_default_fonts=False` below
+                         stops Scalar fetching Inter and JetBrains Mono from Google,
+                         which nothing then uses. The weights are the three the
+                         frontend ships; anything else synthesises from the nearest.
+                         `swap` so the text is readable while the file loads.
+                         These are served from the root app's /static mount, not the
+                         v1 sub-app, which is why the paths have no /v1 prefix — same
+                         as the favicon and the sidebar logo. */
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHLight.woff2") format("woff2");
+                        font-weight: 300;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHRegular.woff2") format("woff2");
+                        font-weight: 400;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter XH";
+                        src: url("/static/fonts/MatterXHMedium.woff2") format("woff2");
+                        font-weight: 500;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter SemiMono";
+                        src: url("/static/fonts/MatterSemiMonoRegular.woff2")
+                          format("woff2");
+                        font-weight: 400;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      @font-face {
+                        font-family: "Matter SemiMono";
+                        src: url("/static/fonts/MatterSemiMonoMedium.woff2")
+                          format("woff2");
+                        font-weight: 500;
+                        font-style: normal;
+                        font-display: swap;
+                      }
+                      /* Scalar reads both of these for every surface it renders, so
+                         setting them is enough — no per-element font rules. */
+                      :root,
+                      :root .dark-mode,
+                      :root .light-mode {
+                        --scalar-font: "Matter XH", ui-sans-serif, system-ui,
+                          sans-serif;
+                        --scalar-font-code: "Matter SemiMono", ui-monospace,
+                          SFMono-Regular, monospace;
+                      }
                       /* override theme colours */
                       :root .dark-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
+                        --scalar-color-2: #d8cfca;
+                        --scalar-text-decoration-color: var(--scalar-color-accent);
+                        --scalar-text-decoration-color-hover: var(--scalar-color-accent);
                       }
                       :root .light-mode {
-                        --scalar-color-accent: #ffd053;
+                        --scalar-color-accent: #ff4901;
+                        --scalar-color-green: #57afa8;
+                        --scalar-color-red: #dd2f2c;
+                        --scalar-color-yellow: #ffd072;
+                        --scalar-color-blue: #64b0c9;
+                        --scalar-color-orange: #f99f56;
+                        --scalar-color-purple: #4575c1;
+                        --scalar-button-1: #fffbf4;
+                        --scalar-button-1-hover: #fffbf4e6;
+                        --scalar-button-1-color: black;
                       }
                       /* target the authorize button specifically */
-                      .dark-mode .scalar-button:not(.scalar-button-ghost), .show-api-client-button {
-                        background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
-                        border-color: transparent !important;
-                      }
+                      .dark-mode .scalar-button:not(.scalar-button-ghost),
                       .light-mode .scalar-button:not(.scalar-button-ghost),
                       .show-api-client-button {
-                        background-color: var(--scalar-color-accent) !important;
-                        color: #333 !important;
+                        background-color: var(--scalar-color-2) !important;
+                        color: #000 !important;
                         border-color: transparent !important;
+                      }
+                      @supports (color:color-mix(in lab, red, red)) {
+                        .scalar-app .markdown a {
+                          -webkit-text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent);
+                          text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent);
+                        }
+                        .scalar-app .markdown a:hover {
+                          -webkit-text-decoration-color: var(--scalar-color-accent, currentColor);
+                          text-decoration-color: var(--scalar-color-accent, currentColor);
+                          color: var(--scalar-link-color-hover, var(--scalar-color-accent));
+                          -webkit-text-decoration: var(--scalar-text-decoration-hover);
+                          text-decoration-line: var(--scalar-text-decoration-hover);
+                        }
+                        .download-button span {
+                          -webkit-text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent)
+                            !important;
+                          text-decoration-color:
+                            color-mix(in srgb, var(--scalar-color-accent) 60%, transparent)
+                            !important;
+                        }
+                        .download-button span:hover {
+                          -webkit-text-decoration-color:
+                            var(--scalar-color-accent, currentColor) !important;
+                          text-decoration-color:
+                            var(--scalar-color-accent, currentColor) !important;
+                        }
+                      }
+                      /* Scalar has no logo option (`x-logo` is Redoc-only), so the
+                         logo is drawn above the sidebar search. The sidebar is a
+                         flex column, so this sits as its first item. */
+                      aside.t-doc__sidebar::before {
+                        content: "";
+                        display: block;
+                        flex-shrink: 0;
+                        height: 32px;
+                        margin: 20px 20px 8px;
+                        background: url("/static/logo-ocf.svg") left center / contain
+                          no-repeat;
                       }
                       /* hide "Open in API Client" Scalar link in Sidebar */
                       aside a.open-api-client-button {
@@ -219,7 +596,158 @@ def _create_v1_app(
                       a.open-api-client-button + div {
                         padding-top: 0.75rem;
                       }
+                      /* Scalar never ticks an optional parameter when you type a
+                         value into it, and an unticked row is not sent — upstream
+                         considers that intended (scalar/scalar#7851), and
+                         scalar/scalar#2558 tracks changing it. So grey the disabled
+                         rows to let the enabled ones read as the active set, and name
+                         the state once a disabled row has a value in it.
+                         `code-input-lite--empty` is Scalar's own empty-state class;
+                         `:empty` would miss a field that was typed into and cleared,
+                         which leaves a stray <br> behind. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        .code-input-lite__editor {
+                        color: var(--scalar-color-3);
+                      }
+                      /* A dropdown row has no `.code-input-lite`, so the rule above
+                         misses it and its value read as active while unticked. The
+                         value sits in a ghost button, greyed here to match. */
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button,
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked))
+                        td:last-child:not(:has(.code-input-lite))
+                        button.scalar-button span {
+                        color: var(--scalar-color-3) !important;
+                      }
+                      /* Scalar's own tick is near-white on dark and reads much like
+                         the unticked one at a glance. The checkbox itself is
+                         transparent and overlaid; the visible mark is the sibling
+                         div, whose `color` the tick inherits. */
+                      .scalar-data-table
+                        td:first-child
+                        input[type="checkbox"]:checked
+                        + div {
+                        color: var(--scalar-color-accent) !important;
+                      }
+                      .scalar-data-table
+                        tr.group:has(td:first-child input[type="checkbox"]:not(:checked)):has(
+                          td:last-child .code-input-lite:not(.code-input-lite--empty)
+                        ) td:nth-child(2)::after {
+                        content: "disabled";
+                        margin-left: auto;
+                        padding-right: 0.75rem;
+                        align-self: center;
+                        font-size: 11px;
+                        color: var(--scalar-color-3);
+                        white-space: nowrap;
+                        pointer-events: none;
+                      }
+
+                      /* The introduction renders in the same narrow column as an
+                         endpoint description, which leaves the prose cramped while
+                         the cards beside it have room to spare. Scalar has no option
+                         for this — checked against 1.69.0, the current release — so
+                         rebalance the flex columns it already emits: the text takes
+                         the free space, the cards keep a fixed, comfortable width.
+                         Deliberately nothing here depends on how many sections the
+                         description has, what heading levels it uses, or what order
+                         they come in, so editing the markdown cannot break it. */
+                      .introduction-section .section-columns > .section-column:has(
+                          .introduction-description
+                        ) {
+                        flex: 1 1 0;
+                        min-width: 0;
+                      }
+                      .introduction-section .section-columns > .section-column:has(
+                          .sticky-cards
+                        ) {
+                        flex: 0 0 22rem;
+                        min-width: 0;
+                      }
+
+                      /* Scalar splits the header row evenly, so the title gets
+                         half the width and wraps while the contact link sits in a
+                         mostly empty column. Give the title two thirds.
+                         Only above 1100px: Scalar drops this row to a single column
+                         at narrow widths via a container query, and a plain rule of
+                         higher specificity would win there too and break it. Below
+                         this width its own behaviour is left alone. */
+                      @media (min-width: 1100px) {
+                        .introduction-section .section-header-wrapper {
+                          grid-template-columns: 2fr 1fr;
+                        }
+                      }
+
+                      /* The introduction reads a size larger than it needs to:
+                         Scalar sets 16px body text here, which put the h2 level at
+                         the same size as the page title. Scale the whole section down
+                         from one base size — the headings below are in `em`, so this
+                         is the only number to change. */
+                      .introduction-section .introduction-description,
+                      .introduction-section .introduction-description .markdown {
+                        font-size: 14px;
+                        line-height: 1.6;
+                      }
+                      .introduction-section
+                        .introduction-description
+                        .markdown
+                        :is(p, li, blockquote, td, th) {
+                        font-size: inherit;
+                      }
+
+                      /* Scalar renders every heading level in the description the
+                         same — h2 and h3 are both 20px/600 in the same colour — so a
+                         nested heading reads as another top-level one.*/
+                      .introduction-section .section-header h1 {
+                          font-size: 1.5em;
+                          font-weight: 300;
+                          letter-spacing: 0.5px;
+                      }
+                      .introduction-section .introduction-description h2 {
+                        font-size: 1.35em;
+                        line-height: 1.3;
+                        margin-top: 1.5rem;
+                        margin-bottom: 0.5rem;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid var(--scalar-border-color);
+                        color: var(--scalar-color-1);
+                      }
+                      .introduction-section .introduction-description h3 {
+                        font-size: 1.1em;
+                        line-height: 1.4;
+                        margin-top: 0.25rem;
+                        margin-bottom: 0.5rem;
+                        color: var(--scalar-color-2);
+                      }
+                      .introduction-section .introduction-description h4 {
+                        font-size: 0.85em;
+                        letter-spacing: 0.04em;
+                        text-transform: uppercase;
+                        color: var(--scalar-color-3);
+                      }
+                      section.section.introduction-section {
+                        padding-top: 2.5rem;
+                      }
                     """,
+        )
+        # Response.body is typed bytes | memoryview; HTMLResponse always gives bytes.
+        html = bytes(page.body).decode()
+        if "</body>" not in html:
+            return page
+        return HTMLResponse(
+            html.replace(
+                "<head>",
+                "<head>" + _SCALAR_REDIRECT_REPAIR_JS,
+                1,
+            ).replace(
+                "</body>",
+                _SCALAR_AUTO_ENABLE_JS + _SCALAR_SECTION_ORDER_JS + "</body>",
+                1,
+            ),
         )
 
     return v1_app
@@ -296,6 +824,15 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         v1_app.dependency_overrides[models.get_storage_client] = lambda: storage
         warm_v1_task = asyncio.create_task(warm_all_v1_caches(v1_app))
 
+    warm_satellite_task = None
+    if "satellite" in conf.get_string("api.routers").split(","):
+        from quartz_api.internal.service.satellite.cache import warm_all_satellite_caches
+        from quartz_api.internal.service.satellite.config import VALID_CHANNELS
+
+        warm_satellite_task = asyncio.create_task(
+            warm_all_satellite_caches(s3_module.get_s3_client(), VALID_CHANNELS),
+        )
+
     # make sure cache is cleaned up every 10 seconds
     backend = FastAPICache.get_backend()
     if backend is not None and isinstance(backend, ClearedInMemoryBackend):
@@ -307,6 +844,8 @@ async def _lifespan(server: FastAPI, conf: ConfigTree) -> AsyncGenerator[None]:
         warm_task.cancel()
     if warm_v1_task is not None:
         warm_v1_task.cancel()
+    if warm_satellite_task is not None:
+        warm_satellite_task.cancel()
 
     if clear_cache_periodically is not None:
         clear_cache_periodically.cancel()
@@ -441,15 +980,22 @@ def _create_server(conf: ConfigTree) -> FastAPI:
             server.swagger_ui_init_oauth = {
                 "usePkceWithAuthorizationCodeGrant": True,
                 "clientId": conf.get_string("auth0.client_id"),
-                "scopes": "openid profile email",
+                "scopes": "openid profile email offline_access",
                 "additionalQueryStringParams": {"audience": audience},
             }
 
         case _:
             raise ValueError("Invalid Auth0 configuration")
 
+    # FastAPI() above is constructed before the auth branch runs, so it never received
+    # `description`. The branches append to that local, and _custom_openapi reads
+    # server.description, so both the base text and the authentication section were
+    # being assembled and discarded.
+    server.description = description
+
     # Customize the OpenAPI schema (after auth config is resolved)
-    server.openapi = lambda: _custom_openapi(server)
+    # FastAPI's documented way to install a custom schema; ty sees a method overwritten.
+    server.openapi = lambda: _custom_openapi(server)  # ty: ignore[invalid-assignment]
 
     # Mount v1 as a sub-app (after auth config is resolved so v1 gets OAuth2 config)
     if "v1" in conf.get_string("api.routers").split(","):
@@ -462,12 +1008,23 @@ def _create_server(conf: ConfigTree) -> FastAPI:
 
     # Add middlewares
     server.state.limiter = ratelimit.limiter
-    server.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    server.add_exception_handler(
+        RateLimitExceeded, ratelimit.rate_limit_exceeded_handler,
+    )
+    server.add_exception_handler(grpc.aio.AioRpcError, _grpc_exception_handler)
     server.add_middleware(SlowAPIMiddleware)
+    cors_origins = [
+        o.strip() for o in conf.get_string("api.origins").split(",") if o.strip()
+    ]
     server.add_middleware(
         CORSMiddleware,
-        allow_origins=conf.get_string("api.origins").split(","),
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        # Credentialed CORS cannot be combined with a wildcard: Starlette echoes the
+        # requesting origin back and sets Allow-Credentials, so any site would get
+        # credentialed access. This API authenticates with a bearer token, which a
+        # browser never attaches on its own, so nothing needs the flag while origins
+        # are open. Naming origins explicitly turns it back on.
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

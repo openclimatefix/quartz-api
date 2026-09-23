@@ -4,8 +4,9 @@ import logging
 from collections.abc import Awaitable, Callable
 
 import sentry_sdk
-from fastapi import FastAPI, Request, Response
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from quartz_api.internal.middleware import auth
 from quartz_api.internal.middleware.auth import get_org_id_from_authdata
@@ -16,11 +17,14 @@ class SentryUserMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        server: FastAPI,
+        app: ASGIApp,
         auth_instance: auth.AuthClient | None,
     ) -> None:
-        """Initialize FastAPI server and auth instance."""
-        super().__init__(server)
+        """Initialize the middleware and auth instance.
+
+        `add_middleware` passes the wrapped ASGI app, not the FastAPI instance.
+        """
+        super().__init__(app)
         self.auth_instance = auth_instance
 
     async def dispatch(

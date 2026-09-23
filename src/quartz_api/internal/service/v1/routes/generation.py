@@ -15,6 +15,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
     generation_cache_warming,
     generation_period_base_key,
@@ -22,24 +23,35 @@ from ..cache import (
     warm_v1_generation_cache,
 )
 from ..endpoint_types import (
+    PERIOD_RESPONSES,
+    REGION_RESPONSES,
+    SNAPSHOT_RESPONSES,
     CountryParam,
+    DeprecatedObserver,
+    DetailLevel,
     GenerationResponse,
     GenerationSnapshot,
     GenerationValue,
     RegionGeneration,
     RegionGenerationMatrix,
     RegionGenerationValue,
+    ValidGenerationDetail,
     ValidObserver,
     ValidPeriodRegionType,
     ValidRegion,
     ValidRegionType,
     ValidSource,
+    ValidWindowEnd,
     ValidWindowStart,
 )
 from ..helpers import (
     check_country_access,
+    fetch_api_region,
+    latest_capacity,
     location_display_name,
+    region_metadata,
     resolve_nation,
+    resolve_observer_param,
     resolve_region_id,
     timeseries_window,
     to_uuid,
@@ -52,8 +64,10 @@ router = APIRouter(tags=["Generation"])
 
 @router.get(
     "/{country}/{source}/regions/{region}/generation",
+    responses=REGION_RESPONSES,
     status_code=status.HTTP_200_OK,
     response_model=GenerationResponse,
+    response_model_exclude_none=True,
 )
 @cache(key_builder=key_builder, expire=60)
 async def get_generation(
@@ -63,46 +77,36 @@ async def get_generation(
     region: ValidRegion,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
+    detail: ValidGenerationDetail = DetailLevel.values,
     start_utc: ValidWindowStart = None,
-    end_utc: dt.datetime | None = Query(
-        None,
-        description="End of generation window (UTC). Defaults to now.",
-    ),
+    end_utc: ValidWindowEnd = None,
 ) -> GenerationResponse:
     """Get observed solar generation for a specific region.
 
-    Returns a time series of measured generation values — power in kW — from the
+    Returns a time series of measured generation values (power in kW) from the
     specified observer. The default window is the **last 24 hours**; use `start_utc` /
     `end_utc` to extend or shift it. Historical data is available up to 1 year back.
 
     Two observers are available for GB solar:
 
-    - **pvlive_in_day** (default) — PV_Live in-day estimates, updated every 30 minutes.
+    - **pvlive_in_day** (default): PV_Live in-day estimates, updated every 30 minutes.
       These are the most recent values but may be revised later.
-    - **pvlive_day_after** — PV_Live day-after final values, available from the following
+    - **pvlive_day_after**: PV_Live day-after final values, available from the following
       morning. Use these when accuracy is more important than latency.
 
     NL currently has one observer for solar:
 
-    - **ned_nl** — NED NL estimated solar generation for provinces / national including curtailment.
+    - **ned_nl**: NED NL estimated solar generation for provinces / national including curtailment.
     """
     check_country_access(auth, country)
-    dp_observer = country.resolve_observer(observer)
+    api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     resolved_id = await resolve_region_id(region, country, source, db)
 
-    locs = await db.get_locations(
-        energy_type=source,
-        location_type=None,
-        authdata={},  # TODO: add auth when loosed on DP side
-        location_uuid=resolved_id,
-    )
-    if len(locs) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Region '{resolved_id}' not found.",
-        )
-    region = locs[0]
+    region = await fetch_api_region(resolved_id, country, source, db)
     location_type = region.location_type or models.LocationType.NATION
 
     now = pd.Timestamp.utcnow().floor("h").to_pydatetime()
@@ -123,13 +127,19 @@ async def get_generation(
             ),
         )
 
-    first = agvs[0] if agvs else None
     return GenerationResponse(
         region_name=location_display_name(region, country),
-        capacity_kW=first.capacity_kilowatts if first else 0.0,
-        observer_name=observer,
+        capacity_kW=latest_capacity(agvs),
+        observer_name=api_observer,
+        metadata=region_metadata(region, detail),
         values=[
-            GenerationValue(time_utc=v.valid_timestamp, power_kW=v.power_kilowatts)
+            GenerationValue(
+                time_utc=v.valid_timestamp,
+                power_kW=v.power_kilowatts,
+                capacity_kW=(
+                    None if detail == DetailLevel.values else v.capacity_kilowatts
+                ),
+            )
             for v in agvs
         ],
     )
@@ -137,6 +147,7 @@ async def get_generation(
 
 @router.get(
     "/{country}/{source}/generation/snapshot",
+    responses=SNAPSHOT_RESPONSES,
     status_code=status.HTTP_200_OK,
     summary="Get Generation at Timestamp",
     response_model=GenerationSnapshot,
@@ -149,18 +160,21 @@ async def get_generation_at_timestamp(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidRegionType,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
     time_utc: dt.datetime | None = Query(
         None,
         description=(
-            "Observation target time (UTC). Defaults to the most recent available "
+            "Observation target time (UTC). Rounded down to the country's time step "
+            "(e.g. 30 minutes for GB, 15 for NL); the `time_utc` in the response is "
+            "the timestamp actually used. Defaults to the most recent available "
             "timestamp within the last 6 hours."
         ),
     ),
 ) -> GenerationSnapshot:
     """Get observed generation for all regions of a given type at a specific time.
 
-    Returns a `GenerationSnapshot` — a single point in time with one observed generation
+    Returns a `GenerationSnapshot`: a single point in time with one observed generation
     value per region. Useful for rendering a map of current solar output across an entire
     country.
 
@@ -169,7 +183,9 @@ async def get_generation_at_timestamp(
     rarely have data.
     """
     check_country_access(auth, country)
-    dp_observer = country.resolve_observer(observer)
+    api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
@@ -197,7 +213,9 @@ async def get_generation_at_timestamp(
         )
 
     if time_utc is not None:
-        snapshot_time = time_utc if time_utc.tzinfo else time_utc.replace(tzinfo=dt.UTC)
+        # Floored for the same reason as the forecast snapshot: observations exist only
+        # on the country's time step, so an unfloored timestamp matched nothing.
+        snapshot_time = country.floor_to_time_step(time_utc)
     else:
         # Probe a single region to find the latest available timestamp (up to 6h back).
         # Pick the region with the highest gsp_id (most likely to have recent data) or
@@ -219,10 +237,7 @@ async def get_generation_at_timestamp(
         snapshot_time = (
             probe_vals[-1].valid_timestamp
             if probe_vals
-            else pd.Timestamp.utcnow()
-            .floor("30min")
-            .to_pydatetime()
-            .replace(tzinfo=dt.UTC)
+            else country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
         )
 
     snapshot = await db.get_actual_generation_snapshot(
@@ -236,7 +251,7 @@ async def get_generation_at_timestamp(
     region_names = {to_uuid(r.uuid): location_display_name(r, country) for r in regions}
     return GenerationSnapshot(
         time_utc=snapshot_time,
-        observer_name=observer,
+        observer_name=api_observer,
         values=[
             RegionGenerationValue(
                 region_name=region_names.get(v.location_uuid, ""),
@@ -250,8 +265,9 @@ async def get_generation_at_timestamp(
 
 @router.get(
     "/{country}/{source}/generation/period",
+    responses=PERIOD_RESPONSES,
     status_code=status.HTTP_200_OK,
-    summary="Get Generation for Period",
+    summary="Get Generation for Current Period",
 )
 async def get_generation_period(
     source: ValidSource,
@@ -259,17 +275,14 @@ async def get_generation_period(
     db: models.StorageClientDependency,
     auth: AuthDependency,
     region_type: ValidPeriodRegionType,
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
     start_utc: dt.datetime | None = Query(
         None,
         description="Start of window (UTC). Defaults to 2 days before now "
         "(floored to the nearest 6 hours).",
     ),
-    end_utc: dt.datetime | None = Query(
-        None,
-        description="End of window (UTC). Defaults to 2 days after now "
-        "(floored to the nearest 6 hours).",
-    ),
+    end_utc: ValidWindowEnd = None,
     region_names: list[str] | None = Query(
         None,
         description="Limit to specific region names (e.g. `?region_names=GSP1&region_names=GSP2`).",
@@ -277,14 +290,14 @@ async def get_generation_period(
 ) -> RegionGenerationMatrix:
     """Get observed generation for all (or selected) regions across a time window.
 
-    Returns a `RegionGenerationMatrix` — a compact columnar structure with a shared
+    Returns a `RegionGenerationMatrix`: a compact columnar structure with a shared
     `times` array and one `power_kW` series per region. Analogous to the forecast
     period endpoint but for observed (actual) generation data.
 
     This endpoint is served entirely from a pre-warmed cache (one key per region).
     It does not make live data-platform calls per request. If the cache has not yet
     been populated after startup, the endpoint returns **503** with a `Retry-After: 60`
-    header — retry after a minute. The cache covers a ±2-day window around now,
+    header, so retry after a minute. The cache covers a ±2-day window around now,
     refreshed every 24 hours (or on demand via `POST /{country}/{source}/generation/refresh`).
 
     Time-window and region filtering are applied in-memory from the cached data.
@@ -313,20 +326,9 @@ async def get_generation_period(
                 f"for national-level data."
             ),
         )
-    valid_observers = {
-        gs.api_name
-        for gs in country.generation_sources
-        if gs.source == source.name.lower()
-    }
-    if observer not in valid_observers:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Observer '{observer}' is not available for "
-                f"{country.code} {source.name.lower()}. Available: {sorted(valid_observers)}"
-            ),
-        )
-    dp_observer = country.resolve_observer(observer)
+    _api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
     validate_window(win_start, win_end)
@@ -371,6 +373,21 @@ async def get_generation_period(
             if r.name.lower() in name_set
             or location_display_name(r, country).lower() in name_set
         ]
+        # A name that matches nothing used to be dropped silently, so a typo came back
+        # as a 200 with fewer regions than were asked for, or none at all.
+        found = {r.name.lower() for r in regions} | {
+            location_display_name(r, country).lower() for r in regions
+        }
+        unknown = sorted(n for n in region_names if n.lower() not in found)
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"No {region_type} region in {country.code} named: "
+                    f"{unknown}. Use GET /{country.code}/{source.name.lower()}/regions"
+                    f"?region_type={region_type} to list them."
+                ),
+            )
 
     raw_list = await asyncio.gather(*[backend.get(f"{base}:{r.uuid}") for r in regions])
     all_region_data: list[tuple] = []
@@ -398,6 +415,7 @@ async def get_generation_period(
 
 @router.post(
     "/{country}/{source}/generation/refresh",
+    responses=SNAPSHOT_RESPONSES,
     include_in_schema=False,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -408,7 +426,8 @@ async def refresh_generation_cache(
     request: Request,
     auth: AuthDependency,
     region_type: ValidRegionType = "gsp",
-    observer: ValidObserver = "pvlive_in_day",
+    observer_name: ValidObserver = None,
+    observer: DeprecatedObserver = None,
 ) -> Response:
     """Trigger a background re-warm of the generation period cache.
 
@@ -418,9 +437,11 @@ async def refresh_generation_cache(
 
     Requires the `ocf:admin` permission scope.
     """
-    if "ocf:admin" not in auth.get("permissions", []):
+    if ADMIN_PERMISSION not in auth.get("permissions", []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    dp_observer = country.resolve_observer(observer)
+    _api_observer, dp_observer = resolve_observer_param(
+        country, source.name.lower(), observer_name, observer,
+    )
     flag_key = f"{source.name.lower()}:{country.code}:{region_type}:{dp_observer}"
     if generation_cache_warming.get(flag_key):
         return Response(status_code=202, content="Cache warm already in progress")
