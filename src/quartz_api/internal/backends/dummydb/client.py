@@ -371,6 +371,16 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
+    async def set_location_owner(
+        self,
+        location_uuid: UUID,
+        organisation_id: str,
+        authdata: dict[str, str],
+    ) -> None:
+        """No-op — the dummy backend has no ownership to track."""
+        pass
+
+    @override
     async def log_api_call(
         self,
         url: str,
