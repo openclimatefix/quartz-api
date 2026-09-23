@@ -11,8 +11,8 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
-from quartz_api.internal import models
 from quartz_api.constants import SUPPORT_EMAIL
+from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from ..auth_scopes import ADMIN_PERMISSION
