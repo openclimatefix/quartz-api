@@ -10,6 +10,7 @@ from starlette import status
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency, get_org_id_from_authdata
 
+from .country_config import CountryConfig, SiteConfig
 from .endpoint_types import (
     _NOT_UPDATABLE,
     BaseSiteMetadata,
@@ -76,14 +77,17 @@ async def get_site(
     db: models.StorageInterface,
     site_id: UUID,
     auth: AuthDependency,
+    energy_type: models.EnergyType | None = None,
+    country_code: str | None = None,
 ) -> models.Location:
     """Return the site for the given site_id, or raise 404 if not found."""
     require_org_id(auth)
     locs = await db.get_locations(
-        energy_type=None,
+        energy_type=energy_type,
         location_type=models.LocationType.SITE,
         authdata=auth,
         location_uuid=site_id,
+        country_code=country_code,
     )
     if not locs:
         raise HTTPException(
@@ -168,3 +172,29 @@ def site_input_to_metadata(site_input: SiteInput) -> dict[str, str | int | float
             },
         )
     return metadata
+
+
+def site_config_for(country: CountryConfig, source: models.EnergyType) -> SiteConfig:
+    """Return the country's site config for this source, or 404 if it has none."""
+    site_cfg = country.get_site_config(source.name.lower())
+    if site_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sites are not available for {country.code}/{source.name.lower()}.",
+        )
+    return site_cfg
+
+
+def resolve_site_forecaster(site: models.Location, site_cfg: SiteConfig) -> str:
+    """Return the forecaster to read: the site's own override, else the country default."""
+    forecaster = site.metadata.get("forecast_name") or site_cfg.default_forecaster_name
+    if not forecaster:
+        sentry_sdk.capture_message(
+            f"No forecaster for site {site.uuid}: no metadata['forecast_name'] and no "
+            f"default_forecaster_name in config. check the country_config and add one.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No forecast model is configured for this site.",
+        )
+    return str(forecaster)

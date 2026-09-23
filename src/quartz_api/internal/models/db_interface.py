@@ -74,6 +74,7 @@ class Location:
     capacity_kilowatts: float
     location_type: LocationType | None = None
     energy_type: EnergyType | None = None
+    country_code: str | None = None
     metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 
@@ -137,6 +138,7 @@ class StorageInterface(abc.ABC):
     async def put_actual_generation(
         self,
         generation_values: list[ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: EnergyType,
         location_type: LocationType,
         authdata: dict[str, str],
@@ -178,6 +180,7 @@ class StorageInterface(abc.ABC):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[Location]:
         """Return a list of locations for a given energy and location type.
 
@@ -186,6 +189,7 @@ class StorageInterface(abc.ABC):
         If enclosing_location_uuid is provided, only locations enclosed by that
         location (i.e. children/descendants) are returned.
         If location_names is provided, only locations with those names are returned.
+        If country_code is provided, only locations in that country are returned.
         """
         pass
 

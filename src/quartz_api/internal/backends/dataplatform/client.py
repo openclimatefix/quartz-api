@@ -510,6 +510,7 @@ class StorageClient(models.StorageInterface):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         # For the moment, recreate the auth behaviour of the old routes in here.
         # This should be delegated to the scoping on the API endpoints themselves later.
@@ -562,6 +563,7 @@ class StorageClient(models.StorageInterface):
                 location_type_map[location_type] if location_type is not None else None
             ),
             organisation_id_filter=organisation_id,
+            country_code_filter=country_code,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []
             ),
@@ -619,6 +621,7 @@ class StorageClient(models.StorageInterface):
                 effective_capacity_watts=int(location.capacity_kilowatts * 1000),
                 location_type=location_type_map[location_type],
                 metadata=dict_to_struct(location.metadata),
+                country_code=location.country_code,
             )
             created = await self.dpc.CreateLocation(create_req)
             return models.Location(
@@ -629,6 +632,7 @@ class StorageClient(models.StorageInterface):
                 capacity_kilowatts=_kw(created.effective_capacity_watts),
                 location_type=location_type,
                 energy_type=energy_type,
+                country_code=location.country_code,
                 metadata=location.metadata,
             )
         current = existing[0]

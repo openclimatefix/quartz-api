@@ -259,6 +259,7 @@ class TestQuartzDBClient:
         sites: list[LocationSQL],
     ) -> None:
         await client.put_actual_generation(
+            location_uuid=sites[0].location_uuid,
             energy_type=models.EnergyType.SOLAR,
             location_type=models.LocationType.SITE,
             authdata={EMAIL_KEY: "test@test.com"},
@@ -281,6 +282,7 @@ class TestQuartzDBClient:
     ) -> None:
         try:
             await client.put_actual_generation(
+                location_uuid=sites[0].location_uuid,
                 energy_type=models.EnergyType.SOLAR,
                 location_type=models.LocationType.SITE,
                 authdata={EMAIL_KEY: "test@test.com"},
