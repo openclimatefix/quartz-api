@@ -25,7 +25,7 @@ SITE_OBSERVER_NAME = "site_api"
 # Default forecaster names by energy type, used when a site has no
 # explicit forecast_name set in its metadata.
 _DEFAULT_FORECASTER: dict[models.EnergyType, str] = {
-    models.EnergyType.WIND: "windnet_ad_sites_ecmwf_weathernext2",
+    models.EnergyType.WIND: "windnet_ad_sites_ecmwf_weathernext2_adjust",
     models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long_adjust",
 }
 
