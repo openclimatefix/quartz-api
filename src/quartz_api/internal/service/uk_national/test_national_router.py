@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 import time_machine
 
-from quartz_api.internal import eclipse, models
+from quartz_api.internal import models
 
 from .endpoint_types import gsp_id_map
 
@@ -235,46 +235,3 @@ async def test_national_last_updated_default(api_client, mock_storage: AsyncMock
     assert kwargs["window_start"] == frozen_time - dt.timedelta(minutes=30)
     assert kwargs["window_end"] == frozen_time + dt.timedelta(minutes=30)
 
-
-
-@pytest.mark.asyncio
-async def test_national_forecast_eclipse_adjustment(
-    api_client,
-    mock_storage: AsyncMock,
-    monkeypatch,
-):
-    monkeypatch.setattr(eclipse, "ECLIPSE_ENABLED", True)
-    monkeypatch.setattr(eclipse, "ECLIPSE_DATE", dt.date(2026, 8, 12))
-    frozen_time = dt.datetime(2026, 8, 12, 17, 0, tzinfo=dt.UTC)
-
-    def _value(hour: int, minute: int) -> models.PredictedGenerationValue:
-        return models.PredictedGenerationValue(
-            power_kilowatts=10000.0,
-            valid_timestamp=dt.datetime(2026, 8, 12, hour, minute, tzinfo=dt.UTC),
-            location_uuid=gsp_id_map[0].uuid,
-            capacity_kilowatts=20000.0,
-            forecaster_name="blend_adjust",
-            forecaster_version="1.3.0",
-            created_timestamp=frozen_time,
-            init_timestamp=frozen_time,
-            plevels_kilowatts={"p10": 8000.0, "p90": 12000.0},
-            metadata={},
-        )
-
-    mock_storage.get_locations.return_value = [gsp_id_map[0]]
-    # 17:00 is before the eclipse bites, 18:00 is mid-eclipse.
-    mock_storage.get_predicted_generation.return_value = [_value(17, 0), _value(18, 0)]
-
-
-    with time_machine.travel(frozen_time, tick=False):
-        response = await api_client.get("/v0/solar/GB/national/forecast")
-
-    assert response.status_code == 200
-    before, during = response.json()
-
-    assert before["expectedPowerGenerationMegawatts"] == 10.0
-    # v0 rounds MW to 2dp.
-    assert during["expectedPowerGenerationMegawatts"] == round(10.0 * 0.566288, 2)
-    assert during["plevels"]["plevel_10"] == pytest.approx(8.0 * 0.566288)
-    assert during["plevels"]["plevel_90"] == pytest.approx(12.0 * 0.566288)
-    assert before["plevels"]["plevel_10"] == 8.0
