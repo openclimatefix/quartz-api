@@ -628,6 +628,7 @@ class StorageClient(models.StorageInterface):
                 longitude=location.longitude,
                 capacity_kilowatts=_kw(created.effective_capacity_watts),
                 location_type=location_type,
+                energy_type=energy_type,
                 metadata=location.metadata,
             )
         current = existing[0]
@@ -658,8 +659,22 @@ class StorageClient(models.StorageInterface):
             longitude=current.longitude,
             capacity_kilowatts=_kw(resp.effective_capacity_watts),
             location_type=location_type,
+            energy_type=energy_type,
             metadata=merged_metadata,
         )
+
+    @override
+    async def set_location_owner(
+        self,
+        location_uuid: UUID,
+        organisation_id: str,
+        authdata: dict[str, str],
+    ) -> None:
+        req = messages_pb2.UpdateLocationOwnerRequest(
+            location_uuid=str(location_uuid),
+            new_organisation_id=organisation_id,
+        )
+        await self.dpc.UpdateLocationOwner(req)
 
     @override
     async def log_api_call(

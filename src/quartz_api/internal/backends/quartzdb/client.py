@@ -566,6 +566,18 @@ class StorageClient(models.StorageInterface):
                 )
 
     @override
+    async def set_location_owner(
+        self,
+        location_uuid: UUID,
+        organisation_id: str,
+        authdata: dict[str, str],
+    ) -> None:
+        """Not supported — this legacy backend."""
+        raise NotImplementedError(
+            "Quartz Storage Client has no organisation-based ownership to set.",
+        )
+
+    @override
     async def log_api_call(
         self,
         url: str,
