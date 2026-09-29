@@ -1,29 +1,14 @@
-"""Sun times for the visible satellite channels' nighttime blackout.
-
-The visible channels carry no signal once the region is dark, so they get zeroed
-out at night. Rather than fixed clock times, the window comes from sunrise and
-sunset at a reference point, so it follows the seasons: a timestamp is dark when
-it falls outside the day's sunrise-to-sunset window, widened by a buffer at each
-end and rounded out to a whole hour.
-
-    first_light, last_light = apply_buffer(*sun_times(ts.date(), lon, lat))
-    dark = not first_light <= ts < last_light
-
-Sun times are looked up per UTC day, which assumes the reference point is close
-enough to the prime meridian for a day's sunrise and sunset to share a UTC date.
-That holds for the UK, and `sunrise` raises for a point where the sun never
-crosses the horizon at all, which is outside the UK bounding box.
-"""
+"""Sun times for the visible satellite channels' nighttime blackout."""
 
 import datetime as dt
 
 from astral import Observer
 from astral.sun import sunrise, sunset
 
-# Extend the daylight window by 1 hour before sunrise and after sunset.
-# For example, if sunrise is at 06:00 and sunset is at 18:00,
-# the resulting daylight window is 05:00 to 19:00.
-BLACKOUT_BUFFER = dt.timedelta(hours=1)
+# Extend the daylight window by 1 hour 30 min before sunrise and after sunset
+# (then rounded out to whole hours). For example, sunrise 06:00 and sunset 18:00
+# give a daylight window of 04:00 to 20:00.
+BLACKOUT_BUFFER = dt.timedelta(hours=1, minutes=30)
 
 
 def sun_times(day: dt.date, lon: float, lat: float) -> tuple[dt.datetime, dt.datetime]:

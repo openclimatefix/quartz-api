@@ -1,25 +1,31 @@
 """Static satellite config: channels, geography, ingest tuning."""
+from typing import Any
 
+# Bounding box to crop to Europe
+LEFT, BOTTOM, RIGHT, TOP = -19.0, 43.5, 28.0, 64.0
 
-# Bounding box to crop to UK
-LEFT, BOTTOM, RIGHT, TOP = -17.05, 46.49, 11.60, 63.31
+# Output pixel resolution current is 1 pixel - 17km^2
+RESOLUTION_M = 17_388
 
 # How far back to backfill missing data (in hours)
 BACKFILL_HOURS = 48
 
+# Prefix of the raw EUMETSAT .nat files in the raw-data bucket, per satellite type.
+RAW_PREFIX = {"rss": "rss/raw/", "0deg": "odegree/raw/"}
+
 # Per-channel inversion, and whether to black the channel out while the region is dark.
-LAYER_CONFIG = {
-    "VIS006": {"blackout": True},
-    "VIS008": {"blackout": True},
-    "IR_016": {"blackout": True},
-    "IR_039": {},
-    "IR_087": {"invert": True},
-    "IR_097": {"invert": True},
-    "IR_108": {"invert": True},
-    "IR_120": {"invert": True},
-    "IR_134": {"invert": True},
-    "WV_062": {"invert": True},
-    "WV_073": {"invert": True},
+LAYER_CONFIG: dict[str, dict[str, Any]] = {
+    "VIS006": {"range": (0, 100), "blackout": True},
+    "VIS008": {"range": (0, 100), "blackout": True},
+    "IR_016": {"range": (0, 100)},
+    "IR_039": {"range": (200, 340)},
+    "IR_087": {"range": (190, 320), "invert": True},
+    "IR_097": {"range": (215, 282), "invert": True},
+    "IR_108": {"range": (190, 320), "invert": True},
+    "IR_120": {"range": (190, 320), "invert": True},
+    "IR_134": {"range": (195, 280), "invert": True},
+    "WV_062": {"range": (200, 260), "invert": True},
+    "WV_073": {"range": (200, 280), "invert": True},
 }
 
 COMPOSITE_CONFIG: dict[str, list[str]] = {
@@ -30,8 +36,8 @@ COMPOSITE_CONFIG: dict[str, list[str]] = {
 
 VALID_CHANNELS = frozenset(LAYER_CONFIG) | frozenset(COMPOSITE_CONFIG)
 
-# Re-sign a cached entry once its presigned URL has less than this much validity
-REFRESH_MARGIN_SECS = 24 * 60 * 60
+# Internal at which rolling window to compute the stack (in minutes).
+STACK_INTERVAL_MINUTES = 15
 
 # Composite blending: per-channel alpha cap (0-255) and overall layer opacity.
 SAT_MAX_ALPHA = 180
