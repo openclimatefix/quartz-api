@@ -188,7 +188,7 @@ async def get_forecast(
     window_start = (now_utc - dt.timedelta(days=2)).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
-    window_end = (now_utc + dt.timedelta(days=2)).replace(
+    window_end = (now_utc + dt.timedelta(days=3)).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
     pgvs = await db.get_predicted_generation(
