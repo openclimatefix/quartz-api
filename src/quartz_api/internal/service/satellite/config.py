@@ -2,7 +2,7 @@
 from typing import Any
 
 # Bounding box to crop to Europe
-LEFT, BOTTOM, RIGHT, TOP = -19.0, 43.5, 28.0, 64.0
+LEFT, BOTTOM, RIGHT, TOP = -31.3, 36.0, 36.3, 64.7
 
 # Output pixel resolution current is 1 pixel - 17km^2
 RESOLUTION_M = 17_388
