@@ -43,6 +43,7 @@ class FixedUUIDStorageClient(StorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.GSP:
             return [
@@ -61,6 +62,7 @@ class FixedUUIDStorageClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
@@ -77,6 +79,7 @@ class NullLocationsForUUIDClient(StorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type is None and location_uuid is not None:
             return []
@@ -86,6 +89,7 @@ class NullLocationsForUUIDClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
@@ -93,8 +97,8 @@ class ForeignRegionClient(StorageClient):
     """A region that exists, but is not enclosed by the country in the path.
 
     Models the cross-country case: the DP knows the UUID, so an unscoped lookup finds
-    it, but it is not among the nation's regions. Only the enclosing-filtered lookup
-    can tell the two apart, which is the whole point of the check.
+    it, but it does not carry the country's code. Only the country-filtered lookup can
+    tell the two apart, which is the whole point of the check.
     """
 
     async def get_locations(  # type: ignore[override]
@@ -104,8 +108,9 @@ class ForeignRegionClient(StorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
-        if enclosing_location_uuid is not None and location_uuid is not None:
+        if country_code is not None and location_uuid is not None:
             return []
         return await super().get_locations(
             energy_type=energy_type,
@@ -113,15 +118,16 @@ class ForeignRegionClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
 class SiteBearingClient(StorageClient):
     """Returns sites and substations alongside GSPs for an untyped lookup.
 
-    Mirrors the platform, whose enclosing filter is transitive: a lookup under GB's
-    nation returns 337 GSPs but also 589 primary substations and 64 sites. Only the
-    GSP is a region this API exposes.
+    Mirrors the platform, whose country filter reaches every location type: a lookup
+    by GB returns the nation and 337 GSPs, but also 596 primary substations and 70
+    sites. Only the GSP is a region this API exposes as a child.
     """
 
     SITE_UUID = UUID("00000000-0000-0000-0000-0000000000aa")
@@ -136,6 +142,7 @@ class SiteBearingClient(StorageClient):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.NATION:
             # dummydb mints a fresh UUID per call, so the nation resolved by the route
@@ -147,10 +154,15 @@ class SiteBearingClient(StorageClient):
                     location_type=models.LocationType.NATION,
                 ),
             ]
-        # Any untyped lookup, with or without an enclosing filter: the platform
-        # returns whatever that UUID or name is, region or not.
+        # Any untyped lookup, with or without a country or enclosing filter: the
+        # platform returns whatever that UUID or name is, region or not.
         if location_type is None:
             locs = [
+                models.Location(
+                    uuid=self.NATION_UUID, name="uk", latitude=54.0, longitude=-2.0,
+                    capacity_kilowatts=15000000,
+                    location_type=models.LocationType.NATION,
+                ),
                 models.Location(
                     uuid=self.GSP_UUID, name="a_real_gsp", latitude=51.0, longitude=-1.0,
                     capacity_kilowatts=76000, location_type=models.LocationType.GSP,
@@ -178,6 +190,7 @@ class SiteBearingClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
             location_names=location_names,
         )
 
@@ -195,6 +208,7 @@ class NationResponseClient(StorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type is None and location_uuid is not None:
             return [
@@ -213,6 +227,7 @@ class NationResponseClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
@@ -233,6 +248,7 @@ class NationNameStorageClient(StorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         nation = models.Location(
             uuid=location_uuid or uuid4(),
@@ -253,6 +269,7 @@ class NationNameStorageClient(StorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
@@ -407,6 +424,7 @@ class ReverseOrderGSPClient(StorageClient):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.GSP:
             return [
@@ -426,6 +444,7 @@ class ReverseOrderGSPClient(StorageClient):
             authdata=authdata,
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 
@@ -445,6 +464,7 @@ class NLProvinceClient(NationNameStorageClient):
         authdata: dict,
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.REGION:
             return [
@@ -463,6 +483,7 @@ class NLProvinceClient(NationNameStorageClient):
             authdata={},
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
         )
 
 

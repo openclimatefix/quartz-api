@@ -229,6 +229,11 @@ class _CountryParam(str):
     ) -> dict:
         return {"type": "string", "enum": list(COUNTRIES.keys())}
 
+    @property
+    def code(self) -> str:
+        """The upper-case country code. Typed, unlike the attributes proxied below."""
+        return str(self)
+
     def __getattr__(self, name: str) -> object:
         return getattr(COUNTRIES[str(self)], name)
 

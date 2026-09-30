@@ -116,8 +116,8 @@ def location_to_detail(
 def is_api_region(loc: models.Location, cfg: CountryConfig) -> bool:
     """Whether a platform location is a region this country's API exposes.
 
-    The platform's enclosing filter is transitive, so a lookup under a nation returns
-    everything beneath it: GSPs, but also primary substations and individual sites. Only
+    A lookup by country code, or under a parent region, returns every location type in
+    it: GSPs, but also primary substations and individual sites. Only
     the location types a country configures a region type for are part of its API
     surface, and anything else has to be dropped before it reaches a caller or is
     accepted as a region id.
@@ -325,12 +325,12 @@ async def resolve_region_id(
             energy_type=energy_type,
             location_type=None,
             authdata={},
-            enclosing_location_uuid=to_uuid(nation.uuid),
+            country_code=cfg.code,
             location_uuid=candidate,
         )
         # Confirmed client-side rather than trusting the response to be empty, for the
         # same reason the name search below re-checks its own filter. The region type
-        # check matters as much as the country one: the enclosing filter reaches sites
+        # check matters as much as the country one: the country filter reaches sites
         # and substations, which are not regions this API exposes.
         if any(
             to_uuid(loc.uuid) == candidate and is_api_region(loc, cfg)
@@ -366,11 +366,11 @@ async def resolve_region_id(
         energy_type=energy_type,
         location_type=None,
         authdata={},
-        enclosing_location_uuid=to_uuid(nation.uuid),
+        country_code=cfg.code,
         location_names=[search_name],
     )
     # Client-side confirmation: DP may not filter by name server-side yet, and the
-    # enclosing filter reaches sites and substations that are not API regions.
+    # country filter reaches sites and substations that are not API regions.
     match = next(
         (
             loc

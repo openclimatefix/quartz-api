@@ -340,7 +340,7 @@ async def get_forecasts_at_time(
             energy_type=source,
             location_type=location_type,
             authdata={},
-            enclosing_location_uuid=to_uuid(nation.uuid),
+            country_code=country.code,
         )
 
     if len(regions) == 0:
@@ -488,12 +488,11 @@ async def get_forecasts_period(
             headers={"Retry-After": "60"},
         )
 
-    nation = await resolve_nation(db, source, country, auth)
     regions = await db.get_locations(
         energy_type=source,
         location_type=rt.location_type,
         authdata={},  # TODO: add auth when loosed on DP side
-        enclosing_location_uuid=to_uuid(nation.uuid),
+        country_code=country.code,
     )
 
     if len(regions) == 0:

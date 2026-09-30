@@ -14,7 +14,7 @@ from quartz_api.internal import models
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
-from .helpers import internal_to_api_name, timeseries_window, to_uuid
+from .helpers import internal_to_api_name, timeseries_window
 
 log = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ async def warm_v1_forecast_cache(
             energy_type=energy_type,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=to_uuid(nation.uuid),
+            country_code=cfg.code,
         )
 
         backend = FastAPICache.get_backend()
@@ -280,7 +280,7 @@ async def warm_v1_generation_cache(
             energy_type=energy_type,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=to_uuid(nation.uuid),
+            country_code=cfg.code,
         )
 
         backend = FastAPICache.get_backend()

@@ -77,18 +77,24 @@ async def get_country_regions(
                 location_type=None,
                 authdata={},
                 location_uuid=parent_uuid,
-                enclosing_location_uuid=to_uuid(nation.uuid),
+                country_code=country.code,
             )
             if len(parent_location) == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Parent region '{parent}' not found in {country.code}.",
                 )
+        # The nation's children are found by country code, like the unparented lookups
+        # below: the DP's enclosing filter misses regions whose boundary overlaps the
+        # nation's without falling wholly inside it. The country code filter also
+        # matches the nation itself, which is not its own child.
+        is_nation = parent_uuid == nation.uuid
         locs = await db.get_locations(
             energy_type=source,
             location_type=rt.location_type if rt is not None else None,
             authdata={},
-            enclosing_location_uuid=parent_uuid,
+            enclosing_location_uuid=None if is_nation else parent_uuid,
+            country_code=country.code if is_nation else None,
         )
         # Without a region_type the platform returns every descendant, which includes
         # primary substations and individual sites as well as regions.
@@ -96,7 +102,7 @@ async def get_country_regions(
             [
                 location_to_detail(loc, country)
                 for loc in locs
-                if is_api_region(loc, country)
+                if is_api_region(loc, country) and to_uuid(loc.uuid) != to_uuid(nation.uuid)
             ],
             name,
             country,
@@ -111,7 +117,7 @@ async def get_country_regions(
             energy_type=source,
             location_type=rt.location_type,
             authdata={},
-            enclosing_location_uuid=to_uuid(nation.uuid),
+            country_code=country.code,
         )
         return _filter_and_sort(
             [location_to_detail(loc, country) for loc in locs],
@@ -129,7 +135,7 @@ async def get_country_regions(
                 energy_type=source,
                 location_type=rt.location_type,
                 authdata={},
-                enclosing_location_uuid=to_uuid(nation.uuid),
+                country_code=country.code,
             ),
         )
     results = await asyncio.gather(*tasks, return_exceptions=True)

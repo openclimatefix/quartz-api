@@ -708,6 +708,30 @@ class TestDataPlatformClient(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(ctx.exception.status_code, 403)
 
+    async def test_get_locations_country_code_filter(self) -> None:
+        client_mock = MagicMock(spec=service_pb2_grpc.DataPlatformDataServiceStub)
+        client_mock.ListLocations = AsyncMock(
+            return_value=messages_pb2.ListLocationsResponse(locations=[]),
+        )
+        client = StorageClient.from_dp(client_mock)
+
+        await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.GSP,
+            authdata={},
+            country_code="GB",
+        )
+        sent = client_mock.ListLocations.call_args.args[0]
+        self.assertEqual(sent.country_code_filter, "GB")
+
+        await client.get_locations(
+            energy_type=models.EnergyType.SOLAR,
+            location_type=models.LocationType.GSP,
+            authdata={},
+        )
+        sent = client_mock.ListLocations.call_args.args[0]
+        self.assertFalse(sent.HasField("country_code_filter"))
+
     @patch("ocf.dp.dp_data.service_pb2_grpc.DataPlatformDataServiceStub")
     async def test_forecaster_auto_selection(
         self,
