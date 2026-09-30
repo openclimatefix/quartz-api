@@ -204,7 +204,7 @@ async def get_forecast(
     # replaces, rather than converted to the deployment's configured tz.
     out: list[PredictedPower] = [
         PredictedPower(
-            PowerKW=v.power_kilowatts,
+            PowerKW=round(v.power_kilowatts),
             Time=v.valid_timestamp.astimezone(tz=dt.UTC),
             created_time=v.created_timestamp.astimezone(tz=dt.UTC),
             forecaster_name=v.forecaster_name,
@@ -241,7 +241,7 @@ async def get_generation(
     )
     out: list[ActualPower] = [
         ActualPower(
-            PowerKW=v.power_kilowatts,
+            PowerKW=round(v.power_kilowatts),
             Time=v.valid_timestamp.astimezone(tz=tz),
         )
         for v in agvs
