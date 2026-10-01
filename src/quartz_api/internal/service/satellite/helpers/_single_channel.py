@@ -1,11 +1,13 @@
 """Turn raw EUMETSAT .nat files into single-channel tifs on the Europe grid."""
 import datetime as dt
+import logging
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import rasterio
+import sentry_sdk
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, reproject
 from satpy import Scene
@@ -22,6 +24,8 @@ from quartz_api.internal.s3 import S3Client
 from ..config import BOTTOM, LAYER_CONFIG, LEFT, RAW_PREFIX, RIGHT, TOP
 from ._blackout import apply_buffer, sun_times
 from .common import DST_CRS, DST_SHAPE, DST_TF, TS_FMT, build_layer_tif, save
+
+log = logging.getLogger(__name__)
 
 HEADER = get_native_header(with_archive_header=True)
 
@@ -47,8 +51,20 @@ def list_raw_files(
     """(slot, key) for every raw file whose header slot is at or after cutoff, oldest first."""
     keys = []
     for k in s3.list_keys(icechunk_bucket, RAW_PREFIX[sat_type]):
-        # scan-end from the filename, tz attached below; only a coarse pre-filter
-        scan_end = dt.datetime.strptime(k.rsplit("-NA-", 1)[1][:14], "%Y%m%d%H%M%S")  # noqa: DTZ007
+        # scan-end from the filename, tz attached below; only a coarse pre-filter.
+        # Skip anything that isn't a well-formed raw key rather than aborting the ingest.
+        try:
+            scan_end = dt.datetime.strptime(k.rsplit("-NA-", 1)[1][:14], "%Y%m%d%H%M%S")  # noqa: DTZ007
+        except (IndexError, ValueError):
+            log.warning("Skipping unparseable raw key: %s", k)
+            sentry_sdk.capture_message(
+                "Skipping unparseable raw satellite key",
+                level="warning",
+                fingerprint=["unparseable-raw-key"],
+                tags={"sat_type": sat_type},
+                extras={"key": k},
+            )
+            continue
         if scan_end.replace(tzinfo=dt.UTC) >= cutoff - dt.timedelta(hours=1):
             keys.append(k.removeprefix(f"{icechunk_bucket}/"))
 
