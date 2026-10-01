@@ -1,41 +1,30 @@
-"""Presigned-URL lookup routes — single timestamp and full cache dump."""
+"""Presigned-URL lookup routes - one timestamp's tif, or a layer's rolling 48 h stack."""
 
 import asyncio
-import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi_cache import FastAPICache
 
 from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
-from ..cache import _presign_period_base_key
-from ..config import BACKFILL_HOURS, VALID_CHANNELS
-from ..endpoint_types import HistoricSatelliteData, HistoricSatelliteDataEntry
+from ..config import VALID_CHANNELS
+from ..endpoint_types import HistoricSatelliteData
+from ..helpers._stack import stack_url
 
 router = APIRouter()
 
 S3ClientDep = Annotated[S3Client, Depends(get_s3_client)]
 
 
-async def _get_cached_entries(channel: str) -> dict[str, dict] | None:
-    """Return the pre-warmed {timestamp_iso: {url, signed_at}} for a channel.
-
-    ``None`` if it's never been warmed.
-    """
-    backend = FastAPICache.get_backend()
-    prefix = FastAPICache.get_prefix()
-    base = _presign_period_base_key(prefix, channel)
-    raw = await backend.get(f"{base}:entries")
-    return json.loads(raw) if raw is not None else None
-
-
-def _bypass_cache(request: Request) -> bool:
-    # if the header includes no-cache, skip the pre-warmed cache and hit S3
-    return request.headers.get("cache-control", "").lower() == "no-cache"
+def _check_channel(channel: str) -> None:
+    if channel not in VALID_CHANNELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
+        )
 
 
 @router.get("/", response_model=HistoricSatelliteData)
@@ -48,23 +37,17 @@ async def get_historic_satellite_data_url(
     timestamp: datetime | None = None,
     latest: bool = False,
 ) -> HistoricSatelliteData:
-    """Get a pre-signed URL for a satellite file.
+    """Get a pre-signed URL for one timestamp's satellite file.
 
-    latest=true: always live S3 lookup for the most recent file (last 30 min), 404 if none.
-    otherwise: check cache first, fall back to a live S3 lookup on a miss.
+    latest=true: the most recent file (last 30 min), 404 if none.
+    otherwise: the file for `timestamp`, 404 if it doesn't exist.
     """
-    if channel not in VALID_CHANNELS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
-        )
-
+    _check_channel(channel)
     if not latest and timestamp is None:
         raise HTTPException(status_code=400, detail="timestamp is required unless latest=true")
 
     bucket = get_geotiff_bucket()
 
-    # latest=true -> always live S3, skip cache
     if latest:
         key = await asyncio.to_thread(s3_client.get_latest_key, bucket, f"layers/{channel}/")
         if key is None:
@@ -75,19 +58,9 @@ async def get_historic_satellite_data_url(
         url = await asyncio.to_thread(s3_client.get_presigned_url, bucket, key)
         return HistoricSatelliteData(url=url)
 
-    # normalize timestamp to UTC
     timestamp = (
         timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp.astimezone(UTC)
     )
-
-    # not latest -> try cache first
-    # if not _bypass_cache(request):
-    #     cached = await _get_cached_entries(channel)
-    #     entry = cached.get(timestamp.isoformat()) if cached else None
-    #     if entry is not None:
-    #         return HistoricSatelliteData(url=entry["url"])
-
-    # cache miss (or bypassed) -> fall back to live S3
     key = f"layers/{channel}/{timestamp.strftime('%Y%m%d_%H%M%S')}.tif"
     if not await asyncio.to_thread(s3_client.object_exists, bucket, key):
         raise HTTPException(
@@ -99,23 +72,16 @@ async def get_historic_satellite_data_url(
     return HistoricSatelliteData(url=url)
 
 
-@router.get("/history", response_model=list[HistoricSatelliteDataEntry])
-async def get_historic_satellite_data_history(
+@router.get("/stack", response_model=HistoricSatelliteData)
+@limiter.limit("20/second")
+async def get_satellite_stack_url(
     request: Request,  # noqa: ARG001
     channel: str,
     _: AuthDependency,
-) -> list[HistoricSatelliteDataEntry]:
-    """Dump the pre-warmed cache of presigned URLs for a channel, from the last BACKFILL_HOURS."""
-    if channel not in VALID_CHANNELS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid channel. Must be one of {sorted(VALID_CHANNELS)}",
-        )
-
-    cutoff = datetime.now(tz=UTC) - timedelta(hours=BACKFILL_HOURS)
-    entries = await _get_cached_entries(channel) or {}
-    return [
-        HistoricSatelliteDataEntry(timestamp=ts, url=e["url"])
-        for ts, e in sorted(entries.items())
-        if datetime.fromisoformat(ts) >= cutoff
-    ]
+) -> HistoricSatelliteData:
+    """Get a pre-signed URL for a layer's rolling stack: one multi-band tif of the last 48 h."""
+    _check_channel(channel)
+    url = await asyncio.to_thread(stack_url, channel)
+    if url is None:
+        raise HTTPException(status_code=404, detail="No rolling stack for this channel yet")
+    return HistoricSatelliteData(url=url)
