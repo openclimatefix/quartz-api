@@ -52,11 +52,13 @@ def rebuild_stacks(s3: S3Client, bucket: str) -> None:
 
 def stack_url(layer: str) -> str | None:
     """Presigned URL (valid 1 h, re-signed every STACK_INTERVAL_MINUTES) of a layer's stack."""
+    s3, bucket = get_s3_client(), get_geotiff_bucket()
+    if not s3.object_exists(bucket, f"rolling/{layer}.tif"):
+        return None
     return _signed_stack_url(layer, int(time.time() // (STACK_INTERVAL_MINUTES * 60)))
 
 
 @lru_cache(maxsize=64)
-def _signed_stack_url(layer: str, _window: int) -> str | None:
+def _signed_stack_url(layer: str, _window: int) -> str:
     s3, bucket = get_s3_client(), get_geotiff_bucket()
-    key = f"rolling/{layer}.tif"
-    return s3.get_presigned_url(bucket, key) if s3.object_exists(bucket, key) else None
+    return s3.get_presigned_url(bucket, f"rolling/{layer}.tif")
