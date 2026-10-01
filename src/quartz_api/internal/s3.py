@@ -59,6 +59,7 @@ class S3Client:
         region = _require_config()["region"]
         self.fs = fsspec.filesystem(
             "s3",
+            use_listings_cache=False,
             **({"client_kwargs": {"region_name": region}} if region else {}),
         )
 

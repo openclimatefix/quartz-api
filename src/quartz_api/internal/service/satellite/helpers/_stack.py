@@ -36,15 +36,19 @@ def rebuild_stacks(s3: S3Client, bucket: str) -> None:
                 lambda ts, p=prefix: s3.download_bytes(bucket, f"{p}{ts}.tif"), slots,
             ))
         bands = []
+        missing_per_slot = []
         for blob in frames:
             with rasterio.open(io.BytesIO(blob)) as src:
                 bands.append(src.read(1))
+                missing_per_slot.append(src.tags().get("missing_channels", ""))
 
         buf = io.BytesIO()
         with rasterio.open(buf, "w", count=len(bands), interleave="band", **TIF_PROFILE) as dst:
             dst.write(np.stack(bands))
             for i, ts in enumerate(slots, start=1):
                 dst.set_band_description(i, ts)
+                if missing_per_slot[i - 1]:
+                    dst.update_tags(i, missing_channels=missing_per_slot[i - 1])
             dst.update_tags(**tags(layer, timestamps=",".join(slots)))
         s3.upload_bytes(bucket, f"rolling/{layer}.tif", buf.getvalue())
         log.info("Uploaded rolling stack for %s (%d slots)", layer, len(slots))
