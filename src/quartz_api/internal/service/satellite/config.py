@@ -4,7 +4,7 @@ from typing import Any
 # Bounding box to crop to Europe
 LEFT, BOTTOM, RIGHT, TOP = -31.3, 36.0, 36.3, 64.7
 
-# Output pixel resolution (EPSG:3857 metres): 1 pixel = 17 km × 17 km cells.
+# Output pixel resolution: 1 pixel = 17 km x 17 km cells.
 RESOLUTION_M = 17_388
 
 # How far back to backfill missing data (in hours)
