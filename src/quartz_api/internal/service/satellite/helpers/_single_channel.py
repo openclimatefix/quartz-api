@@ -80,12 +80,12 @@ def ingest_channels(
     key: str,
     slot: dt.datetime,
     uploaded: dict[str, set[str]],
-) -> None:
+) -> set[str]:
     """Decode one raw file, reproject each still-missing channel to the Europe grid, and upload."""
     ts = slot.strftime(TS_FMT)
     todo = [ch for ch in LAYER_CONFIG if f"{ts}.tif" not in uploaded[ch]]
     if not todo:
-        return
+        return set()
 
     sunrise, sunset = apply_buffer(*sun_times(slot.date(), (LEFT + RIGHT) / 2, (BOTTOM + TOP) / 2))
     dark = not sunrise <= slot < sunset
@@ -120,3 +120,4 @@ def ingest_channels(
                 if cfg.get("invert"):
                     grey = 1 - grey
             save(s3, geo_bucket, ch, ts, build_layer_tif(ch, grey, timestamp=ts), uploaded)
+    return set(todo)

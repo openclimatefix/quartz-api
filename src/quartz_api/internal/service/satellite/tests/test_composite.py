@@ -2,8 +2,22 @@ import unittest
 
 import numpy as np
 
-from ..helpers._composite import _flatten
-from ..helpers.common import DST_SHAPE
+from ..config import COMPOSITE_CONFIG
+from ..helpers._composite import _flatten, build_composites
+from ..helpers.common import DST_SHAPE, LAYERS, build_layer_tif
+
+
+class FakeS3:
+    def __init__(self, store: dict[str, bytes]) -> None:
+        self.store = store
+        self.uploads: dict[str, bytes] = {}
+
+    def download_bytes(self, _bucket: str, key: str) -> bytes:
+        return self.store[key]
+
+    def upload_bytes(self, _bucket: str, key: str, data: bytes) -> None:
+        self.uploads[key] = data
+        self.store[key] = data
 
 
 class TestFlatten(unittest.TestCase):
@@ -30,6 +44,44 @@ class TestFlatten(unittest.TestCase):
 
         self.assertTrue(np.isfinite(out).all())
         np.testing.assert_array_equal(out, np.zeros(DST_SHAPE, dtype=np.float32))
+
+
+class TestBuildCompositesRebuild(unittest.TestCase):
+    TS = "20260101_120000"
+
+    def _setup(self) -> tuple[FakeS3, dict[str, set[str]], str, list[str]]:
+        comp = "COMPOSITE_BLUE"
+        members = COMPOSITE_CONFIG[comp]
+        grey = np.zeros(DST_SHAPE, dtype=np.float32)
+        fname = f"{self.TS}.tif"
+        store = {f"layers/{m}/{fname}": build_layer_tif(m, grey) for m in members}
+        s3 = FakeS3(store)
+        uploaded: dict[str, set[str]] = {layer: set() for layer in LAYERS}
+        for m in members:
+            uploaded[m].add(fname)
+        return s3, uploaded, comp, members
+
+    def test_builds_then_skips_when_nothing_changed(self) -> None:
+        s3, uploaded, comp, _ = self._setup()
+        fname = f"{self.TS}.tif"
+
+        build_composites(s3, "bucket", self.TS, uploaded)
+        self.assertIn(f"layers/{comp}/{fname}", s3.uploads)
+        self.assertIn(fname, uploaded[comp])
+
+        s3.uploads.clear()
+        build_composites(s3, "bucket", self.TS, uploaded)  # no `changed`
+        self.assertEqual(s3.uploads, {})  # already built, nothing changed -> skip
+
+    def test_rebuilds_when_a_member_changed(self) -> None:
+        s3, uploaded, comp, members = self._setup()
+        fname = f"{self.TS}.tif"
+
+        build_composites(s3, "bucket", self.TS, uploaded)
+        s3.uploads.clear()
+
+        build_composites(s3, "bucket", self.TS, uploaded, changed={members[0]})
+        self.assertIn(f"layers/{comp}/{fname}", s3.uploads)  # member changed -> rebuilt
 
 
 if __name__ == "__main__":

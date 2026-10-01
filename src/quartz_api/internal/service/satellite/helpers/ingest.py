@@ -84,8 +84,10 @@ def _run_ingest(
     for slot, key in raw_files:
         ts = slot.strftime(TS_FMT)
         try:
-            _single_channel.ingest_channels(s3, icechunk_bucket, geo_bucket, key, slot, uploaded)
-            _composite.build_composites(s3, geo_bucket, ts, uploaded)
+            changed = _single_channel.ingest_channels(
+                s3, icechunk_bucket, geo_bucket, key, slot, uploaded,
+            )
+            _composite.build_composites(s3, geo_bucket, ts, uploaded, changed)
         except Exception as e:
             log.exception("Failed %s (slot %s): %s", key, ts, e)
             sentry_sdk.capture_exception(e)

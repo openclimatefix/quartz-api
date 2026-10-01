@@ -29,13 +29,21 @@ def _flatten(greys: list[np.ndarray]) -> np.ndarray:
 
 
 def build_composites(
-    s3: S3Client, geo_bucket: str, ts: str, uploaded: dict[str, set[str]],
+    s3: S3Client,
+    geo_bucket: str,
+    ts: str,
+    uploaded: dict[str, set[str]],
+    changed: set[str] | None = None,
 ) -> None:
-    """Blend each composite's already-uploaded member tifs into one layer, if not done yet."""
+    """Blend each composite's member tifs into one layer; rebuild if a member changed this run."""
+    changed = changed or set()
     fname = f"{ts}.tif"
     for comp, members in COMPOSITE_CONFIG.items():
         present = [m for m in members if fname in uploaded[m]]
-        if fname in uploaded[comp] or not present:
+        if not present:
+            continue
+        # Skip only if already built and no member was (re)written this run.
+        if fname in uploaded[comp] and not any(m in changed for m in members):
             continue
 
         greys = []
