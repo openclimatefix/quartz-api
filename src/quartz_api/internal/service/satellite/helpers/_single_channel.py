@@ -21,8 +21,7 @@ from satpy.readers.seviri_l1b_native_hdr import get_native_header, native_traile
 
 from quartz_api.internal.s3 import S3Client
 
-from ..config import BOTTOM, LAYER_CONFIG, LEFT, RAW_PREFIX, RIGHT, TOP
-from ._blackout import apply_buffer, sun_times
+from ..config import LAYER_CONFIG, RAW_PREFIX
 from .common import DST_CRS, DST_SHAPE, DST_TF, TS_FMT, build_layer_tif, save
 
 log = logging.getLogger(__name__)
@@ -87,14 +86,12 @@ def ingest_channels(
     if not todo:
         return set()
 
-    sunrise, sunset = apply_buffer(*sun_times(slot.date(), (LEFT + RIGHT) / 2, (BOTTOM + TOP) / 2))
-    dark = not sunrise <= slot < sunset
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, key.rsplit("/", 1)[-1])
         with open(path, "wb") as f:
             f.write(s3.download_bytes(icechunk_bucket, key))
         scn = Scene(filenames=[path], reader="seviri_l1b_native")
-        scn.load(todo)  # lazy - blacked-out channels are never actually decoded
+        scn.load(todo)
 
         area = scn[todo[0]].attrs["area"]
         src_crs = CRS.from_wkt(area.crs.to_wkt())
@@ -104,20 +101,17 @@ def ingest_channels(
         )
         for ch in todo:
             cfg = LAYER_CONFIG[ch]
-            if dark and cfg.get("blackout"):
-                grey = np.zeros(DST_SHAPE, dtype=np.float32)
-            else:
-                out = np.full(DST_SHAPE, np.nan, dtype=np.float32)
-                # average, not bilinear: each output pixel covers several source pixels
-                reproject(
-                    scn[ch].values.astype(np.float32), out,
-                    src_transform=src_tf, src_crs=src_crs,
-                    dst_transform=DST_TF, dst_crs=DST_CRS,
-                    resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
-                )
-                lo, hi = cfg["range"]
-                grey = np.clip((out - lo) / (hi - lo), 0, 1)
-                if cfg.get("invert"):
-                    grey = 1 - grey
+            out = np.full(DST_SHAPE, np.nan, dtype=np.float32)
+            # average, not bilinear: each output pixel covers several source pixels
+            reproject(
+                scn[ch].values.astype(np.float32), out,
+                src_transform=src_tf, src_crs=src_crs,
+                dst_transform=DST_TF, dst_crs=DST_CRS,
+                resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
+            )
+            lo, hi = cfg["range"]
+            grey = np.clip((out - lo) / (hi - lo), 0, 1)
+            if cfg.get("invert"):
+                grey = 1 - grey
             save(s3, geo_bucket, ch, ts, build_layer_tif(ch, grey, timestamp=ts), uploaded)
     return set(todo)
