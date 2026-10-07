@@ -11,6 +11,7 @@ from fastapi import Request, Response
 from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
+from quartz_api.internal.middleware.auth import get_org_id_from_authdata
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
@@ -71,6 +72,44 @@ async def key_builder(
     if tier is not None:
         parts.append(tier)
     return ":".join(parts)
+
+
+async def site_key_builder(
+    func: Callable[..., Any],
+    namespace: str = "",
+    *,
+    request: Request,
+    response: Response,
+    args: Any,  # noqa: ANN401
+    kwargs: Any,  # noqa: ANN401
+) -> str:
+    """Cache key builder for site routes: `key_builder` plus the caller's company."""
+    company = get_org_id_from_authdata(kwargs.get("auth", {})) or "ocf-admin"
+    base = await key_builder(
+        func,
+        f"{namespace}:{company}",
+        request=request,
+        response=response,
+        args=args,
+        kwargs=kwargs,
+    )
+
+    route = request.scope.get("route")
+    allowed = (
+        {param.alias for param in route.dependant.query_params}
+        if route is not None and hasattr(route, "dependant")
+        else set(func.__code__.co_varnames)
+    )
+    params = sorted(
+        (k, v) for k, v in request.query_params.multi_items() if k in allowed
+    )
+    return f"{base}:{params!r}"
+
+
+async def invalidate_company_site_cache(auth: dict) -> None:
+    """Invalidate all site cache entries for the caller's company."""
+    company = get_org_id_from_authdata(auth) or "ocf-admin"
+    await FastAPICache.clear(namespace=f"sites:{company}:")
 
 
 def forecast_period_base_key(

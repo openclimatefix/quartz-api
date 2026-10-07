@@ -3,11 +3,13 @@
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..cache import invalidate_company_site_cache, site_key_builder
 from ..endpoint_types import CountryParam, SiteInput, ValidSource
 from ..helpers import check_country_access
 from ..sites_scoping import (
@@ -26,6 +28,7 @@ router = APIRouter(tags=["Sites"])
     "/{country}/{source}/sites",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites(
     country: CountryParam,
     source: ValidSource,
@@ -155,6 +158,7 @@ async def create_site(
         authdata=auth,
     )
 
+    await invalidate_company_site_cache(auth)
     return location_to_site_response(created)
 
 
@@ -162,6 +166,7 @@ async def create_site(
     "/{country}/{source}/sites/{site_id}",
     status_code=status.HTTP_200_OK,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_site_detail(
     country: CountryParam,
     source: ValidSource,
@@ -226,4 +231,5 @@ async def update_site(
         authdata=auth,
     )
 
+    await invalidate_company_site_cache(auth)
     return location_to_site_response(updated)
