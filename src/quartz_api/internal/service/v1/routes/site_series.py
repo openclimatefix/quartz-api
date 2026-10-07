@@ -6,11 +6,13 @@ from uuid import UUID
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi_cache.decorator import cache
 from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
+from ..cache import invalidate_company_site_cache, site_key_builder
 from ..clearsky import clearsky_times, site_clearsky_kw
 from ..endpoint_types import (
     CountryParam,
@@ -55,6 +57,7 @@ router = APIRouter(tags=["Sites"])
     response_model=SiteForecastResponse,
     response_model_exclude_none=True,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_site_forecast(
     country: CountryParam,
     source: ValidSource,
@@ -124,6 +127,7 @@ async def get_site_forecast(
     response_model=SiteGenerationResponse,
     response_model_exclude_none=True,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_site_generation(
     country: CountryParam,
     source: ValidSource,
@@ -220,6 +224,8 @@ async def post_site_generation(
         authdata=auth,
     )
 
+    await invalidate_company_site_cache(auth)
+
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
@@ -227,6 +233,7 @@ async def post_site_generation(
     "/{country}/{source}/sites/clearsky",
     response_model=SiteClearskyMatrix,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites_clearsky(
     country: CountryParam,
     source: ValidSource,
@@ -269,6 +276,7 @@ async def get_sites_clearsky(
     response_model=SiteClearskyResponse,
     response_model_exclude_none=True,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_site_clearsky(
     country: CountryParam,
     source: ValidSource,
@@ -308,6 +316,7 @@ async def get_site_clearsky(
     response_model=SiteForecastMatrix,
     response_model_exclude_none=True,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites_forecasts_period(
     country: CountryParam,
     source: ValidSource,
@@ -422,6 +431,7 @@ async def get_sites_forecasts_period(
     "/{country}/{source}/sites/generation/period",
     response_model=SiteGenerationMatrix,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites_generation_period(
     country: CountryParam,
     source: ValidSource,
@@ -502,6 +512,7 @@ async def get_sites_generation_period(
     response_model=SiteForecastSnapshot,
     response_model_exclude_none=True,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites_forecasts_snapshot(
     country: CountryParam,
     source: ValidSource,
@@ -599,6 +610,7 @@ async def get_sites_forecasts_snapshot(
     "/{country}/{source}/sites/generation/snapshot",
     response_model=SiteGenerationSnapshot,
 )
+@cache(key_builder=site_key_builder, namespace="sites", expire=60)
 async def get_sites_generation_snapshot(
     country: CountryParam,
     source: ValidSource,
