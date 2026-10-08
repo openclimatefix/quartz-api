@@ -443,7 +443,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
             SiteConfig(
                 source="solar",
                 observer_name="pv_actual",
-                default_forecaster_name=None,
+                default_forecaster_name="pv_site_production", #TODO Check with Brad
             ),
         ),
     ),
