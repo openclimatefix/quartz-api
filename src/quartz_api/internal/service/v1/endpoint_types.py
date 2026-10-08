@@ -774,3 +774,83 @@ class SiteGenerationInput(BaseModel):
 
     time_utc: dt.datetime
     power_kW: float = Field(ge=0)
+
+
+class SiteSeries(BaseModel):
+    """One site's row in a matrix; `power_kW` lines up with the shared `times_utc`."""
+
+    site_id: UUID
+    capacity_kW: float
+    power_kW: list[float | None] = Field(
+        description=(
+            "One value per entry in `times_utc`. A `null` is a time this site has no "
+            "value for, which happens whenever the selected sites carry different runs "
+            "or were created on different dates. Zero is not used for a gap: it would be "
+            "indistinguishable from a real zero at night, and dropping the time would "
+            "break the alignment with every other site."
+        ),
+    )
+
+
+class SiteForecastMatrix(BaseModel):
+    """Forecasts for several sites over one shared set of times."""
+
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "The model every site in this response was read from. Absent only when the "
+            "response has no sites, since there is then no model to report."
+        ),
+    )
+    model_version: str | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
+    times_utc: list[dt.datetime]
+    sites: list[SiteSeries]
+
+
+class SiteGenerationMatrix(BaseModel):
+    """Observed generation for several sites over one shared set of times."""
+
+    observer_name: str
+    times_utc: list[dt.datetime]
+    sites: list[SiteSeries]
+
+
+class SiteSnapshotValue(BaseModel):
+    """One site's value at a single point in time."""
+
+    site_id: UUID
+    capacity_kW: float
+    power_kW: float
+
+
+class SiteForecastSnapshot(BaseModel):
+    """Forecast for every one of the caller's sites at a single time.
+
+    Sites the platform has no value for at `time_utc` are absent from `values` rather
+    than carrying a zero, for the same reason a matrix gap is `null`.
+    """
+
+    time_utc: dt.datetime = Field(
+        description="The single target time every value in this snapshot is for.",
+    )
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "The model every site in this response was read from. Absent only when the "
+            "caller has no sites."
+        ),
+    )
+    model_version: str | None = None
+    last_updated_utc: dt.datetime | None = None
+    latest_init_utc: dt.datetime | None = None
+    values: list[SiteSnapshotValue]
+
+
+class SiteGenerationSnapshot(BaseModel):
+    """Observed generation for every one of the caller's sites at a single time."""
+
+    time_utc: dt.datetime
+    observer_name: str
+    values: list[SiteSnapshotValue]
