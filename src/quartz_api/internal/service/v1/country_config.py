@@ -139,6 +139,15 @@ class RegionTypeConfig:
 
 
 @dataclass(frozen=True)
+class SiteConfig:
+    """Per-country, per-energy-source configuration for site-level data."""
+
+    source: str
+    observer_name: str
+    default_forecaster_name: str | None = None
+
+
+@dataclass(frozen=True)
 class GenerationSource:
     """Configuration for a generation source.
 
@@ -173,6 +182,7 @@ class CountryConfig:
     generation_sources: tuple[GenerationSource, ...] = ()
     permission: str = ""
     intraday_permission: str | None = None
+    site_configs: tuple[SiteConfig, ...] = ()
     stage: Stage = "production"
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
@@ -197,6 +207,13 @@ class CountryConfig:
         for gt in self.generation_sources:
             if gt.source == source:
                 return gt
+        return None
+
+    def get_site_config(self, source: str) -> SiteConfig | None:
+        """Look up site-level config for a given energy source ('solar'/'wind')."""
+        for sc in self.site_configs:
+            if sc.source == source:
+                return sc
         return None
 
     def default_observer(self, source: str) -> str | None:
@@ -420,6 +437,13 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
                 source="solar",
                 name="pvlive_day_after",
                 label="PV Live Updated",
+            ),
+        ),
+        site_configs=(
+            SiteConfig(
+                source="solar",
+                observer_name="pv_actual",
+                default_forecaster_name=None,
             ),
         ),
     ),
