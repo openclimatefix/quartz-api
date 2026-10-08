@@ -563,7 +563,6 @@ class StorageClient(models.StorageInterface):
                 location_type_map[location_type] if location_type is not None else None
             ),
             organisation_id_filter=organisation_id,
-            country_code_filter=country_code,
             location_uuids_filter=(
                 [str(location_uuid)] if location_uuid is not None else []
             ),
