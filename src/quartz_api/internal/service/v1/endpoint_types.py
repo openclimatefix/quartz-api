@@ -638,8 +638,10 @@ class RegionForecast(BaseModel):
 
     region_name: str
     capacity_kW: float
-    power_kW: list[float]
-    plevels_kW: dict[str, list[float]] = Field(default_factory=dict)
+    # Index-aligned with the matrix's `times_utc`; `None` where this region has no value
+    # at that time.
+    power_kW: list[float | None]
+    plevels_kW: dict[str, list[float | None]] = Field(default_factory=dict)
 
 
 class RegionForecastMatrix(BaseModel):
@@ -659,7 +661,9 @@ class RegionGeneration(BaseModel):
 
     region_name: str
     capacity_kW: float
-    power_kW: list[float]
+    # Index-aligned with the matrix's `times_utc`; `None` where this region has no reading
+    # at that time.
+    power_kW: list[float | None]
 
 
 class RegionGenerationMatrix(BaseModel):

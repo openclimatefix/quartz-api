@@ -2361,3 +2361,186 @@ async def test_nl_forecast_period_display_name_filter(
     )
     assert resp2.status_code == 200
     assert len(resp2.json()["regions"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Period matrices: alignment to times_utc, and per-region ordering
+# ---------------------------------------------------------------------------
+
+_SECOND_GSP_UUID = uuid4()
+
+
+class TwoGSPStorageClient(StorageClient):
+    """DummyDB variant with two GSPs on stable UUIDs, so a period matrix has to align them."""
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
+    ) -> list[models.Location]:
+        if location_type == models.LocationType.GSP:
+            return [
+                models.Location(
+                    uuid=uuid,
+                    name=name,
+                    latitude=51.0,
+                    longitude=-1.0,
+                    capacity_kilowatts=1000,
+                    location_type=models.LocationType.GSP,
+                )
+                for uuid, name in [(_FIXED_GSP_UUID, "gsp_a"), (_SECOND_GSP_UUID, "gsp_b")]
+            ]
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
+        )
+
+
+class ReversedValuesStorageClient(StorageClient):
+    """DummyDB variant returning time series newest-first, as the DP is free to."""
+
+    async def get_actual_generation(self, *args, **kwargs):  # type: ignore[override]
+        return list(reversed(await super().get_actual_generation(*args, **kwargs)))
+
+    async def get_predicted_generation(self, *args, **kwargs):  # type: ignore[override]
+        return list(reversed(await super().get_predicted_generation(*args, **kwargs)))
+
+
+@pytest_asyncio.fixture
+async def two_gsp_client() -> AsyncGenerator[AsyncClient, None]:
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(TwoGSPStorageClient(), ["read:gb"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def reversed_values_client() -> AsyncGenerator[AsyncClient, None]:
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(ReversedValuesStorageClient(), ["read:gb"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+
+async def _set_region_cache(key_base: str, uuid: UUID, values: list[dict]) -> None:
+    await FastAPICache.get_backend().set(
+        f"{FastAPICache.get_prefix()}:{key_base}:{uuid}",
+        json.dumps(values).encode(),
+        expire=3600,
+    )
+
+
+def _half_hours(n: int) -> list[str]:
+    now = dt.datetime.now(tz=dt.UTC).replace(minute=0, second=0, microsecond=0)
+    return [(now + dt.timedelta(minutes=30 * i)).isoformat() for i in range(n)]
+
+
+def _by_region(body: dict) -> dict[str, dict]:
+    return {r["region_name"]: r for r in body["regions"]}
+
+
+@pytest.mark.anyio
+async def test_get_generation_period_aligns_regions_to_shared_times(
+    two_gsp_client: AsyncClient,
+) -> None:
+    """Each region's power_kW follows times_utc, whatever order or length its rows have.
+
+    The cache stores rows in the order the DP returned them. Taking the first region's
+    times as the matrix's and every region's values as stored sent readings to the wrong
+    times: on 2026-10-23, 593 kW at 20:30 for a 1,551 kW GSP.
+    """
+    t0, t1, t2 = _half_hours(3)
+    base = "v1:period:generation:GB:solar:gsp:pvlive_in_day"
+    await _set_generation_meta()
+    # First region: newest-first, so its order is not the answer.
+    await _set_region_cache(
+        base,
+        _FIXED_GSP_UUID,
+        [
+            {"time_utc": t2, "power_kW": 3.0},
+            {"time_utc": t1, "power_kW": 2.0},
+            {"time_utc": t0, "power_kW": 1.0},
+        ],
+    )
+    # Second region: another order, and no reading at t1.
+    await _set_region_cache(
+        base,
+        _SECOND_GSP_UUID,
+        [{"time_utc": t2, "power_kW": 30.0}, {"time_utc": t0, "power_kW": 10.0}],
+    )
+
+    resp = await two_gsp_client.get("/v1/GB/solar/generation/period?region_type=gsp")
+    assert resp.status_code == 200
+    body = resp.json()
+    times = [dt.datetime.fromisoformat(t) for t in body["times_utc"]]
+    assert times == [dt.datetime.fromisoformat(t) for t in (t0, t1, t2)]
+    regions = _by_region(body)
+    assert regions["gsp_a"]["power_kW"] == [1.0, 2.0, 3.0]
+    assert regions["gsp_b"]["power_kW"] == [10.0, None, 30.0]
+
+
+@pytest.mark.anyio
+async def test_get_forecasts_period_aligns_regions_to_shared_times(
+    two_gsp_client: AsyncClient,
+) -> None:
+    """The forecast matrix is built the same way, plevels included."""
+    t0, t1, t2 = _half_hours(3)
+    base = "v1:period:GB:solar:gsp"
+    await _set_forecast_meta()
+    await _set_region_cache(
+        base,
+        _FIXED_GSP_UUID,
+        [
+            {"time_utc": t1, "power_kW": 2.0, "plevels_kW": {"p10": 1.5}},
+            {"time_utc": t0, "power_kW": 1.0, "plevels_kW": {"p10": 0.5}},
+        ],
+    )
+    await _set_region_cache(
+        base,
+        _SECOND_GSP_UUID,
+        [
+            {"time_utc": t2, "power_kW": 30.0, "plevels_kW": {"p10": 25.0}},
+            {"time_utc": t0, "power_kW": 10.0, "plevels_kW": {"p10": 5.0}},
+        ],
+    )
+
+    resp = await two_gsp_client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    assert resp.status_code == 200
+    body = resp.json()
+    times = [dt.datetime.fromisoformat(t) for t in body["times_utc"]]
+    assert times == [dt.datetime.fromisoformat(t) for t in (t0, t1, t2)]
+    regions = _by_region(body)
+    assert regions["gsp_a"]["power_kW"] == [1.0, 2.0, None]
+    assert regions["gsp_a"]["plevels_kW"] == {"p10": [0.5, 1.5, None]}
+    assert regions["gsp_b"]["power_kW"] == [10.0, None, 30.0]
+    assert regions["gsp_b"]["plevels_kW"] == {"p10": [5.0, None, 25.0]}
+
+
+@pytest.mark.anyio
+async def test_get_region_generation_values_are_time_ordered(
+    reversed_values_client: AsyncClient,
+) -> None:
+    resp = await reversed_values_client.get("/v1/GB/solar/regions/national/generation")
+    assert resp.status_code == 200
+    times = [v["time_utc"] for v in resp.json()["values"]]
+    assert len(times) > 1
+    assert times == sorted(times)
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_values_are_time_ordered(
+    reversed_values_client: AsyncClient,
+) -> None:
+    resp = await reversed_values_client.get("/v1/GB/solar/regions/national/forecast")
+    assert resp.status_code == 200
+    times = [v["time_utc"] for v in resp.json()["values"]]
+    assert len(times) > 1
+    assert times == sorted(times)

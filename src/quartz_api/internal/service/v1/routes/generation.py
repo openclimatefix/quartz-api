@@ -45,10 +45,12 @@ from ..endpoint_types import (
     ValidWindowStart,
 )
 from ..helpers import (
+    align_to_times,
     check_country_access,
     fetch_api_region,
     latest_capacity,
     location_display_name,
+    period_times,
     region_metadata,
     resolve_nation,
     resolve_observer_param,
@@ -127,6 +129,8 @@ async def get_generation(
             ),
         )
 
+    # The DP gives no ordering guarantee, and a series plotted as received draws as a scribble.
+    agvs.sort(key=lambda v: v.valid_timestamp)
     return GenerationResponse(
         region_name=location_display_name(region, country),
         capacity_kW=latest_capacity(agvs),
@@ -397,14 +401,14 @@ async def get_generation_period(
         windowed = [v for v in all_values if win_start <= v.time_utc <= win_end]
         all_region_data.append((r, windowed))
 
-    times = [v.time_utc for v in all_region_data[0][1]] if all_region_data else []
+    times = period_times([windowed for _, windowed in all_region_data])
     region_series: list[RegionGeneration] = []
     for r, windowed in all_region_data:
         region_series.append(
             RegionGeneration(
                 region_name=location_display_name(r, country),
                 capacity_kW=r.capacity_kilowatts,
-                power_kW=[v.power_kW for v in windowed],
+                power_kW=align_to_times(windowed, times, lambda v: v.power_kW),
             ),
         )
 

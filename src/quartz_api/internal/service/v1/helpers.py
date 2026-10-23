@@ -5,7 +5,8 @@
 import contextlib
 import datetime as dt
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import TypeVar
 from uuid import UUID
 
 import pandas as pd
@@ -678,6 +679,30 @@ def plevel_sort_key(name: str) -> tuple[int, str]:
     """
     digits = name[1:] if name[:1].lower() == "p" else name
     return (int(digits), name) if digits.isdigit() else (_PLEVEL_UNKNOWN, name)
+
+
+_V = TypeVar("_V")
+_T = TypeVar("_T")
+
+
+def period_times(series: list[list]) -> list[dt.datetime]:
+    """The shared, ascending `times_utc` of a period matrix: every region's times, merged.
+
+    Taking one region's times instead is what misaligned the matrix: the cache stores each
+    region's rows in the order the DP returned them, which differs between regions, and a
+    region can be missing readings another has.
+    """
+    return sorted({v.time_utc for values in series for v in values})
+
+
+def align_to_times(
+    values: list[_V],
+    times: list[dt.datetime],
+    pick: Callable[[_V], _T],
+) -> list[_T | None]:
+    """One region's values laid out on the matrix's `times`, `None` where it has none."""
+    by_time = {v.time_utc: v for v in values}  # type: ignore[attr-defined]
+    return [pick(by_time[t]) if t in by_time else None for t in times]
 
 
 def sort_plevels(plevels: dict) -> dict:
