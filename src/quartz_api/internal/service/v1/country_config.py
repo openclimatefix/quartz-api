@@ -244,6 +244,12 @@ class FM:
         adjust_name="blend_adjust",
         adjust_aliases=("blend_adjust",),
     )
+    # GB — blend cloudcasting
+    BLEND_CLOUDCASTING = ForecastModel(
+        name="blend_cloudcasting",
+        label="Blend Cloudcasting",
+        adjust_name="blend_cloudcasting_adjust",
+    )
     # GB — NWP-only day-ahead (ECMWF + Met Office, no satellite at day-ahead range)
     ECMWF_MO = ForecastModel(
         name="pvnet_day_ahead",
@@ -351,6 +357,7 @@ _GB_NATIONAL_FORECAST_MODELS = (
     FM.ECMWF,
     FM.SAT_8H,
     FM.MO,
+    FM.BLEND_CLOUDCASTING,
 )
 
 _GB_GSP_FORECAST_MODELS = (
