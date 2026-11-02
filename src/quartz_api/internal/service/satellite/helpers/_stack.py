@@ -1,4 +1,4 @@
-"""Rolling 48 h stacks: one multi-band tif per layer, and its presigned URL."""
+"""Rolling 60 h stacks: one multi-band tif per layer, and its presigned URL."""
 import datetime as dt
 import io
 import logging
