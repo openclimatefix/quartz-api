@@ -54,7 +54,7 @@ _GATED_PERMISSIONS: frozenset[str] = frozenset(
 )
 
 
-def _addon_key_part(auth: dict) -> str:
+def _gated_permissions_key(auth: dict) -> str:
     """The caller's gated permissions as one string, e.g. "read:gb-solar-cloudcasting".
 
     Sorted, so the same set of permissions always gives the same string whatever order
@@ -81,7 +81,7 @@ async def key_builder(
     cache entry. Unauthorized users always get a distinct key and therefore always
     reach the route handler (which raises 403, never cached).
 
-    Add-on permissions are appended on top of the tier. Without that, an entitled
+    Permissions that gate a single model are appended on top of the tier. Without that, an entitled
     caller's response for a gated model would be served from cache to a caller at the
     same country tier who lacks the add-on, and the 403 in the handler never runs.
     Callers holding none keep the unsuffixed key, so adding a gated model does not
@@ -99,9 +99,9 @@ async def key_builder(
     parts = [namespace, request.method.lower(), request.url.path, repr(sorted(params))]
     if tier is not None:
         parts.append(tier)
-    addons = _addon_key_part(auth)
-    if addons:
-        parts.append(addons)
+    gated = _gated_permissions_key(auth)
+    if gated:
+        parts.append(gated)
     return ":".join(parts)
 
 
