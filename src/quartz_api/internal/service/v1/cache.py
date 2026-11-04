@@ -42,6 +42,29 @@ def _country_access_tier(auth: dict, country: object) -> str:
     return "unauthorized"
 
 
+# Permissions that gate individual models, so two callers at the same country tier can be
+# entitled to different data. Collected from the config rather than listed, so adding a
+# gated model cannot forget this.
+_GATED_PERMISSIONS: frozenset[str] = frozenset(
+    fm.required_permission
+    for cfg in COUNTRIES.values()
+    for rt in cfg.region_types
+    for fm in rt.forecast_models
+    if fm.required_permission
+)
+
+
+def _addon_key_part(auth: dict) -> str:
+    """The caller's gated permissions as one string, e.g. "read:gb-solar-cloudcasting".
+
+    Sorted, so the same set of permissions always gives the same string whatever order
+    the token lists them in. Empty when the caller holds none, which keeps their key
+    exactly as it was before any gated model existed.
+    """
+    held = frozenset(auth.get("permissions", [])) & _GATED_PERMISSIONS
+    return ",".join(sorted(held))
+
+
 async def key_builder(
     func: Callable[..., Any],
     namespace: str = "",
@@ -57,6 +80,12 @@ async def key_builder(
     raw permission strings so that all users who receive identical data share one
     cache entry. Unauthorized users always get a distinct key and therefore always
     reach the route handler (which raises 403, never cached).
+
+    Add-on permissions are appended on top of the tier. Without that, an entitled
+    caller's response for a gated model would be served from cache to a caller at the
+    same country tier who lacks the add-on, and the 403 in the handler never runs.
+    Callers holding none keep the unsuffixed key, so adding a gated model does not
+    invalidate everyone else's entries.
     """
     auth = kwargs.get("auth", {})
     country = kwargs.get("country")
@@ -70,6 +99,9 @@ async def key_builder(
     parts = [namespace, request.method.lower(), request.url.path, repr(sorted(params))]
     if tier is not None:
         parts.append(tier)
+    addons = _addon_key_part(auth)
+    if addons:
+        parts.append(addons)
     return ":".join(parts)
 
 

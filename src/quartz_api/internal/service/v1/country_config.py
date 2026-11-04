@@ -43,6 +43,12 @@ class ForecastModel:
     aliases: tuple[str, ...] = ()
     adjust_aliases: tuple[str, ...] = ()
     stage: Stage = "production"
+    # An Auth0 permission the caller must hold to name this model. The gate is enforced in
+    # resolve_forecast_model and the permission is part of the cache key (see cache.py), or
+    # an entitled caller's response would be served from cache to an unentitled one. It must
+    # never be a default_model or intraday_default_model: callers who name no model would
+    # then share a key whose only entitlement component is the coarse country tier.
+    required_permission: str | None = None
 
     @property
     def api_name(self) -> str:
@@ -249,6 +255,7 @@ class FM:
         name="blend_cloudcasting",
         label="Blend + Cloudcasting",
         adjust_name="blend_cloudcasting_adjust",
+        required_permission="read:gb-solar-cloudcasting",
     )
     # GB — NWP-only day-ahead (ECMWF + Met Office, no satellite at day-ahead range)
     ECMWF_MO = ForecastModel(
