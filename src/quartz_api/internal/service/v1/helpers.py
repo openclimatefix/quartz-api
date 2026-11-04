@@ -16,7 +16,7 @@ from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
-from .auth_scopes import ALL_COUNTRY_PERMISSIONS
+from .auth_scopes import ADMIN_PERMISSION, ALL_COUNTRY_PERMISSIONS
 from .country_config import (
     COUNTRIES,
     CountryConfig,
@@ -407,6 +407,11 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     pass it to `_resolve_forecast_model` to apply model restrictions.
     """
     perms = _get_permissions(auth)
+    # If a country is hidden (ie DE) then check for ocf admin
+    if cfg.hidden:
+        if ADMIN_PERMISSION in perms or cfg.permission in perms:
+            return True
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
     if perms & ALL_COUNTRY_PERMISSIONS:
         return True
     if cfg.permission and cfg.permission in perms:
