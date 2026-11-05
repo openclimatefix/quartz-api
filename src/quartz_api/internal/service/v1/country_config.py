@@ -174,7 +174,7 @@ class CountryConfig:
     permission: str = ""
     intraday_permission: str | None = None
     stage: Stage = "production"
-    # hidden_in_docs flag, if true then country is hidden from docs and /countries only on production
+    # If true, country is hidden from docs and /countries only on production
     hidden_in_docs: bool = False
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
