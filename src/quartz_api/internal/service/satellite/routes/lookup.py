@@ -1,4 +1,4 @@
-"""Presigned-URL lookup routes - one timestamp's tif, or a layer's rolling 48 h stack."""
+"""Presigned-URL lookup routes - one timestamp's tif, or a layer's rolling BACKFILL_HOURS stack."""
 
 import asyncio
 from datetime import UTC, datetime
@@ -10,7 +10,7 @@ from quartz_api.internal.middleware.auth import AuthDependency
 from quartz_api.internal.middleware.ratelimit import limiter
 from quartz_api.internal.s3 import S3Client, get_geotiff_bucket, get_s3_client
 
-from ..config import VALID_CHANNELS
+from ..config import BACKFILL_HOURS, VALID_CHANNELS
 from ..endpoint_types import HistoricSatelliteData
 from ..helpers._stack import stack_url
 
@@ -72,14 +72,19 @@ async def get_historic_satellite_data_url(
     return HistoricSatelliteData(url=url)
 
 
-@router.get("/stack", response_model=HistoricSatelliteData)
+@router.get(
+    "/stack",
+    response_model=HistoricSatelliteData,
+    description=f"Get a pre-signed URL for a layer's rolling stack: "
+    f"one multi-band tif of the last {BACKFILL_HOURS} h.",
+)
 @limiter.limit("20/second")
 async def get_satellite_stack_url(
     request: Request,  # noqa: ARG001
     channel: str,
     _: AuthDependency,
 ) -> HistoricSatelliteData:
-    """Get a pre-signed URL for a layer's rolling stack: one multi-band tif of the last 48 h."""
+    """Pre-signed URL for a layer's rolling stack (multi-band tif of the last BACKFILL_HOURS)."""
     _check_channel(channel)
     url = await asyncio.to_thread(stack_url, channel)
     if url is None:
