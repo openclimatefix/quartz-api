@@ -17,10 +17,16 @@ from ..endpoint_types import (
     GenerationValue,
     SiteClearskyMatrix,
     SiteClearskyResponse,
+    SiteForecastMatrix,
     SiteForecastResponse,
+    SiteForecastSnapshot,
     SiteGenerationInput,
+    SiteGenerationMatrix,
     SiteGenerationResponse,
+    SiteGenerationSnapshot,
     SitePowerSeries,
+    SiteSeries,
+    SiteSnapshotValue,
     ValidSource,
     ValidWindowEnd,
     ValidWindowStart,
@@ -29,13 +35,15 @@ from ..helpers import (
     check_country_access,
     latest_run_timestamps,
     timeseries_window,
+    to_uuid,
     validate_window,
     window_chunks,
 )
 from ..sites_scoping import (
     get_site,
-    require_org_id,
+    list_owned_sites,
     resolve_site_forecaster,
+    select_sites_for_period,
     site_config_for,
 )
 
@@ -61,17 +69,18 @@ async def get_site_forecast(
     """Return the forecast for a site."""
     check_country_access(auth, country)
 
-    # set forecast window.
+    # Set forecast window.
     now = pd.Timestamp.now(tz="UTC").floor("15min").to_pydatetime()
     window_start = start_utc or now
     window_end = end_utc or now + dt.timedelta(hours=48)
     validate_window(window_start, window_end)
 
+    # Select site and resolve forecast model.
     site_cfg = site_config_for(country, source)
     site = await get_site(db, site_id, auth, source, str(country.code))
     forecaster_name = resolve_site_forecaster(site, site_cfg)
 
-    # fetch forecast values
+    # Fetch forecast values.
     values: list[models.PredictedGenerationValue] = []
 
     for chunk_start, chunk_end in window_chunks(window_start, window_end):
@@ -89,7 +98,7 @@ async def get_site_forecast(
             ),
         )
 
-    # build response metadata
+    # Build response metadata.
     first_value = values[0] if values else None
     last_updated, latest_init = latest_run_timestamps(values)
 
@@ -127,16 +136,17 @@ async def get_site_generation(
     """Return the generation a site has reported. Defaults to the last 24 hours."""
     check_country_access(auth, country)
 
-    # set generation window
+    # Set generation window.
     now = pd.Timestamp.now(tz="UTC").floor("15min").to_pydatetime()
     window_end = end_utc or now
     window_start = start_utc or window_end - dt.timedelta(hours=24)
     validate_window(window_start, window_end)
 
+    # Select site.
     site_cfg = site_config_for(country, source)
     site = await get_site(db, site_id, auth, source, str(country.code))
 
-    # fetch observed values
+    # Fetch observed values.
     values: list[models.ActualGenerationValue] = []
 
     for chunk_start, chunk_end in window_chunks(window_start, window_end):
@@ -188,6 +198,7 @@ async def post_site_generation(
             detail="No values to save.",
         )
 
+    # Select site.
     site_cfg = site_config_for(country, source)
     site = await get_site(db, site_id, auth, source, str(country.code))
 
@@ -234,44 +245,9 @@ async def get_sites_clearsky(
             "Clearsky is only available for solar sites.",
         )
 
-    require_org_id(auth)
-
-    sites = await db.get_locations(
-        energy_type=source,
-        location_type=models.LocationType.SITE,
-        authdata=auth,
-        country_code=str(country.code),
-    )
-
-    if site_ids is None:
-        if len(sites) > 10:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"You have {len(sites)} sites; this endpoint returns at most "
-                    "10 per request. Pass site_ids to choose which, "
-                    "e.g. ?site_ids=<uuid>&site_ids=<uuid>. Site UUIDs come from GET /sites."
-                ),
-            )
-    else:
-        sites_by_id = {site.uuid: site for site in sites}
-        missing = next((site_id for site_id in site_ids if site_id not in sites_by_id), None)
-
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No site found for '{missing}'.",
-            )
-
-        sites = [sites_by_id[site_id] for site_id in set(site_ids)]
-
-    sites = sorted(
-        sites,
-        key=lambda site: (
-            str(site.metadata.get("client_site_name", site.name)),
-            str(site.uuid),
-        ),
-    )
+    # Select sites.
+    owned_sites = await list_owned_sites(db, auth, source, str(country.code))
+    sites = select_sites_for_period(owned_sites, site_ids)
 
     times = clearsky_times(*timeseries_window(start_utc, end_utc))
 
@@ -311,6 +287,7 @@ async def get_site_clearsky(
             "Clearsky is only available for solar sites.",
         )
 
+    # Select site.
     site = await get_site(db, site_id, auth, source, str(country.code))
 
     times = clearsky_times(start_utc, end_utc)
@@ -323,4 +300,365 @@ async def get_site_clearsky(
             GenerationValue(time_utc=time, power_kW=power_value)
             for time, power_value in zip(times, power, strict=True)
         ],
+    )
+
+
+@router.get(
+    "/{country}/{source}/sites/forecasts/period",
+    response_model=SiteForecastMatrix,
+    response_model_exclude_none=True,
+)
+async def get_sites_forecasts_period(
+    country: CountryParam,
+    source: ValidSource,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    site_ids: Annotated[list[UUID] | None, Query(max_length=10)] = None,
+    start_utc: ValidWindowStart = None,
+    end_utc: ValidWindowEnd = None,
+    horizon_minutes: Annotated[int | None, Query(ge=0)] = None,
+    creation_limit_utc: Annotated[dt.datetime | None, Query()] = None,
+) -> SiteForecastMatrix:
+    """Return forecasts for several sites on a shared time axis."""
+    check_country_access(auth, country)
+
+    # Set forecast window.
+    window_start, window_end = timeseries_window(start_utc, end_utc)
+    validate_window(window_start, window_end)
+
+    # Select sites and resolve forecast model.
+    site_cfg = site_config_for(country, source)
+    owned_sites = await list_owned_sites(db, auth, source, str(country.code))
+    sites = select_sites_for_period(owned_sites, site_ids)
+
+    models_by_site: dict[str, list[str]] = {}
+
+    for site in sites:
+        forecaster_name = resolve_site_forecaster(site, site_cfg)
+        models_by_site.setdefault(forecaster_name, []).append(str(site.uuid))
+
+    if len(models_by_site) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "The selected sites do not all use the same forecast model "
+                f"({', '.join(sorted(models_by_site))}), and this endpoint reports one model "
+                "for the whole response. Request them in separate calls: "
+                + "; ".join(
+                    f"{model}: {', '.join(site_ids)}"
+                    for model, site_ids in sorted(models_by_site.items())
+                )
+            ),
+        )
+
+    forecaster_name = next(iter(models_by_site), None)
+
+    # Fetch forecast values.
+    all_values: list[models.PredictedGenerationValue] = []
+    per_site: list[tuple[models.Location, dict[dt.datetime, float]]] = []
+
+    for site in sites:
+        values: list[models.PredictedGenerationValue] = []
+
+        for chunk_start, chunk_end in window_chunks(window_start, window_end):
+            values.extend(
+                await db.get_predicted_generation(
+                    location_uuid=site.uuid,
+                    window_start=chunk_start,
+                    window_end=chunk_end,
+                    energy_type=source,
+                    location_type=models.LocationType.SITE,
+                    authdata=auth,
+                    created_cutoff=creation_limit_utc,
+                    forecast_horizon_minutes=horizon_minutes or 0,
+                    forecaster_name=forecaster_name,
+                ),
+            )
+
+        all_values.extend(values)
+        per_site.append(
+            (
+                site,
+                {
+                    value.valid_timestamp: value.power_kilowatts
+                    for value in values
+                },
+            ),
+        )
+
+    # Align all sites on one time axis.
+    times = sorted(
+        {
+            time
+            for _, values_by_time in per_site
+            for time in values_by_time
+        },
+    )
+
+    series = [
+        SiteSeries(
+            site_id=site.uuid,
+            capacity_kW=site.capacity_kilowatts,
+            power_kW=[values_by_time.get(time) for time in times],
+        )
+        for site, values_by_time in per_site
+    ]
+
+    # Build response metadata.
+    first_value = all_values[0] if all_values else None
+    last_updated, latest_init = latest_run_timestamps(all_values)
+
+    return SiteForecastMatrix(
+        model_name=forecaster_name,
+        model_version=first_value.forecaster_version if first_value else None,
+        last_updated_utc=last_updated,
+        latest_init_utc=latest_init,
+        times_utc=times,
+        sites=series,
+    )
+
+
+@router.get(
+    "/{country}/{source}/sites/generation/period",
+    response_model=SiteGenerationMatrix,
+)
+async def get_sites_generation_period(
+    country: CountryParam,
+    source: ValidSource,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    site_ids: Annotated[list[UUID] | None, Query(max_length=10)] = None,
+    start_utc: ValidWindowStart = None,
+    end_utc: ValidWindowEnd = None,
+) -> SiteGenerationMatrix:
+    """Return generation for several sites on a shared time axis."""
+    check_country_access(auth, country)
+
+    # Set generation window.
+    window_start, window_end = timeseries_window(start_utc, end_utc)
+    validate_window(window_start, window_end)
+
+    # Select sites.
+    site_cfg = site_config_for(country, source)
+    owned_sites = await list_owned_sites(db, auth, source, str(country.code))
+    sites = select_sites_for_period(owned_sites, site_ids)
+
+    # Fetch generation values.
+    per_site: list[tuple[models.Location, dict[dt.datetime, float]]] = []
+
+    for site in sites:
+        values: list[models.ActualGenerationValue] = []
+
+        for chunk_start, chunk_end in window_chunks(window_start, window_end):
+            values.extend(
+                await db.get_actual_generation(
+                    location_uuid=site.uuid,
+                    window_start=chunk_start,
+                    window_end=chunk_end,
+                    energy_type=source,
+                    location_type=models.LocationType.SITE,
+                    authdata=auth,
+                    observer_name=site_cfg.observer_name,
+                ),
+            )
+
+        per_site.append(
+            (
+                site,
+                {
+                    value.valid_timestamp: value.power_kilowatts
+                    for value in values
+                },
+            ),
+        )
+
+    # Align all sites on one time axis.
+    times = sorted(
+        {
+            time
+            for _, values_by_time in per_site
+            for time in values_by_time
+        },
+    )
+
+    series = [
+        SiteSeries(
+            site_id=site.uuid,
+            capacity_kW=site.capacity_kilowatts,
+            power_kW=[values_by_time.get(time) for time in times],
+        )
+        for site, values_by_time in per_site
+    ]
+
+    return SiteGenerationMatrix(
+        observer_name=site_cfg.observer_name,
+        times_utc=times,
+        sites=series,
+    )
+
+
+@router.get(
+    "/{country}/{source}/sites/forecasts/snapshot",
+    response_model=SiteForecastSnapshot,
+    response_model_exclude_none=True,
+)
+async def get_sites_forecasts_snapshot(
+    country: CountryParam,
+    source: ValidSource,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    time_utc: Annotated[dt.datetime | None, Query()] = None,
+) -> SiteForecastSnapshot:
+    """Return the forecast for every site at one point in time."""
+    check_country_access(auth, country)
+
+    # Set snapshot time.
+    stamp = (
+        pd.Timestamp(time_utc)
+        if time_utc is not None
+        else pd.Timestamp.now(tz="UTC")
+    )
+
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+
+    snapshot_time = stamp.floor("15min").to_pydatetime()
+
+    # Select sites and resolve forecast model.
+    site_cfg = site_config_for(country, source)
+    sites = await list_owned_sites(db, auth, source, str(country.code))
+
+    if not sites:
+        return SiteForecastSnapshot(
+            time_utc=snapshot_time,
+            values=[],
+        )
+
+    models_by_site: dict[str, list[str]] = {}
+
+    for site in sites:
+        forecaster_name = resolve_site_forecaster(site, site_cfg)
+        models_by_site.setdefault(forecaster_name, []).append(str(site.uuid))
+
+    if len(models_by_site) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "The selected sites do not all use the same forecast model "
+                f"({', '.join(sorted(models_by_site))}), and this endpoint reports one model "
+                "for the whole response. Request them in separate calls: "
+                + "; ".join(
+                    f"{model}: {', '.join(site_ids)}"
+                    for model, site_ids in sorted(models_by_site.items())
+                )
+            ),
+        )
+
+    forecaster_name = next(iter(models_by_site))
+
+    # Fetch forecast values.
+    snapshot = await db.get_predicted_generation_snapshot(
+        location_uuids=[site.uuid for site in sites],
+        snapshot_timestamp_utc=snapshot_time,
+        energy_type=source,
+        authdata=auth,
+        forecaster_name=forecaster_name,
+    )
+
+    # Build site values in the same order as the selected sites.
+    value_by_id = {
+        to_uuid(value.location_uuid): value
+        for value in snapshot
+    }
+
+    values = [
+        SiteSnapshotValue(
+            site_id=site.uuid,
+            capacity_kW=site.capacity_kilowatts,
+            power_kW=value_by_id[to_uuid(site.uuid)].power_kilowatts,
+        )
+        for site in sites
+        if to_uuid(site.uuid) in value_by_id
+    ]
+
+    # Build response metadata.
+    first_value = snapshot[0] if snapshot else None
+    last_updated, latest_init = latest_run_timestamps(snapshot)
+
+    return SiteForecastSnapshot(
+        time_utc=snapshot_time,
+        model_name=forecaster_name,
+        model_version=first_value.forecaster_version if first_value else None,
+        last_updated_utc=last_updated,
+        latest_init_utc=latest_init,
+        values=values,
+    )
+
+
+@router.get(
+    "/{country}/{source}/sites/generation/snapshot",
+    response_model=SiteGenerationSnapshot,
+)
+async def get_sites_generation_snapshot(
+    country: CountryParam,
+    source: ValidSource,
+    db: models.StorageClientDependency,
+    auth: AuthDependency,
+    time_utc: Annotated[dt.datetime | None, Query()] = None,
+) -> SiteGenerationSnapshot:
+    """Return generation for every site at one point in time."""
+    check_country_access(auth, country)
+
+    # Set snapshot time.
+    stamp = (
+        pd.Timestamp(time_utc)
+        if time_utc is not None
+        else pd.Timestamp.now(tz="UTC")
+    )
+
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+
+    snapshot_time = stamp.floor("15min").to_pydatetime()
+
+    # Select sites.
+    site_cfg = site_config_for(country, source)
+    sites = await list_owned_sites(db, auth, source, str(country.code))
+
+    if not sites:
+        return SiteGenerationSnapshot(
+            time_utc=snapshot_time,
+            observer_name=site_cfg.observer_name,
+            values=[],
+        )
+
+    # Fetch generation values.
+    snapshot = await db.get_actual_generation_snapshot(
+        location_uuids=[site.uuid for site in sites],
+        snapshot_timestamp_utc=snapshot_time,
+        energy_type=source,
+        authdata=auth,
+        observer_name=site_cfg.observer_name,
+    )
+
+    # Build site values in the same order as the selected sites.
+    value_by_id = {
+        to_uuid(value.location_uuid): value
+        for value in snapshot
+    }
+
+    values = [
+        SiteSnapshotValue(
+            site_id=site.uuid,
+            capacity_kW=site.capacity_kilowatts,
+            power_kW=value_by_id[to_uuid(site.uuid)].power_kilowatts,
+        )
+        for site in sites
+        if to_uuid(site.uuid) in value_by_id
+    ]
+
+    return SiteGenerationSnapshot(
+        time_utc=snapshot_time,
+        observer_name=site_cfg.observer_name,
+        values=values,
     )
