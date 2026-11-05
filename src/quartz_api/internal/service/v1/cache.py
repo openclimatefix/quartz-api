@@ -32,7 +32,7 @@ def _country_access_tier(auth: dict, country: object) -> str:
     """
     perms = frozenset(auth.get("permissions", []))
     # add hidden param to cache to ensure de is not "leaked" to others
-    if getattr(country, "hidden", False):
+    if getattr(country, "hidden_in_docs", False):
         allowed = ADMIN_PERMISSION in perms or getattr(country, "permission", None) in perms
         return "full" if allowed else "unauthorized"
     if perms & ALL_COUNTRY_PERMISSIONS:

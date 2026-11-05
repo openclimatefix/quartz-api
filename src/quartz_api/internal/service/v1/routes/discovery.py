@@ -80,7 +80,7 @@ async def get_countries(
     )
     result = []
     for country_code, cfg in COUNTRIES.items():
-        if cfg.hidden:
+        if cfg.hidden_in_docs:
             continue
         nation = next(
             (n for n in nations if n.name.lower() == cfg.nation_name.lower()),

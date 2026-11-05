@@ -408,7 +408,7 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     """
     perms = _get_permissions(auth)
     # If a country is hidden (ie DE) then check for ocf admin
-    if cfg.hidden:
+    if cfg.hidden_in_docs:
         if ADMIN_PERMISSION in perms or cfg.permission in perms:
             return True
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")

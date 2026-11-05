@@ -174,7 +174,8 @@ class CountryConfig:
     permission: str = ""
     intraday_permission: str | None = None
     stage: Stage = "production"
-    hidden: bool = False
+    # hidden_in_docs flag, if true then country is hidden from docs and /countries only on production
+    hidden_in_docs: bool = False
 
     def get_region_type(self, type_name: str) -> RegionTypeConfig | None:
         """Look up a region type by its user-facing name."""
@@ -485,7 +486,7 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
         display_name="Deutschland",
         time_step_minutes=15,
         permission="read:de",
-        hidden=True,
+        hidden_in_docs=True,
         region_types=(
             RegionTypeConfig(
                 type="national",
@@ -586,8 +587,8 @@ def filter_for_deployment(
     return {
         cfg.code: replace(
             cfg,
-            #only hide on prod not on dev
-            hidden=cfg.hidden and checked_stage == "production",
+            # only hide on prod, not on dev (see CountryConfig.hidden_in_docs)
+            hidden_in_docs=cfg.hidden_in_docs and checked_stage == "production",
             region_types=tuple(
                 _filter_region_type(rt, checked_stage)
                 for rt in cfg.region_types
