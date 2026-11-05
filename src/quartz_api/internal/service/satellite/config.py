@@ -8,7 +8,7 @@ LEFT, BOTTOM, RIGHT, TOP = -31.3, 36.0, 36.3, 64.7
 RESOLUTION_M = 17_388
 
 # How far back to backfill missing data (in hours)
-BACKFILL_HOURS = 68
+BACKFILL_HOURS = 60  # 2.5 days; also the length of the rolling /stack tif
 
 # Prefix of the full-disk Icechunk store in the satellite bucket, per satellite type.
 ICECHUNK_PREFIX = {
