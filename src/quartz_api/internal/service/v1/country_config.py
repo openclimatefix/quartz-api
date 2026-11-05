@@ -247,7 +247,7 @@ class FM:
     # GB — blend cloudcasting
     BLEND_CLOUDCASTING = ForecastModel(
         name="blend_cloudcasting",
-        label="Blend Cloudcasting",
+        label="Blend + Cloudcasting",
         adjust_name="blend_cloudcasting_adjust",
     )
     # GB — NWP-only day-ahead (ECMWF + Met Office, no satellite at day-ahead range)
