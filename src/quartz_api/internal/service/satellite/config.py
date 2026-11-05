@@ -8,10 +8,13 @@ LEFT, BOTTOM, RIGHT, TOP = -31.3, 36.0, 36.3, 64.7
 RESOLUTION_M = 17_388
 
 # How far back to backfill missing data (in hours)
-BACKFILL_HOURS = 50
+BACKFILL_HOURS = 68
 
-# Prefix of the raw EUMETSAT .nat files in the raw-data bucket, per satellite type.
-RAW_PREFIX = {"rss": "rss/raw/", "0deg": "odegree/raw/"}
+# Prefix of the full-disk Icechunk store in the satellite bucket, per satellite type.
+ICECHUNK_PREFIX = {
+    "rss": "eu_rss_v1/data/rss_eu3000m.icechunk",
+    "0deg": "eu_odegree_v1/data/odegree_eu3000m.icechunk",
+}
 
 # Per-channel value range and inversion.
 LAYER_CONFIG: dict[str, dict[str, Any]] = {
