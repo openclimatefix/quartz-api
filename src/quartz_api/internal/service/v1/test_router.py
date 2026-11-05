@@ -66,6 +66,33 @@ class FixedUUIDStorageClient(StorageClient):
         )
 
 
+class NationRegionClient(StorageClient):
+    """DummyDB variant whose unscoped region lookup returns the nation.
+
+    The dummy backend answers an unscoped lookup with a GSP, so the per-region route
+    always resolves to the gsp region type — where a national-only model is rejected by
+    validate_model before model permissions are ever considered.
+    """
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
+    ) -> list[models.Location]:
+        return await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type or models.LocationType.NATION,
+            authdata={},
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
+        )
+
+
 class NullLocationsForUUIDClient(StorageClient):
     """Returns an empty list for any untyped location lookup that filters by UUID.
 
@@ -340,6 +367,18 @@ async def admin_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with ocf:admin + GB read permissions."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["ocf:admin", "read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def cloudcasting_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with GB read access plus the cloudcasting add-on."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:gb", "read:gb-solar-cloudcasting"])
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -2037,6 +2076,118 @@ async def test_discovery_routes_are_public(no_perm_client: AsyncClient) -> None:
     ]:
         resp = await no_perm_client.get(url)
         assert resp.status_code == 200, f"Expected 200 on {url}, got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Auth — per-model permissions
+# ---------------------------------------------------------------------------
+
+
+def _gated_gb_national_model() -> str:
+    """A GB national model that needs a permission of its own."""
+    rt = COUNTRIES["GB"].get_region_type("national")
+    assert rt is not None
+    model = next((m.api_name for m in rt.forecast_models if m.required_permission), None)
+    assert model is not None, "no gated GB national model configured"
+    return model
+
+
+_SNAPSHOT = "/v1/GB/solar/forecasts/snapshot?region_type=national"
+
+
+@pytest.mark.anyio
+async def test_gated_model_without_its_permission_403(client: AsyncClient) -> None:
+    """read:gb alone does not buy an add-on model, even though it is a GB model."""
+    model = _gated_gb_national_model()
+    resp = await client.get(f"{_SNAPSHOT}&model={model}")
+    assert resp.status_code == 403
+    assert "not included in your subscription" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_gated_model_with_its_permission_200(
+    cloudcasting_client: AsyncClient,
+) -> None:
+    """The add-on permission serves the model it gates."""
+    model = _gated_gb_national_model()
+    resp = await cloudcasting_client.get(f"{_SNAPSHOT}&model={model}")
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_gated_model_on_the_region_route_with_its_permission_200(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The region route resolves models through the same helper, so its call site has to
+    pass auth too: without it the helper sees no permissions and 403s everyone."""
+    model = _gated_gb_national_model()
+    app = _make_app(NationRegionClient(), ["read:gb", "read:gb-solar-cloudcasting"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get(f"/v1/GB/solar/regions/{uuid4()}/forecast?model={model}")
+
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_gated_model_not_served_from_an_entitled_callers_cache(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The 403 runs behind @cache, so entitlement has to be part of the cache key.
+
+    Both callers hold read:gb and so share the country tier "full": without the add-on
+    in the key, the second request is served the first's cached response and never
+    reaches the handler.
+    """
+    model = _gated_gb_national_model()
+    url = f"{_SNAPSHOT}&model={model}"
+
+    entitled = _make_app(StorageClient(), ["read:gb", "read:gb-solar-cloudcasting"])
+    async with AsyncClient(
+        transport=ASGITransport(app=entitled),
+        base_url="http://test",
+    ) as ac:
+        assert (await ac.get(url)).status_code == 200
+
+    unentitled = _make_app(StorageClient(), ["read:gb"])
+    async with AsyncClient(
+        transport=ASGITransport(app=unentitled),
+        base_url="http://test",
+    ) as ac:
+        resp = await ac.get(url)
+
+    assert resp.status_code == 403, "served a gated model from an entitled caller's cache"
+
+
+@pytest.mark.anyio
+async def test_unentitled_caller_naming_nothing_gets_the_default(
+    client: AsyncClient,
+) -> None:
+    """Gating a model must not reach the callers who never name one: they keep the
+    region type's default, which is the model the warmed cache holds."""
+    rt = COUNTRIES["GB"].get_region_type("national")
+    assert rt is not None and rt.default_model_api_name() is not None
+    resp = await client.get(_SNAPSHOT)
+    assert resp.status_code == 200
+    assert resp.json()["model_name"] == rt.default_model_api_name()
+
+
+def test_no_default_model_is_gated() -> None:
+    """The config invariant the cache depends on, across every country and region type."""
+    for code, cfg in COUNTRIES.items():
+        for rt in cfg.region_types:
+            defaults = [rt.default_model_api_name()]
+            if rt.intraday_default_model is not None:
+                defaults.append(rt.intraday_default_model.api_name)
+            for name in filter(None, defaults):
+                fm = rt.get_model_by_api_name(name)
+                assert fm is None or fm.required_permission is None, (
+                    f"{code}/{rt.type}: default model '{name}' needs "
+                    f"'{fm.required_permission}', so an unentitled caller naming nothing "
+                    f"would be served it"
+                )
 
 
 # ---------------------------------------------------------------------------
