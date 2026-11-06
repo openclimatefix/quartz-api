@@ -369,8 +369,14 @@ async def get_forecasts_at_time(
         time_utc if time_utc is not None else dt.datetime.now(tz=dt.UTC),
     )
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
-    if trial_expired(auth, now):
-        snapshot_time = min(snapshot_time, now)
+    if trial_expired(auth, now) and snapshot_time > now:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Your trial has ended, so future forecasts are not available. "
+                f"Contact {SUPPORT_EMAIL} to upgrade."
+            ),
+        )
 
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[to_uuid(r.uuid) for r in regions],
