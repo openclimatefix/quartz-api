@@ -19,7 +19,7 @@ authors = [
 classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
     "cryptography >= 41.0.0",
-    "dp-sdk >= 0.32.0,<1.0.0",
+    "dp-sdk >= 0.40.0,<1.0.0",
     "fastapi==0.136.3", # 0.137.0 currently has a bug with ratelimits
     "httpx >= 0.28.0",
     "pvsite-datamodel == 1.2.3",
@@ -41,11 +41,9 @@ dependencies = [
     "protobuf>=7.34.1",
     "fsspec>=2026.4.0",
     "s3fs>=2026.4.0",
-    "icechunk>=1.1.21",
     "rasterio>=1.4.4",
-    "xarray>=2026.4.0",
+    "satpy>=0.58.0",
     "timezonefinder>=8.2.4",
-    "astral>=3.2",
 ]
 
 [dependency-groups]
@@ -70,7 +68,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.32.0/dp_sdk-0.32.0-py3-none-any.whl" }
+dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.40.0/dp_sdk-0.40.0-py3-none-any.whl" }
 
 [project.urls]
 repository = "https://github.com/openclimatefix/quartz-api"
@@ -82,7 +80,7 @@ quartz-api = "quartz_api.cmd.main:run"
 include-package-data = true
 
 [tool.setuptools.package-data]
-"*" = ["*.conf", "*.ico", "*.png", "*.html", "*.js"]
+"*" = ["*.conf", "*.ico", "*.png", "*.svg", "*.html", "*.js", "*.woff2"]
 
 [tool.setuptools-git-versioning]
 enabled = true

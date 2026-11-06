@@ -9,8 +9,9 @@ from contextvars import ContextVar
 from typing import Any
 
 import grpc.aio
-from fastapi import FastAPI, Request, Response
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 from typing_extensions import override
 
 CORR_HEADER = "X-Request-Id"
@@ -36,9 +37,12 @@ def set_trace_id(trace_id: str) -> None:
 class TracerMiddleware(BaseHTTPMiddleware):
     """Middleware to add tracing information to API requests."""
 
-    def __init__(self, server: FastAPI) -> None:
-        """Initialize the middleware with the FastAPI server and database client."""
-        super().__init__(server)
+    def __init__(self, app: ASGIApp) -> None:
+        """Initialize the middleware.
+
+        `add_middleware` passes the wrapped ASGI app, not the FastAPI instance.
+        """
+        super().__init__(app)
 
     async def dispatch(
         self,

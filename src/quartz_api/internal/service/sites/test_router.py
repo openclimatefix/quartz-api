@@ -56,6 +56,7 @@ class SitesStorageClient(StorageClient):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.SITE and energy_type is None:
             all_sites = [
@@ -88,6 +89,7 @@ class SitesStorageClient(StorageClient):
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
             location_names=location_names,
+            country_code=country_code,
         )
 
 
@@ -105,6 +107,7 @@ class EmptySitesClient(SitesStorageClient):
         location_uuid: UUID | None = None,
         enclosing_location_uuid: UUID | None = None,
         location_names: list[str] | None = None,
+        country_code: str | None = None,
     ) -> list[models.Location]:
         if location_type == models.LocationType.SITE and energy_type is None:
             return []
@@ -115,6 +118,7 @@ class EmptySitesClient(SitesStorageClient):
             location_uuid=location_uuid,
             enclosing_location_uuid=enclosing_location_uuid,
             location_names=location_names,
+            country_code=country_code,
         )
 
 

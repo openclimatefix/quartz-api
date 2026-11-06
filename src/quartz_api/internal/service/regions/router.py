@@ -26,13 +26,6 @@ from .endpoint_types import (
 
 router = APIRouter(tags=[pathlib.Path(__file__).parent.stem.capitalize()])
 
-# Backwards-compatibility aliases. The old API exposed a single "ruvnl" region;
-# it has since been split into source-specific regions, so map the legacy name
-# onto the new one per source before resolving.
-_REGION_ALIASES: dict[str, dict[str, str]] = {
-    "solar": {"ruvnl": "ruvnl_solar"},
-    "wind": {"ruvnl": "ruvnl_wind"},
-}
 
 _REGION_OBSERVER_NAME = "ruvnl"
 
@@ -49,13 +42,13 @@ async def _resolve_region_location(
     region: str,
 ) -> models.Location:
     """Resolve a region name to its Location, raising 404 if it doesn't exist."""
-    region = _REGION_ALIASES.get(source, {}).get(region, region)
     locations = await db.get_locations(
         energy_type=(
             models.EnergyType.WIND if source == "wind" else models.EnergyType.SOLAR
         ),
         location_type=models.LocationType.REGION,
         authdata={},
+        location_names=[region],
     )
     location = next((loc for loc in locations if loc.name == region), None)
     if location is None:
@@ -110,10 +103,7 @@ async def get_regions_route(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid source {source}. Available sources: 'solar'.",
         )
-    legacy_by_new = {new: legacy for legacy, new in _REGION_ALIASES.get(source, {}).items()}
-    region_names = list(
-        dict.fromkeys(legacy_by_new.get(r.name, r.name) for r in regions),
-    )
+    region_names = list(dict.fromkeys(r.name for r in regions))
     return GetRegionsResponse(regions=region_names)
 
 

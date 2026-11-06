@@ -73,6 +73,32 @@ class AuthClient:
             if self._backend is None:
                 raise HTTPException(status_code=500, detail="Auth backend not configured")
 
+            # The Auth0 plugin answers a missing or non-Bearer Authorization header
+            # with a 400 `invalid_request` and an empty description. RFC 6750 makes
+            # missing credentials a 401 carrying a WWW-Authenticate challenge.
+            #
+            # Checked here rather than by remapping the plugin's error, because the
+            # plugin flattens its exceptions to (status, code, description) and
+            # MissingRequiredArgumentError — a programming error on our side — arrives
+            # as the same 400 with the same `invalid_request` code. Remapping on either
+            # would dress one of our own bugs up as an authentication failure.
+            #
+            # Only the credential-shaped cases are taken: a token that is present but
+            # bad still goes to the plugin, which answers 401 `invalid_token`.
+            if isinstance(self._backend, Auth0FastAPI):
+                scheme, _, credentials = request.headers.get(
+                    "authorization", "",
+                ).partition(" ")
+                if scheme.lower() != "bearer" or not credentials.strip():
+                    raise HTTPException(
+                        status_code=401,
+                        detail=(
+                            "Not authenticated. Supply an Auth0 bearer token in the "
+                            "Authorization header."
+                        ),
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
             validator_dependency = self._backend.require_auth(scopes)
             try:
                 claims = await validator_dependency(request)

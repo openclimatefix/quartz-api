@@ -4,8 +4,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 if TYPE_CHECKING:
     from quartz_api.internal import models
@@ -14,9 +15,12 @@ if TYPE_CHECKING:
 class RequestLoggerMiddleware(BaseHTTPMiddleware):
     """Middleware to log API requests to the database."""
 
-    def __init__(self, server: FastAPI) -> None:
-        """Initialize the middleware with the FastAPI server and database client."""
-        super().__init__(server)
+    def __init__(self, app: ASGIApp) -> None:
+        """Initialize the middleware.
+
+        `add_middleware` passes the wrapped ASGI app, not the FastAPI instance.
+        """
+        super().__init__(app)
 
     async def dispatch(
         self,

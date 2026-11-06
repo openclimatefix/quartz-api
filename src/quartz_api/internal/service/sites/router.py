@@ -25,8 +25,8 @@ SITE_OBSERVER_NAME = "site_api"
 # Default forecaster names by energy type, used when a site has no
 # explicit forecast_name set in its metadata.
 _DEFAULT_FORECASTER: dict[models.EnergyType, str] = {
-    models.EnergyType.WIND: "windnet_ad_sites",
-    models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long",
+    models.EnergyType.WIND: "windnet_ad_sites_ecmwf_weathernext2_adjust",
+    models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long_adjust",
 }
 
 
@@ -173,7 +173,6 @@ async def get_forecast(
     site_uuid: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
-    tz: models.TZDependency,
 ) -> list[PredictedPower]:
     """Get forecast of a site (Solar or Wind, auto-detected)."""
     site = await _get_site_with_energy_type(db, site_uuid, auth)
@@ -183,20 +182,31 @@ async def get_forecast(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
+    # Window is aligned to UTC day boundaries (not the current hour), matching the
+    # windowing behaviour of the legacy (v0.2.4) India API this replaces.
+    now_utc = dt.datetime.now(tz=dt.UTC)
+    window_start = (now_utc - dt.timedelta(days=2)).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
+    window_end = (now_utc + dt.timedelta(days=3)).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
     pgvs = await db.get_predicted_generation(
         location_uuid=site_uuid,
-        window_start=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() - dt.timedelta(days=2),
-        window_end=pd.Timestamp.now(tz=tz).floor("H").to_pydatetime() + dt.timedelta(days=2),
+        window_start=window_start,
+        window_end=window_end,
         energy_type=site.energy_type or models.EnergyType.SOLAR,
         location_type=models.LocationType.SITE,
         authdata=auth,
         forecaster_name=forecaster_name,
     )
+    # Time is always returned in UTC, matching the legacy (v0.2.4) India API this
+    # replaces, rather than converted to the deployment's configured tz.
     out: list[PredictedPower] = [
         PredictedPower(
-            PowerKW=v.power_kilowatts,
-            Time=v.valid_timestamp.astimezone(tz=tz),
-            created_time=v.created_timestamp.astimezone(tz=tz),
+            PowerKW=round(v.power_kilowatts),
+            Time=v.valid_timestamp.astimezone(tz=dt.UTC),
+            created_time=v.created_timestamp.astimezone(tz=dt.UTC),
             forecaster_name=v.forecaster_name,
             forecaster_version=v.forecaster_version,
         )
@@ -231,7 +241,7 @@ async def get_generation(
     )
     out: list[ActualPower] = [
         ActualPower(
-            PowerKW=v.power_kilowatts,
+            PowerKW=round(v.power_kilowatts),
             Time=v.valid_timestamp.astimezone(tz=tz),
         )
         for v in agvs
