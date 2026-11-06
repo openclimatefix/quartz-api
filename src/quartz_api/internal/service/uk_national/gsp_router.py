@@ -25,7 +25,7 @@ from pydantic import AfterValidator, TypeAdapter
 from starlette import status
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from ...models.endpoint_types import default_now_window_start, default_window_end
@@ -45,7 +45,6 @@ from .endpoint_types import (
 )
 from .time_utils import (
     limit_end_datetime_by_permissions,
-    trial_expired,
 )
 
 log = logging.getLogger(__name__)

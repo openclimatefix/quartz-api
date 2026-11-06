@@ -13,7 +13,7 @@ from starlette import status
 
 from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 
 from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
@@ -64,7 +64,6 @@ from ..helpers import (
     sort_plevels,
     timeseries_window,
     to_uuid,
-    trial_expired,
     validate_model,
     validate_window,
     window_chunks,

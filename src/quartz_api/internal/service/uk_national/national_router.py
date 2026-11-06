@@ -11,7 +11,7 @@ from pydantic import AfterValidator
 from starlette import status
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from .cache import key_builder
@@ -25,7 +25,7 @@ from .endpoint_types import (
     gsp_id_map,
     model_names_external_to_internal,
 )
-from .time_utils import limit_end_datetime_by_permissions, trial_expired
+from .time_utils import limit_end_datetime_by_permissions
 
 log = logging.getLogger(__name__)
 

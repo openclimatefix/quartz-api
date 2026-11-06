@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import Request, Response
 
-from .time_utils import trial_expired
+from quartz_api.internal.middleware.auth import trial_expired
 
 log = logging.getLogger(__name__)
 

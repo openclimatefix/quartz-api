@@ -1,9 +1,11 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
 
+import datetime as dt
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
+import sentry_sdk
 from apitally.fastapi import set_consumer
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer
@@ -151,6 +153,29 @@ def get_org_id_from_authdata(authdata: dict) -> str | None:
     return "no-org-access"
 
 
+def trial_expired(authdata: dict, now: dt.datetime) -> bool:
+    """Check whether the caller's trial has ended, per app_metadata.trial_ends_at.
+
+    No claim at all (paid/non-trial user) is treated the same as an unexpired
+    trial: both mean "don't clamp." Only a claim that has actually passed
+    counts as expired.
+    """
+    app_metadata = authdata.get("app_metadata", {})
+    if not isinstance(app_metadata, dict):
+        return False
+    raw = app_metadata.get("trial_ends_at")
+    if raw is None:
+        return False
+    try:
+        ends_at = dt.datetime.fromisoformat(str(raw))
+    except ValueError:
+        # Currently counts as "not expired", so make sure we hear about it.
+        log.warning(f"Unparseable trial_ends_at claim: {raw!r}")
+        sentry_sdk.capture_message(f"Unparseable trial_ends_at claim: {raw!r}")
+        return False
+    if ends_at.tzinfo is None:
+        ends_at = ends_at.replace(tzinfo=dt.UTC)
+    return ends_at <= now
 
 
 def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:

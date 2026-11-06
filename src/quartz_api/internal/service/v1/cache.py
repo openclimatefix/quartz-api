@@ -11,10 +11,11 @@ from fastapi import Request, Response
 from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
+from quartz_api.internal.middleware.auth import trial_expired
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
-from .helpers import internal_to_api_name, timeseries_window, trial_expired
+from .helpers import internal_to_api_name, timeseries_window
 
 log = logging.getLogger(__name__)
 
