@@ -1,9 +1,11 @@
 """Authentication dependency for FastAPI using Auth0 JWT tokens."""
 
+import datetime as dt
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
+import sentry_sdk
 from apitally.fastapi import set_consumer
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer
@@ -151,6 +153,37 @@ def get_org_id_from_authdata(authdata: dict) -> str | None:
     return "no-org-access"
 
 
+def trial_expired(authdata: dict, now: dt.datetime) -> bool:
+    """Check whether the caller's trial has ended, per the trial_ends_at claim.
+
+    Reads the top-level `trial_ends_at` custom claim on the access token, not
+    app_metadata.trial_ends_at: app_metadata is only a fallback copy kept for when
+    HubSpot is down, so it can be stale (e.g. a trial extended today).
+
+    No claim (paid/non-trial user) is treated the same as an unexpired trial:
+    both mean "don't clamp." Only a claim that has actually passed counts as
+    expired - except for a `read:trial` user with no usable date (missing or
+    unparseable claim, e.g. a HubSpot blip), who is treated as expired so they
+    can't get full data by losing the claim. Paying clients don't have
+    `read:trial`, so they are unaffected.
+    """
+    permissions: str | list[str] = authdata.get("permissions", [])
+    if isinstance(permissions, str):
+        permissions = [permissions]
+    is_trial_user = "read:trial" in permissions
+
+    raw = authdata.get("trial_ends_at")
+    if raw is None:
+        return is_trial_user
+    try:
+        ends_at = dt.datetime.fromisoformat(str(raw))
+    except ValueError:
+        log.warning(f"Unparseable trial_ends_at claim: {raw!r}")
+        sentry_sdk.capture_message(f"Unparseable trial_ends_at claim: {raw!r}")
+        return is_trial_user
+    if ends_at.tzinfo is None:
+        ends_at = ends_at.replace(tzinfo=dt.UTC)
+    return ends_at <= now
 
 
 def make_api_auth_description(domain: str, audience: str, host_url: str, client_id: str) -> str:

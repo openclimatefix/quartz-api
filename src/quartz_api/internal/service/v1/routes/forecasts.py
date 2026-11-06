@@ -13,7 +13,7 @@ from starlette import status
 
 from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 
 from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
@@ -141,6 +141,19 @@ async def get_forecast(
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
+    if trial_expired(auth, now):
+        if win_end.tzinfo is None:
+            win_end = win_end.replace(tzinfo=dt.UTC)
+        if start_utc is not None and start_utc >= now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        win_start = max(start_utc or now - dt.timedelta(hours=48), now - dt.timedelta(hours=48))
+        win_end = min(win_end, now)
     validate_window(win_start, win_end)
     pgvs: list = []
     with api_facing_model_errors(model_name, rt):
@@ -355,6 +368,15 @@ async def get_forecasts_at_time(
     snapshot_time = country.floor_to_time_step(
         time_utc if time_utc is not None else dt.datetime.now(tz=dt.UTC),
     )
+    now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
+    if trial_expired(auth, now) and snapshot_time > now:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Your trial has ended, so future forecasts are not available. "
+                f"Contact {SUPPORT_EMAIL} to upgrade."
+            ),
+        )
 
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[to_uuid(r.uuid) for r in regions],
@@ -470,6 +492,18 @@ async def get_forecasts_period(
         )
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
+    now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
+    if trial_expired(auth, now):
+        if win_start >= now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        win_start = max(win_start, now - dt.timedelta(hours=48))
+        win_end = min(win_end, now)
     validate_window(win_start, win_end)
 
     backend = FastAPICache.get_backend()
