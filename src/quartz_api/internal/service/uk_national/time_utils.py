@@ -21,6 +21,8 @@ def limit_end_datetime_by_permissions(
     permissions: str | list[str] = auth.get("permissions", [])
     if isinstance(permissions, str):
         permissions = [permissions]
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        return min(end_datetime_utc, dt.datetime.now(dt.UTC))
     if not permissions or len(permissions) == 0:
         sentry_sdk.capture_message(
             "User has no permissions during limit_end_datetime_by_permissions check;"
@@ -29,8 +31,6 @@ def limit_end_datetime_by_permissions(
         return end_datetime_utc
 
     intraday_max_allowed = dt.datetime.now(dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
-    if trial_expired(auth, dt.datetime.now(dt.UTC)):
-        return min(end_datetime_utc, dt.datetime.now(dt.UTC))
     if "read:uk-intraday" in permissions:
         return min(end_datetime_utc, intraday_max_allowed)
 
