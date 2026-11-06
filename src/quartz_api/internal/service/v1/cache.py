@@ -103,7 +103,7 @@ async def key_builder(
     gated = _gated_permissions_key(auth)
     if gated:
         parts.append(gated)
-    #Invalidte cache if trial has expired
+    # Invalidate cache if trial has expired
     if trial_expired(auth, dt.datetime.now(dt.UTC)):
         parts.append("trial_ended=true")
     return ":".join(parts)
