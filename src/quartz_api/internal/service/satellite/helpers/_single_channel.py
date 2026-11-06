@@ -61,6 +61,9 @@ def open_source(bucket: str, sat_type: str) -> Source | None:
     # Crop before reprojecting (full disk's off-earth corners can't go to 3857), with
     # one output pixel of margin so edge pixels average a full footprint.
     x, y = ds["x_geostationary"].values, ds["y_geostationary"].values
+    # Indexing below assumes ascending x (west->east) and y (south->north); fail, don't flip.
+    if not (np.all(np.diff(x) > 0) and np.all(np.diff(y) > 0)):
+        raise ValueError(f"Expected ascending x/y_geostationary in s3://{bucket}/{prefix}")
     xres, yres = abs(x[1] - x[0]), abs(y[1] - y[0])
     x0, y0, x1, y1 = transform_bounds(
         "EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP, densify_pts=101,
