@@ -96,20 +96,30 @@ def test_dummy_backend_is_untouched() -> None:
 
 def test_trial_expired_true_when_claim_in_past() -> None:
     now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
-    auth = {"app_metadata": {"trial_ends_at": "2025-12-31T00:00:00.000Z"}}
+    auth = {"trial_ends_at": "2025-12-31T00:00:00.000Z"}
     assert trial_expired(auth, now) is True
 
 
 def test_trial_expired_false_when_claim_missing_or_future() -> None:
     now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
     assert trial_expired({}, now) is False
-    auth = {"app_metadata": {"trial_ends_at": "2026-06-01T00:00:00.000Z"}}
+    auth = {"trial_ends_at": "2026-06-01T00:00:00.000Z"}
     assert trial_expired(auth, now) is False
 
 
 def test_trial_expired_unparseable_claim_logs_and_reports() -> None:
     now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
-    auth = {"app_metadata": {"trial_ends_at": "not-a-date"}}
+    auth = {"trial_ends_at": "not-a-date"}
     with patch("quartz_api.internal.middleware.auth.sentry_sdk.capture_message") as capture:
         assert trial_expired(auth, now) is False
     capture.assert_called_once()
+
+
+def test_trial_expired_ignores_stale_app_metadata_copy() -> None:
+    """A trial extended today: the claim is in the future, app_metadata still in the past."""
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    auth = {
+        "trial_ends_at": "2026-02-01T00:00:00.000Z",
+        "app_metadata": {"trial_ends_at": "2025-12-31T00:00:00.000Z"},
+    }
+    assert trial_expired(auth, now) is False

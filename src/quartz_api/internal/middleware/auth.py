@@ -154,16 +154,17 @@ def get_org_id_from_authdata(authdata: dict) -> str | None:
 
 
 def trial_expired(authdata: dict, now: dt.datetime) -> bool:
-    """Check whether the caller's trial has ended, per app_metadata.trial_ends_at.
+    """Check whether the caller's trial has ended, per the trial_ends_at claim.
+
+    Reads the top-level `trial_ends_at` custom claim on the access token, not
+    app_metadata.trial_ends_at: app_metadata is only a fallback copy kept for when
+    HubSpot is down, so it can be stale (e.g. a trial extended today).
 
     No claim at all (paid/non-trial user) is treated the same as an unexpired
     trial: both mean "don't clamp." Only a claim that has actually passed
     counts as expired.
     """
-    app_metadata = authdata.get("app_metadata", {})
-    if not isinstance(app_metadata, dict):
-        return False
-    raw = app_metadata.get("trial_ends_at")
+    raw = authdata.get("trial_ends_at")
     if raw is None:
         return False
     try:
