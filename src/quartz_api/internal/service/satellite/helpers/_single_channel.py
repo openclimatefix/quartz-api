@@ -1,117 +1,115 @@
-"""Turn raw EUMETSAT .nat files into single-channel tifs on the Europe grid."""
+"""Read satellite frames from the Icechunk store and turn them into single-channel tifs."""
 import datetime as dt
 import logging
-import os
-import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
+import icechunk
 import numpy as np
 import rasterio
-import sentry_sdk
+import xarray as xr
 from rasterio.crs import CRS
-from rasterio.warp import Resampling, reproject
-from satpy import Scene
-from satpy.readers.core.eum import recarray2dict
-from satpy.readers.core.seviri import (
-    REPEAT_CYCLE_DURATION,
-    REPEAT_CYCLE_DURATION_RSS,
-    round_nom_time,
-)
-from satpy.readers.seviri_l1b_native_hdr import get_native_header, native_trailer
+from rasterio.transform import Affine
+from rasterio.warp import Resampling, reproject, transform_bounds
 
-from quartz_api.internal.s3 import S3Client
+from quartz_api.internal.s3 import S3Client, get_region
 
-from ..config import LAYER_CONFIG, RAW_PREFIX
+from ..config import BOTTOM, ICECHUNK_PREFIX, LAYER_CONFIG, LEFT, RESOLUTION_M, RIGHT, TOP
 from .common import DST_CRS, DST_SHAPE, DST_TF, TS_FMT, build_layer_tif, save
 
 log = logging.getLogger(__name__)
 
-HEADER = get_native_header(with_archive_header=True)
+
+@dataclass(frozen=True)
+class Source:
+    """One satellite's Icechunk data, cropped to Europe in its native projection."""
+
+    data: xr.DataArray  # (time, channel, y, x), rows north-up
+    crs: CRS
+    transform: Affine
+
+    def slots(self, cutoff: dt.datetime) -> list[tuple[dt.datetime, int]]:
+        """(slot, time index) for every timestamp at or after cutoff, oldest first.
+
+        The store's time is the scan's nominal end time.
+        """
+        times = self.data["time"].values.astype("datetime64[s]")
+        return sorted(
+            (s, i) for i, t in enumerate(times)
+            if (s := t.item().replace(tzinfo=dt.UTC)) >= cutoff
+        )
 
 
-def _slot_time(s3: S3Client, bucket: str, key: str) -> dt.datetime:
-    """The raw file's slot, from its header + trailer (= satpy's nominal_end_time)."""
-    size = s3.size(bucket, key)
-    header = recarray2dict(np.frombuffer(s3.read_range(bucket, key, 0, HEADER.itemsize), HEADER))
-    trailer_bytes = s3.read_range(bucket, key, size - native_trailer.itemsize, size)
-    trailer = recarray2dict(np.frombuffer(trailer_bytes, native_trailer))
+def open_source(bucket: str, sat_type: str) -> Source | None:
+    """Open the sat_type Icechunk store; None if nothing has been committed to it yet."""
+    prefix = ICECHUNK_PREFIX[sat_type]
+    repo = icechunk.Repository.open(
+        storage=icechunk.s3_storage(bucket=bucket, prefix=prefix, region=get_region() or None),
+    )
+    try:
+        ds = xr.open_zarr(repo.readonly_session("main").store)
+    except FileNotFoundError:  # zarr's GroupNotFoundError: repo created, nothing committed
+        log.warning("Icechunk store s3://%s/%s has no data yet", bucket, prefix)
+        return None
 
-    scan = trailer["15TRAILER"]["ImageProductionStats"]["ActualScanningSummary"]
-    cycle = REPEAT_CYCLE_DURATION_RSS if scan["ReducedScan"] == 1 else REPEAT_CYCLE_DURATION
-    planned_end = header["15_DATA_HEADER"]["ImageAcquisition"]["PlannedAcquisitionTime"][
-        "PlannedRepeatCycleEnd"
-    ]
-    return round_nom_time(planned_end, dt.timedelta(minutes=cycle)).replace(tzinfo=dt.UTC)
+    proj = next(iter(ds.attrs["area"].values()))["projection"]
+    src_crs = CRS.from_proj4(
+        f"+proj=geos +lon_0={proj['lon_0']} +h={proj['h']} "
+        f"+x_0={proj['x_0']} +y_0={proj['y_0']} "
+        f"+a={proj['a']} +rf={proj['rf']}",
+    )
 
-
-def list_raw_files(
-    s3: S3Client, icechunk_bucket: str, sat_type: str, cutoff: dt.datetime,
-) -> list[tuple[dt.datetime, str]]:
-    """(slot, key) for every raw file whose header slot is at or after cutoff, oldest first."""
-    keys = []
-    for k in s3.list_keys(icechunk_bucket, RAW_PREFIX[sat_type]):
-        # scan-end from the filename, tz attached below; only a coarse pre-filter.
-        # Skip anything that isn't a well-formed raw key rather than aborting the ingest.
-        try:
-            scan_end = dt.datetime.strptime(k.rsplit("-NA-", 1)[1][:14], "%Y%m%d%H%M%S")  # noqa: DTZ007
-        except (IndexError, ValueError):
-            log.warning("Skipping unparseable raw key: %s", k)
-            sentry_sdk.capture_message(
-                "Skipping unparseable raw satellite key",
-                level="warning",
-                fingerprint=["unparseable-raw-key"],
-                tags={"sat_type": sat_type},
-                extras={"key": k},
-            )
-            continue
-        if scan_end.replace(tzinfo=dt.UTC) >= cutoff - dt.timedelta(hours=1):
-            keys.append(k.removeprefix(f"{icechunk_bucket}/"))
-
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        slots = pool.map(lambda k: _slot_time(s3, icechunk_bucket, k), keys)
-        return sorted((t, k) for t, k in zip(slots, keys, strict=True) if t >= cutoff)
+    # Crop before reprojecting (full disk's off-earth corners can't go to 3857), with
+    # one output pixel of margin so edge pixels average a full footprint.
+    x, y = ds["x_geostationary"].values, ds["y_geostationary"].values
+    # Indexing below assumes ascending x (west->east) and y (south->north); fail, don't flip.
+    if not (np.all(np.diff(x) > 0) and np.all(np.diff(y) > 0)):
+        raise ValueError(f"Expected ascending x/y_geostationary in s3://{bucket}/{prefix}")
+    xres, yres = abs(x[1] - x[0]), abs(y[1] - y[0])
+    x0, y0, x1, y1 = transform_bounds(
+        "EPSG:4326", src_crs, LEFT, BOTTOM, RIGHT, TOP, densify_pts=101,
+    )
+    m = RESOLUTION_M
+    xi = np.flatnonzero((x >= x0 - m) & (x <= x1 + m))
+    yi = np.flatnonzero((y >= y0 - m) & (y <= y1 + m))[::-1]  # y ascending -> rows north-up
+    data = ds["data"].isel(x_geostationary=xi, y_geostationary=yi).transpose(
+        "time", "channel", "y_geostationary", "x_geostationary",
+    )
+    src_tf = rasterio.transform.from_origin(
+        x[xi].min() - xres / 2, y[yi].max() + yres / 2, xres, yres,
+    )
+    log.info("Opened s3://%s/%s: %d timestamps", bucket, prefix, ds.sizes["time"])
+    return Source(data=data, crs=src_crs, transform=src_tf)
 
 
 def ingest_channels(
     s3: S3Client,
-    icechunk_bucket: str,
     geo_bucket: str,
-    key: str,
+    src: Source,
+    t_idx: int,
     slot: dt.datetime,
     uploaded: dict[str, set[str]],
 ) -> set[str]:
-    """Decode one raw file, reproject each still-missing channel to the Europe grid, and upload."""
+    """Reproject each still-missing channel of one timestamp to the Europe grid, and upload."""
     ts = slot.strftime(TS_FMT)
     todo = [ch for ch in LAYER_CONFIG if f"{ts}.tif" not in uploaded[ch]]
     if not todo:
         return set()
 
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, key.rsplit("/", 1)[-1])
-        with open(path, "wb") as f:
-            f.write(s3.download_bytes(icechunk_bucket, key))
-        scn = Scene(filenames=[path], reader="seviri_l1b_native")
-        scn.load(todo)
-
-        area = scn[todo[0]].attrs["area"]
-        src_crs = CRS.from_wkt(area.crs.to_wkt())
-        x0, y0, x1, y1 = area.area_extent
-        src_tf = rasterio.transform.from_origin(
-            x0, y1, (x1 - x0) / area.width, (y1 - y0) / area.height,
+    # One read per timestamp: each chunk holds every channel.
+    frame = src.data.isel(time=t_idx).sel(channel=todo).values.astype(np.float32)
+    for ch, arr in zip(todo, frame, strict=True):
+        cfg = LAYER_CONFIG[ch]
+        out = np.full(DST_SHAPE, np.nan, dtype=np.float32)
+        # average, not bilinear: each output pixel covers several source pixels
+        reproject(
+            arr, out,
+            src_transform=src.transform, src_crs=src.crs,
+            dst_transform=DST_TF, dst_crs=DST_CRS,
+            resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
         )
-        for ch in todo:
-            cfg = LAYER_CONFIG[ch]
-            out = np.full(DST_SHAPE, np.nan, dtype=np.float32)
-            # average, not bilinear: each output pixel covers several source pixels
-            reproject(
-                scn[ch].values.astype(np.float32), out,
-                src_transform=src_tf, src_crs=src_crs,
-                dst_transform=DST_TF, dst_crs=DST_CRS,
-                resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
-            )
-            lo, hi = cfg["range"]
-            grey = np.clip((out - lo) / (hi - lo), 0, 1)
-            if cfg.get("invert"):
-                grey = 1 - grey
-            save(s3, geo_bucket, ch, ts, build_layer_tif(ch, grey, timestamp=ts), uploaded)
+        lo, hi = cfg["range"]
+        grey = np.clip((out - lo) / (hi - lo), 0, 1)
+        if cfg.get("invert"):
+            grey = 1 - grey
+        save(s3, geo_bucket, ch, ts, build_layer_tif(ch, grey, timestamp=ts), uploaded)
     return set(todo)

@@ -1,4 +1,4 @@
-"""Orchestrate ingest: raw files -> per-channel tifs -> composites -> rolling stacks."""
+"""Orchestrate ingest: icechunk store -> per-channel tifs -> composites -> rolling stacks."""
 import datetime as dt
 import logging
 from threading import Lock
@@ -80,21 +80,30 @@ def _run_ingest(
     channels = list(LAYER_CONFIG)
     cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(hours=BACKFILL_HOURS)
 
-    raw_files = _single_channel.list_raw_files(s3, icechunk_bucket, sat_type, cutoff)
-    for slot, key in raw_files:
-        ts = slot.strftime(TS_FMT)
-        try:
-            changed = _single_channel.ingest_channels(
-                s3, icechunk_bucket, geo_bucket, key, slot, uploaded,
-            )
-            _composite.build_composites(s3, geo_bucket, ts, uploaded, changed)
-        except Exception as e:
-            log.exception("Failed %s (slot %s): %s", key, ts, e)
-            sentry_sdk.capture_exception(e)
+    slots = []
+    try:
+        src = _single_channel.open_source(icechunk_bucket, sat_type)
+    except Exception as e:
+        log.exception("Could not open %s icechunk store: %s", sat_type, e)
+        sentry_sdk.capture_exception(e)
+        src = None
+    if src:
+        slots = src.slots(cutoff)
+        for slot, t_idx in slots:
+            ts = slot.strftime(TS_FMT)
+            try:
+                changed = _single_channel.ingest_channels(
+                    s3, geo_bucket, src, t_idx, slot, uploaded,
+                )
+                _composite.build_composites(s3, geo_bucket, ts, uploaded, changed)
+            except Exception as e:
+                log.exception("Failed %s slot %s: %s", sat_type, ts, e)
+                sentry_sdk.capture_exception(e)
 
-    if check_gaps and any(
+    # Fall back if this store gave us nothing (open failed / empty) or left gaps.
+    if check_gaps and (src is None or any(
         _find_missing_timestamps(list(uploaded[ch]), BACKFILL_HOURS) for ch in channels
-    ):
+    )):
         other = "0deg" if sat_type == "rss" else "rss"
         log.warning("Gaps found, retrying ingest with sat_type=%s", other)
         _run_ingest(other, uploaded, check_gaps=False)
@@ -114,6 +123,6 @@ def _run_ingest(
                 extras={"missing_tiles": still_missing},
             )
 
-    latest = raw_files[-1][0] if raw_files else None
+    latest = slots[-1][0] if slots else None
     log.info("Ingest %s done, latest slot %s", sat_type, latest)
     return (latest.isoformat(), latest.strftime(TS_FMT)) if latest else ("", "")
