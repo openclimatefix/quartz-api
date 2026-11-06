@@ -123,3 +123,23 @@ def test_trial_expired_ignores_stale_app_metadata_copy() -> None:
         "app_metadata": {"trial_ends_at": "2025-12-31T00:00:00.000Z"},
     }
     assert trial_expired(auth, now) is False
+
+
+def test_trial_expired_trial_user_without_usable_date_counts_as_expired() -> None:
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    assert trial_expired({"permissions": ["read:trial"]}, now) is True
+    assert trial_expired({"permissions": "read:trial"}, now) is True
+    with patch("quartz_api.internal.middleware.auth.sentry_sdk.capture_message"):
+        auth = {"permissions": ["read:trial"], "trial_ends_at": "not-a-date"}
+        assert trial_expired(auth, now) is True
+
+
+def test_trial_expired_trial_user_with_future_date_not_expired() -> None:
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    auth = {"permissions": ["read:trial"], "trial_ends_at": "2026-06-01T00:00:00.000Z"}
+    assert trial_expired(auth, now) is False
+
+
+def test_trial_expired_paying_client_without_claim_not_expired() -> None:
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    assert trial_expired({"permissions": ["read:gb", "read:uk-intraday"]}, now) is False
