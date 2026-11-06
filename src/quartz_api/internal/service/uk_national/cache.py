@@ -11,8 +11,7 @@ from .time_utils import trial_expired
 
 log = logging.getLogger(__name__)
 
-#TODO: verify this string with brad
-cache_dependent_scopes = ["read:intraday"]
+cache_dependent_scopes = ["read:uk-intraday"]
 legacy_query_params = ["historic"]
 
 
