@@ -1,11 +1,18 @@
 import datetime as dt
+import typing
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 import time_machine
+from fastapi import FastAPI
+from fastapi_cache import FastAPICache
+from httpx import ASGITransport, AsyncClient
+from pyhocon import ConfigTree
 
+from quartz_api.cmd.main import _create_server
 from quartz_api.internal import models
+from quartz_api.internal.middleware.auth import AuthDependency
 
 from .endpoint_types import gsp_id_map
 
@@ -287,3 +294,44 @@ async def test_gsp_pvlive_all_grouping(api_client, mock_storage: AsyncMock):
 
     # Verify the database was actually called 3 times by the router's internal loop
     assert mock_storage.get_actual_generation_snapshot.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Expired trial gating
+# ---------------------------------------------------------------------------
+
+_auth_dep = typing.get_args(AuthDependency)[1].dependency
+_FROZEN = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
+_EXPIRED_TRIAL = {
+    "permissions": ["read:trial"],
+    "trial_ends_at": (_FROZEN - dt.timedelta(days=1)).isoformat(),
+}
+
+
+def _v0_app(config: ConfigTree, storage: AsyncMock, claims: dict) -> FastAPI:
+    app = _create_server(config)
+    app.dependency_overrides[models.get_storage_client] = lambda: storage
+    app.dependency_overrides[_auth_dep] = lambda: {"sub": "test|user", **claims}
+    return app
+
+
+def _client_for(app: FastAPI) -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.mark.asyncio
+async def test_gsp_forecast_expired_trial_no_future(
+    config_all_routers: ConfigTree,
+    mock_storage: AsyncMock,
+):
+    """An expired trial only asks the DB for GSP data up to now."""
+    app = _v0_app(config_all_routers, mock_storage, _EXPIRED_TRIAL)
+    await FastAPICache.clear()
+
+    with time_machine.travel(_FROZEN, tick=False):
+        async with _client_for(app) as ac:
+            response = await ac.get("/v0/solar/GB/gsp/1/forecast")
+
+    assert response.status_code == 200
+    mock_storage.get_predicted_generation.assert_called_once()
+    assert mock_storage.get_predicted_generation.call_args.kwargs["window_end"] <= _FROZEN
