@@ -28,7 +28,10 @@ class Source:
     transform: Affine
 
     def slots(self, cutoff: dt.datetime) -> list[tuple[dt.datetime, int]]:
-        """(slot, time index) for every timestamp at or after cutoff, oldest first."""
+        """(slot, time index) for every timestamp at or after cutoff, oldest first.
+
+        The store's time is the scan's nominal end time.
+        """
         times = self.data["time"].values.astype("datetime64[s]")
         return sorted(
             (s, i) for i, t in enumerate(times)
