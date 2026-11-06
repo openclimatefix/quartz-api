@@ -136,7 +136,7 @@ async def get_forecast(
     # The region type slug the caller knows, not the internal LocationType enum
     # name, which reads 'GSP' where the API says 'gsp'.
     validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
-    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
+    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted, auth=auth)
 
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
     win_start = start_utc or now
@@ -250,7 +250,7 @@ async def get_forecast_last_updated_timestamp(
     # The region type slug the caller knows, not the internal LocationType enum
     # name, which reads 'GSP' where the API says 'gsp'.
     validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
-    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted)
+    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted, auth=auth)
 
     now = dt.datetime.now(tz=dt.UTC)
     with api_facing_model_errors(model_name, rt):
@@ -330,6 +330,7 @@ async def get_forecasts_at_time(
         rt,
         is_intraday_only,
         adjusted,
+        auth=auth,
     )
     location_type = rt.location_type
 

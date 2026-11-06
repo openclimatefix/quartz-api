@@ -445,12 +445,16 @@ def resolve_forecast_model(
     rt: RegionTypeConfig | None,
     is_intraday_only: bool,
     adjusted: bool = True,
+    *,
+    auth: AuthDependency | None = None,
 ) -> str | None:
     """Resolve a user-facing model name to the internal DP forecaster_name.
 
     User-facing names are slugs that differ from the DP forecaster_name — pvnet_v2 is
     exposed as "ecmwf_mo_sat_8h" — and retired slugs are still accepted as aliases.
-    Raises 403 if an intraday-only caller names a model outside their permitted set.
+    Raises 403 if an intraday-only caller names a model outside their permitted set, or
+    names one whose `required_permission` they lack. Omitting `auth` means no permissions,
+    so a gated model is refused rather than served.
     """
     if rt is None:
         return model
@@ -473,6 +477,14 @@ def resolve_forecast_model(
             detail=(
                 f"Model '{model}' is not available with your current access level. "
                 f"Intraday-accessible models: {sorted(rt.intraday_api_names())}"
+            ),
+        )
+    if fm.required_permission and fm.required_permission not in _get_permissions(auth or {}):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Model '{model}' is not included in your subscription. "
+                f"Contact {SUPPORT_EMAIL} to request access."
             ),
         )
     # A retired alias pins its own adjuster state, keeping its pre-rename result.
