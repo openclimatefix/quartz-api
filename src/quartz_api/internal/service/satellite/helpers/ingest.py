@@ -81,7 +81,13 @@ def _run_ingest(
     cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(hours=BACKFILL_HOURS)
 
     slots = []
-    if src := _single_channel.open_source(icechunk_bucket, sat_type):
+    try:
+        src = _single_channel.open_source(icechunk_bucket, sat_type)
+    except Exception as e:
+        log.exception("Could not open %s icechunk store: %s", sat_type, e)
+        sentry_sdk.capture_exception(e)
+        src = None
+    if src:
         slots = src.slots(cutoff)
         for slot, t_idx in slots:
             ts = slot.strftime(TS_FMT)
@@ -94,9 +100,10 @@ def _run_ingest(
                 log.exception("Failed %s slot %s: %s", sat_type, ts, e)
                 sentry_sdk.capture_exception(e)
 
-    if check_gaps and any(
+    # Fall back if this store gave us nothing (open failed / empty) or left gaps.
+    if check_gaps and (src is None or any(
         _find_missing_timestamps(list(uploaded[ch]), BACKFILL_HOURS) for ch in channels
-    ):
+    )):
         other = "0deg" if sat_type == "rss" else "rss"
         log.warning("Gaps found, retrying ingest with sat_type=%s", other)
         _run_ingest(other, uploaded, check_gaps=False)
