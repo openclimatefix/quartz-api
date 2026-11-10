@@ -204,7 +204,7 @@ def _forecast_value(
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder, expire=10)
+@cache(key_builder=key_builder, expire=1)
 async def get_forecast_last_updated_timestamp(
     request: Request,
     source: ValidSource,
