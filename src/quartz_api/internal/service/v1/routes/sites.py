@@ -68,6 +68,7 @@ async def get_sites(
         energy_type=source,
         location_type=models.LocationType.SITE,
         authdata=auth,
+        country_code=str(country.code),
     )
 
     sites = [location_to_site_response(location) for location in locations]
@@ -133,10 +134,11 @@ async def create_site(
     new_site_id = uuid4()
     location = models.Location(
         uuid=new_site_id,
-        name=f"site_{new_site_id.hex}",
+        name=f"{country.code.lower()}_{new_site_id.hex}",
         latitude=site_input.latitude,
         longitude=site_input.longitude,
         capacity_kilowatts=site_input.capacity_kW,
+        country_code=str(country.code),
         metadata=site_input_to_metadata(site_input),
     )
 
@@ -162,7 +164,7 @@ async def create_site(
 )
 async def get_site_detail(
     country: CountryParam,
-    source: ValidSource,  # noqa: ARG001
+    source: ValidSource,
     site_id: UUID,
     db: models.StorageClientDependency,
     auth: AuthDependency,
@@ -171,7 +173,7 @@ async def get_site_detail(
     check_country_access(auth, country)
 
     # fetch site
-    location = await get_site(db, site_id, auth)
+    location = await get_site(db, site_id, auth, source, str(country.code))
 
     return location_to_site_response(location)
 
@@ -191,7 +193,7 @@ async def update_site(
     """Partially update a site. Fields left unset are unchanged."""
     check_country_access(auth, country)
 
-    existing = await get_site(db, site_id, auth)
+    existing = await get_site(db, site_id, auth, source, str(country.code))
     validate_metadata_for_source(site_input, source)
     reject_not_updatable(site_input)
 

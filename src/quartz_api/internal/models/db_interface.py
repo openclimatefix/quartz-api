@@ -74,6 +74,7 @@ class Location:
     capacity_kilowatts: float
     location_type: LocationType | None = None
     energy_type: EnergyType | None = None
+    country_code: str | None = None
     metadata: dict[str, str | int | float] = dataclasses.field(default_factory=dict)
 
 
@@ -137,6 +138,7 @@ class StorageInterface(abc.ABC):
     async def put_actual_generation(
         self,
         generation_values: list[ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: EnergyType,
         location_type: LocationType,
         authdata: dict[str, str],

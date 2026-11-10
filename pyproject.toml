@@ -44,6 +44,7 @@ dependencies = [
     "rasterio>=1.4.4",
     "satpy>=0.58.0",
     "timezonefinder>=8.2.4",
+    "pvlib>=0.15.2",
 ]
 
 [dependency-groups]
