@@ -25,8 +25,8 @@ SITE_OBSERVER_NAME = "site_api"
 # Default forecaster names by energy type, used when a site has no
 # explicit forecast_name set in its metadata.
 _DEFAULT_FORECASTER: dict[models.EnergyType, str] = {
-    models.EnergyType.WIND: "windnet_ad_sites_ecmwf_weathernext2_adjust",
-    models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long_adjust",
+    models.EnergyType.WIND: "windnet_ad_sites",
+    models.EnergyType.SOLAR: "pvnet_extra_ad_sites_ecmwf_satellite_pv_long",
 }
 
 
@@ -188,7 +188,7 @@ async def get_forecast(
     window_start = (now_utc - dt.timedelta(days=2)).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
-    window_end = (now_utc + dt.timedelta(days=3)).replace(
+    window_end = (now_utc + dt.timedelta(days=2)).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
     pgvs = await db.get_predicted_generation(
@@ -204,7 +204,7 @@ async def get_forecast(
     # replaces, rather than converted to the deployment's configured tz.
     out: list[PredictedPower] = [
         PredictedPower(
-            PowerKW=round(v.power_kilowatts),
+            PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=dt.UTC),
             created_time=v.created_timestamp.astimezone(tz=dt.UTC),
             forecaster_name=v.forecaster_name,
@@ -241,7 +241,7 @@ async def get_generation(
     )
     out: list[ActualPower] = [
         ActualPower(
-            PowerKW=round(v.power_kilowatts),
+            PowerKW=v.power_kilowatts,
             Time=v.valid_timestamp.astimezone(tz=tz),
         )
         for v in agvs
