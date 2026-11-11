@@ -13,6 +13,7 @@ from starlette import status
 
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.ratelimit import limiter
 
 from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
@@ -209,6 +210,11 @@ def _forecast_value(
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
+# Traders poll this to detect a new run the moment it is saved, so the hourly default
+# would cut them off mid-window. A route limit replaces the defaults rather than adding
+# to them (slowapi's override_defaults is True), leaving a per-second cap and no hourly
+# cliff. Above @cache so a cached hit still counts against the cap.
+@limiter.limit("20/second")
 @cache(key_builder=key_builder, expire=1)
 async def get_forecast_last_updated_timestamp(
     request: Request,
@@ -275,7 +281,15 @@ async def get_forecast_last_updated_timestamp(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No recent forecasts found for this region.",
         )
-    return pgvs[0].created_timestamp
+    # The DP stitches the latest-run value per target time and does not order values,
+    # so the window can mix runs: the newest creation time is the max, not the first row.
+    created = [v.created_timestamp for v in pgvs if v.created_timestamp is not None]
+    if not created:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No recent forecasts found for this region.",
+        )
+    return max(created)
 
 
 @router.get(
