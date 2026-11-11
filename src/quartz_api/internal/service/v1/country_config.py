@@ -46,7 +46,7 @@ class ForecastModel:
     # An Auth0 permission the caller must hold to name this model. The gate is enforced in
     # resolve_forecast_model and the permission is part of the cache key (see cache.py), or
     # an entitled caller's response would be served from cache to an unentitled one. It must
-    # never be a default_model or intraday_default_model: callers who name no model would
+    # never be a default_model: callers who name no model would
     # then share a key whose only entitlement component is the coarse country tier.
     required_permission: str | None = None
 
@@ -85,9 +85,6 @@ class RegionTypeConfig:
     # False (e.g. GB gsp) means no adjusted variants exist, so `adjusted` is a no-op.
     supports_adjusted: bool = False
     metadata_fields: tuple[str, ...] = ()
-    # intraday_models lists models accessible to intraday-only users (subset of forecast_models).
-    intraday_models: tuple[ForecastModel, ...] = ()
-    intraday_default_model: ForecastModel | None = None
     # Maps internal DP location names to user-facing display names.
     # Entries not listed fall back to loc.name unchanged.
     location_name_map: tuple[tuple[str, str], ...] = ()
@@ -138,10 +135,6 @@ class RegionTypeConfig:
             return None
         fm = self.get_model_by_internal_name(self.default_model)
         return fm.api_name if fm else self.default_model
-
-    def intraday_api_names(self) -> frozenset[str]:
-        """Return the set of user-facing names for intraday-accessible models."""
-        return frozenset(fm.api_name for fm in self.intraday_models)
 
 
 @dataclass(frozen=True)
@@ -408,8 +401,6 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_GB_NATIONAL_FORECAST_MODELS,
                 default_model="blend",
                 supports_adjusted=True,
-                intraday_models=(FM.ECMWF_MO_SAT_8H,),
-                intraday_default_model=FM.ECMWF_MO_SAT_8H,
             ),
             RegionTypeConfig(
                 type="gsp",
@@ -420,8 +411,6 @@ ALL_COUNTRIES: dict[str, CountryConfig] = {
                 forecast_models=_GB_GSP_FORECAST_MODELS,
                 default_model="blend",
                 metadata_fields=("gsp_id", "full_name"),
-                intraday_models=(FM.ECMWF_MO_SAT_8H,),
-                intraday_default_model=FM.ECMWF_MO_SAT_8H,
             ),
         ),
         generation_sources=(
@@ -560,7 +549,6 @@ def _visible(entry: ForecastModel | RegionTypeConfig | CountryConfig, stage: Sta
 
 def _filter_region_type(rt: RegionTypeConfig, stage: Stage) -> RegionTypeConfig:
     models = tuple(fm for fm in rt.forecast_models if _visible(fm, stage))
-    intraday = tuple(fm for fm in rt.intraday_models if _visible(fm, stage))
     names = {fm.name for fm in models}
     # A hidden default would make every request without `model_name` fail at the DP.
     if rt.default_model is not None and rt.default_model not in names:
@@ -568,12 +556,7 @@ def _filter_region_type(rt: RegionTypeConfig, stage: Stage) -> RegionTypeConfig:
             f"Region type '{rt.type}': default model '{rt.default_model}' "
             f"is not visible at stage '{stage}'",
         )
-    if rt.intraday_default_model is not None and rt.intraday_default_model not in intraday:
-        raise ValueError(
-            f"Region type '{rt.type}': intraday default model "
-            f"'{rt.intraday_default_model.name}' is not visible at stage '{stage}'",
-        )
-    return replace(rt, forecast_models=models, intraday_models=intraday)
+    return replace(rt, forecast_models=models)
 
 
 def filter_for_deployment(

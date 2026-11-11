@@ -11,7 +11,6 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
-from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
 from quartz_api.internal.middleware.auth import AuthDependency
 
@@ -49,10 +48,12 @@ from ..endpoint_types import (
 from ..helpers import (
     api_facing_model_errors,
     check_country_access,
+    check_intraday_datetime_limit,
     fetch_api_region,
     internal_to_api_name,
     latest_capacity,
     latest_run_timestamps,
+    limit_window_end_for_intraday,
     location_display_name,
     parse_forecast_metadata,
     plevel_sort_key,
@@ -125,6 +126,9 @@ async def get_forecast(
     By default the window runs from **now** to **up to 48 hours ahead**, though a
     response reaches only as far as the latest model run does. Use `start_utc` /
     `end_utc` to override. Historical data is available up to 1 year back.
+
+    Intraday-only subscriptions reach a shorter horizon, and the window is truncated to
+    it; a window lying entirely beyond it is a 403 naming the limit.
     """
     model_name = resolve_model_param(model_name, model)
     is_intraday_only = not check_country_access(auth, country)
@@ -136,12 +140,13 @@ async def get_forecast(
     # The region type slug the caller knows, not the internal LocationType enum
     # name, which reads 'GSP' where the API says 'gsp'.
     validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
-    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted, auth=auth)
+    model_name = resolve_forecast_model(model_name, rt, adjusted, auth=auth)
 
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
     validate_window(win_start, win_end)
+    win_end = limit_window_end_for_intraday(win_start, win_end, is_intraday_only)
     pgvs: list = []
     with api_facing_model_errors(model_name, rt):
         for chunk_start, chunk_end in window_chunks(win_start, win_end):
@@ -231,7 +236,8 @@ async def get_forecast_last_updated_timestamp(
     indicators in a UI.
     """
     model_name = resolve_model_param(model_name, model)
-    is_intraday_only = not check_country_access(auth, country)
+    # No horizon check: the window is ±30 minutes of now, inside every tier's reach.
+    check_country_access(auth, country)
     resolved_id = await resolve_region_id(region, country, source, db)
 
     locs = await db.get_locations(
@@ -250,7 +256,7 @@ async def get_forecast_last_updated_timestamp(
     # The region type slug the caller knows, not the internal LocationType enum
     # name, which reads 'GSP' where the API says 'gsp'.
     validate_model(model_name, rt, rt.type if rt else location_type.name.lower())
-    model_name = resolve_forecast_model(model_name, rt, is_intraday_only, adjusted, auth=auth)
+    model_name = resolve_forecast_model(model_name, rt, adjusted, auth=auth)
 
     now = dt.datetime.now(tz=dt.UTC)
     with api_facing_model_errors(model_name, rt):
@@ -316,6 +322,14 @@ async def get_forecasts_at_time(
     """
     model_name = resolve_model_param(model_name, model)
     is_intraday_only = not check_country_access(auth, country)
+    # Floored whether supplied or defaulted: values exist only on the country's time
+    # step, so an unfloored timestamp matched nothing and came back as an empty snapshot.
+    snapshot_time = country.floor_to_time_step(
+        time_utc if time_utc is not None else dt.datetime.now(tz=dt.UTC),
+    )
+    # Ahead of the location lookups below: the 403 is an exception, so nothing caches it
+    # and a client retrying a far-future timestamp would pay for them on every attempt.
+    check_intraday_datetime_limit(snapshot_time, is_intraday_only)
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
@@ -325,13 +339,7 @@ async def get_forecasts_at_time(
             detail=f"Unknown region type '{region_type}' for {country.code}.",
         )
     validate_model(model_name, rt, rt.type)
-    model_name = resolve_forecast_model(
-        model_name,
-        rt,
-        is_intraday_only,
-        adjusted,
-        auth=auth,
-    )
+    model_name = resolve_forecast_model(model_name, rt, adjusted, auth=auth)
     location_type = rt.location_type
 
     if location_type == models.LocationType.NATION:
@@ -349,12 +357,6 @@ async def get_forecasts_at_time(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No regions found for type '{location_type}' in {country.code}.",
         )
-
-    # Floored whether supplied or defaulted: values exist only on the country's time
-    # step, so an unfloored timestamp matched nothing and came back as an empty snapshot.
-    snapshot_time = country.floor_to_time_step(
-        time_utc if time_utc is not None else dt.datetime.now(tz=dt.UTC),
-    )
 
     snapshot = await db.get_predicted_generation_snapshot(
         location_uuids=[to_uuid(r.uuid) for r in regions],
@@ -429,23 +431,9 @@ async def get_forecasts_period(
     Model and horizon filters are **not** supported on this endpoint; use
     `GET /{country}/{source}/regions/{region}/forecast` for per-region model selection.
 
-    Not available to intraday-only subscriptions: this endpoint serves the pre-warmed
-    blend, and there is no intraday equivalent to fall back to.
+    Intraday-only subscriptions get the same matrix, truncated to the intraday horizon.
     """
-    # Every other forecast route downgrades an intraday-only caller to the intraday
-    # models. This one serves one pre-warmed model per region type, so there is nothing
-    # to downgrade to — the only honest answers are the blend or a 403.
-    if not check_country_access(auth, country):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "This endpoint serves the blend model only, which is not included in "
-                "intraday-only subscriptions. Use "
-                f"GET /{country.code}/{source.name.lower()}/regions/{{region}}/forecast "
-                f"to request an intraday model per region, or contact {SUPPORT_EMAIL} "
-                "to upgrade."
-            ),
-        )
+    is_intraday_only = not check_country_access(auth, country)
 
     rt = country.get_region_type(region_type)
     _sub_national = [
@@ -471,6 +459,7 @@ async def get_forecasts_period(
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
     validate_window(win_start, win_end)
+    win_end = limit_window_end_for_intraday(win_start, win_end, is_intraday_only)
 
     backend = FastAPICache.get_backend()
     prefix = FastAPICache.get_prefix()
