@@ -42,7 +42,7 @@ def get_geotiff_bucket() -> str:
 
 
 def get_icechunk_bucket() -> str:
-    """Bucket holding the raw EUMETSAT .nat files ingested into GeoTIFFs."""
+    """Bucket holding the satellite Icechunk stores ingested into GeoTIFFs."""
     return _require_config()["icechunk_bucket"]
 
 
@@ -97,14 +97,6 @@ class S3Client:
         """Download raw bytes from an S3 key."""
         with self.fs.open(f"s3://{bucket}/{key}", "rb") as f:
             return f.read()
-
-    def read_range(self, bucket: str, key: str, start: int, end: int) -> bytes:
-        """Read bytes [start, end) of an S3 object without downloading the rest."""
-        return self.fs.cat_file(f"s3://{bucket}/{key}", start=start, end=end)
-
-    def size(self, bucket: str, key: str) -> int:
-        """Size of an S3 object in bytes."""
-        return self.fs.size(f"s3://{bucket}/{key}")
 
     def delete(self, bucket: str, key: str) -> None:
         """Delete an S3 object."""
