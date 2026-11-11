@@ -322,6 +322,47 @@ class EmptyForecastClient(StorageClient):
         return []
 
 
+class MixedRunsForecastClient(StorageClient):
+    """Returns values from different runs, with created timestamps out of order.
+
+    The newest run is deliberately in the middle, so neither the first nor the last
+    row is the answer. One row has no created timestamp.
+    """
+
+    async def get_predicted_generation(  # type: ignore[override]
+        self,
+        location_uuid: UUID | str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType,
+        authdata: dict[str, str],
+        created_cutoff: dt.datetime | None = None,
+        forecast_horizon_minutes: int = 0,
+        forecaster_name: str | None = None,
+        forecaster_version: str | None = None,
+    ) -> list[models.PredictedGenerationValue]:
+        base = dt.datetime(2026, 9, 1, 12, 0, tzinfo=dt.UTC)
+        created = [
+            base - dt.timedelta(hours=3),
+            base,
+            None,
+            base - dt.timedelta(hours=1),
+        ]
+        return [
+            models.PredictedGenerationValue(
+                power_kilowatts=100.0,
+                valid_timestamp=window_start + dt.timedelta(minutes=30 * i),
+                location_uuid=UUID(str(location_uuid)),
+                capacity_kilowatts=1000.0,
+                forecaster_name="blend",
+                forecaster_version="1.0.0",
+                created_timestamp=c,
+            )
+            for i, c in enumerate(created)
+        ]
+
+
 def _make_app(db: models.StorageInterface, permissions: list[str]) -> FastAPI:
     app = FastAPI()
     app.include_router(router, prefix="/v1")
@@ -1399,6 +1440,18 @@ async def test_get_region_forecast_last_updated_no_recent_forecasts_404(
         f"/v1/GB/solar/regions/{region_id}/forecast/last-updated",
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_get_region_forecast_last_updated_returns_newest_run(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """last-updated is the max created timestamp, whatever order the DP returns rows in."""
+    app = _make_app(MixedRunsForecastClient(), ["read:gb"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get(f"/v1/GB/solar/regions/{uuid4()}/forecast/last-updated")
+    assert resp.status_code == 200
+    assert dt.datetime.fromisoformat(resp.json()) == dt.datetime(2026, 9, 1, 12, 0, tzinfo=dt.UTC)
 
 
 # ---------------------------------------------------------------------------
