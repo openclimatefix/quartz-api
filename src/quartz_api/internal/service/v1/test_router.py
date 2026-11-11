@@ -2217,7 +2217,7 @@ def _utc_z(offset: dt.timedelta) -> str:
 async def test_intraday_user_forecast_defaults_to_region_default(
     intraday_client: AsyncClient,
 ) -> None:
-    """The intraday tier limits the horizon, not the model: the default is unchanged."""
+    """The intraday tier limits the limit, not the model: the default is unchanged."""
     gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
     assert gsp_rt is not None
     region_id = str(uuid4())
@@ -2230,7 +2230,10 @@ async def test_intraday_user_forecast_defaults_to_region_default(
 async def test_intraday_user_can_request_blend(
     intraday_client: AsyncClient,
 ) -> None:
-    """The blend used to 403 for intraday-only callers; v0 always served it."""
+    """Blend is accessible to an intraday-only caller, as it always has been in v0.
+
+    Note: this returned 403 before #430.
+    """
     region_id = str(uuid4())
     resp = await intraday_client.get(
         f"/v1/GB/solar/regions/{region_id}/forecast?model_name=blend",
@@ -2249,8 +2252,8 @@ async def test_intraday_user_forecast_truncated_to_horizon(
     assert resp.status_code == 200
     values = resp.json()["values"]
     assert values
-    horizon = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
-    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) <= horizon
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) <= limit
 
 
 @pytest.mark.anyio
@@ -2262,8 +2265,8 @@ async def test_full_access_user_forecast_reaches_past_horizon(
     resp = await client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
     assert resp.status_code == 200
     values = resp.json()["values"]
-    horizon = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
-    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) > horizon
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) > limit
 
 
 @pytest.mark.anyio
@@ -2357,20 +2360,20 @@ async def test_intraday_window_not_served_from_a_full_callers_cache(
     it: unlike the model restriction this replaced, a leak here has no visible symptom.
     """
     url = f"/v1/GB/solar/regions/{uuid4()}/forecast"
-    horizon = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
 
     full = _make_app(StorageClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=full), base_url="http://test") as ac:
         first = await ac.get(url)
     assert first.status_code == 200
-    assert dt.datetime.fromisoformat(first.json()["values"][-1]["time_utc"]) > horizon
+    assert dt.datetime.fromisoformat(first.json()["values"][-1]["time_utc"]) > limit
 
     intraday = _make_app(StorageClient(), ["read:uk-intraday"])
     async with AsyncClient(transport=ASGITransport(app=intraday), base_url="http://test") as ac:
         second = await ac.get(url)
     assert second.status_code == 200
     last = dt.datetime.fromisoformat(second.json()["values"][-1]["time_utc"])
-    assert last <= horizon, "served a full-access window from a full caller's cache"
+    assert last <= limit, "served a full-access window from a full caller's cache"
 
 
 async def _seed_gsp_period_cache() -> None:
@@ -2415,14 +2418,14 @@ async def test_intraday_period_matrix_truncated_to_horizon(
 ) -> None:
     """The period matrix is served to intraday callers, cut to the horizon."""
     await _seed_gsp_period_cache()
-    horizon = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
     app = _make_app(FixedUUIDStorageClient(), ["read:uk-intraday"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 200
     times = [dt.datetime.fromisoformat(t) for t in resp.json()["times_utc"]]
     assert times, "no values survived the clip"
-    assert max(times) <= horizon
+    assert max(times) <= limit
     assert len(resp.json()["regions"][0]["power_kW"]) == len(times)
 
 
@@ -2432,13 +2435,13 @@ async def test_full_access_period_matrix_reaches_past_horizon(
 ) -> None:
     """The same seeded cache, uncut, so the test above pins the clip and not the seed."""
     await _seed_gsp_period_cache()
-    horizon = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
     app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/v1/GB/solar/forecasts/period?region_type=gsp")
     assert resp.status_code == 200
     times = [dt.datetime.fromisoformat(t) for t in resp.json()["times_utc"]]
-    assert max(times) > horizon
+    assert max(times) > limit
 
 
 # ---------------------------------------------------------------------------

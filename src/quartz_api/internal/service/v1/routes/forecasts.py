@@ -48,7 +48,7 @@ from ..endpoint_types import (
 from ..helpers import (
     api_facing_model_errors,
     check_country_access,
-    check_intraday_horizon,
+    check_intraday_datetime_limit,
     fetch_api_region,
     internal_to_api_name,
     latest_capacity,
@@ -329,7 +329,7 @@ async def get_forecasts_at_time(
     )
     # Ahead of the location lookups below: the 403 is an exception, so nothing caches it
     # and a client retrying a far-future timestamp would pay for them on every attempt.
-    check_intraday_horizon(snapshot_time, is_intraday_only)
+    check_intraday_datetime_limit(snapshot_time, is_intraday_only)
     nation = await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)

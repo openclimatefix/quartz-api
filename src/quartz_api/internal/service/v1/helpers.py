@@ -405,7 +405,7 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
       No match → HTTP 403
 
     Callers store the bool as `is_intraday_only = not check_country_access(...)` and pass
-    it to `limit_window_end_for_intraday` or `check_intraday_horizon`: the intraday tier
+    it to `limit_window_end_for_intraday` or `check_intraday_datetime_limit`: the intraday tier
     limits how far ahead a caller may look, not which models they may name.
     """
     perms = _get_permissions(auth)
@@ -704,12 +704,12 @@ def region_metadata(loc: models.Location, detail: object) -> dict | None:
 INTRADAY_LIMIT_HOURS = int(os.getenv("INTRADAY_LIMIT_HOURS", "8"))
 
 
-def _intraday_horizon() -> dt.datetime:
+def _get_intraday_datetime_limit() -> dt.datetime:
     """The furthest target time an intraday-only subscription may ask for."""
     return dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
 
 
-def _beyond_intraday_horizon(requested: dt.datetime) -> HTTPException:
+def _make_beyond_intraday_exception(requested: dt.datetime) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=(
@@ -733,17 +733,17 @@ def limit_window_end_for_intraday(
     """
     if not is_intraday_only:
         return win_end
-    horizon = _intraday_horizon()
-    if win_start >= horizon:
-        raise _beyond_intraday_horizon(win_start)
-    return min(win_end, horizon)
+    limit = _get_intraday_datetime_limit()
+    if win_start >= limit:
+        raise _make_beyond_intraday_exception(win_start)
+    return min(win_end, limit)
 
 
-def check_intraday_horizon(timestamp: dt.datetime, is_intraday_only: bool) -> None:
+def check_intraday_datetime_limit(timestamp: dt.datetime, is_intraday_only: bool) -> None:
     """403 if an intraday-only caller names a single target time beyond the horizon.
 
     A snapshot is one timestamp, so there is nothing to clip: answering for a different
     time than the one asked for would be worse than refusing.
     """
-    if is_intraday_only and timestamp >= _intraday_horizon():
-        raise _beyond_intraday_horizon(timestamp)
+    if is_intraday_only and timestamp >= _get_intraday_datetime_limit():
+        raise _make_beyond_intraday_exception(timestamp)
