@@ -5,6 +5,7 @@
 import contextlib
 import datetime as dt
 import json
+import os
 from collections.abc import Iterator
 from uuid import UUID
 
@@ -400,11 +401,12 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     Three-tier check (short-circuits on first match):
       1. ALL_COUNTRY_PERMISSIONS (read:trial, read:partner) → full access to every country
       2. cfg.permission (e.g. read:gb) → full access to this country
-      3. cfg.intraday_permission (e.g. read:uk-intraday) → intraday models only (False)
+      3. cfg.intraday_permission (e.g. read:uk-intraday) → every model, horizon-limited (False)
       No match → HTTP 403
 
-    Callers store the bool as `is_intraday_only = not _check_country_access(...)` and
-    pass it to `_resolve_forecast_model` to apply model restrictions.
+    Callers store the bool as `is_intraday_only = not check_country_access(...)` and pass
+    it to `limit_window_end_for_intraday` or `check_intraday_horizon`: the intraday tier
+    limits how far ahead a caller may look, not which models they may name.
     """
     perms = _get_permissions(auth)
     if perms & ALL_COUNTRY_PERMISSIONS:
@@ -422,14 +424,8 @@ def check_country_access(auth: AuthDependency, cfg: CountryConfig) -> bool:
     )
 
 
-def _default_forecast_model(
-    rt: RegionTypeConfig,
-    is_intraday_only: bool,
-) -> ForecastModel | None:
+def _default_forecast_model(rt: RegionTypeConfig) -> ForecastModel | None:
     """The model to use when the caller named none, or None if none is configured."""
-    if is_intraday_only and rt.intraday_models:
-        # Naming nothing must not yield a model naming it would 403 on.
-        return rt.intraday_default_model or rt.intraday_models[0]
     if rt.default_model is None:
         return None
     return rt.get_model_by_internal_name(rt.default_model)
@@ -438,7 +434,6 @@ def _default_forecast_model(
 def resolve_forecast_model(
     model: str | None,
     rt: RegionTypeConfig | None,
-    is_intraday_only: bool,
     adjusted: bool = True,
     *,
     auth: AuthDependency | None = None,
@@ -447,15 +442,14 @@ def resolve_forecast_model(
 
     User-facing names are slugs that differ from the DP forecaster_name — pvnet_v2 is
     exposed as "ecmwf_mo_sat_8h" — and retired slugs are still accepted as aliases.
-    Raises 403 if an intraday-only caller names a model outside their permitted set, or
-    names one whose `required_permission` they lack. Omitting `auth` means no permissions,
-    so a gated model is refused rather than served.
+    Raises 403 if the caller names a model whose `required_permission` they lack. Omitting
+    `auth` means no permissions, so a gated model is refused rather than served.
     """
     if rt is None:
         return model
 
     if model is None:
-        fm = _default_forecast_model(rt, is_intraday_only)
+        fm = _default_forecast_model(rt)
         if fm is None:
             # None sends no forecaster_name, so the DP selects the forecaster.
             return rt.default_model
@@ -466,14 +460,6 @@ def resolve_forecast_model(
         # Only reachable for a region type with no configured models — every route
         # calls validate_model first, which 400s an unknown name against a real list.
         return model
-    if is_intraday_only and rt.intraday_models and fm not in rt.intraday_models:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Model '{model}' is not available with your current access level. "
-                f"Intraday-accessible models: {sorted(rt.intraday_api_names())}"
-            ),
-        )
     if fm.required_permission and fm.required_permission not in _get_permissions(auth or {}):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -711,3 +697,53 @@ def region_metadata(loc: models.Location, detail: object) -> dict | None:
         return None
     installed = installed_capacity_kw(loc)
     return {"installed_capacity_kW": installed} if installed is not None else None
+
+
+# The intraday tier is a horizon limit, not a model limit. The same env var drives the v0
+# routers' limit_end_datetime_by_permissions, so one knob moves both APIs together.
+INTRADAY_LIMIT_HOURS = int(os.getenv("INTRADAY_LIMIT_HOURS", "8"))
+
+
+def _intraday_horizon() -> dt.datetime:
+    """The furthest target time an intraday-only subscription may ask for."""
+    return dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+
+
+def _beyond_intraday_horizon(requested: dt.datetime) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"Intraday-only subscriptions reach {INTRADAY_LIMIT_HOURS} hours ahead of now; "
+            f"{requested.isoformat()} is beyond that. "
+            f"Contact {SUPPORT_EMAIL} to request the full forecast horizon."
+        ),
+    )
+
+
+def limit_window_end_for_intraday(
+    win_start: dt.datetime,
+    win_end: dt.datetime,
+    is_intraday_only: bool,
+) -> dt.datetime:
+    """Clip a forecast window to the intraday horizon, as the v0 routers do.
+
+    Intraday-only callers get every model their tier allows, but only as far ahead as
+    INTRADAY_LIMIT_HOURS. A window that starts beyond the horizon raises 403 instead of
+    returning an empty series, so the caller is told about the limit.
+    """
+    if not is_intraday_only:
+        return win_end
+    horizon = _intraday_horizon()
+    if win_start >= horizon:
+        raise _beyond_intraday_horizon(win_start)
+    return min(win_end, horizon)
+
+
+def check_intraday_horizon(timestamp: dt.datetime, is_intraday_only: bool) -> None:
+    """403 if an intraday-only caller names a single target time beyond the horizon.
+
+    A snapshot is one timestamp, so there is nothing to clip: answering for a different
+    time than the one asked for would be worse than refusing.
+    """
+    if is_intraday_only and timestamp >= _intraday_horizon():
+        raise _beyond_intraday_horizon(timestamp)
