@@ -900,7 +900,10 @@ def _create_server(conf: ConfigTree) -> FastAPI:
         sentry_sdk.init(
             dsn=conf.get_string("sentry.dsn"),
             environment=conf.get_string("sentry.environment"),
-            traces_sample_rate=1,
+            # Errors are always sent; this only thins out performance traces.
+            traces_sampler=sentry.make_traces_sampler(
+                conf.get_float("sentry.traces_sample_rate"),
+            ),
             send_default_pii=True,
         )
 

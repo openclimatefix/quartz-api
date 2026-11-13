@@ -238,7 +238,7 @@ async def get_national_forecast(
     response_model=dt.datetime,
     status_code=status.HTTP_200_OK,
 )
-@cache(key_builder=key_builder, expire=10)
+@cache(key_builder=key_builder, expire=1)
 async def get_national_last_updated(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,

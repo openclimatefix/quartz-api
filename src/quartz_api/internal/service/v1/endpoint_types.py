@@ -358,7 +358,10 @@ def _err(description: str) -> dict:
 # generated from the spec has no type for the ones it will actually meet.
 AUTH_RESPONSES: dict = {
     401: _err("No bearer token, or one that could not be verified."),
-    403: _err("The token is valid but lacks access to this country or model."),
+    403: _err(
+        "The token is valid but lacks access to this country or model, or asks "
+        "beyond the forecast horizon the subscription reaches.",
+    ),
     429: _err("Rate limit exceeded. Carries a `Retry-After` header."),
 }
 
