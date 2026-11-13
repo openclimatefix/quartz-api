@@ -2123,6 +2123,25 @@ async def test_expired_trial_forecast_future_start_is_403(
 
 
 @pytest.mark.anyio
+async def test_expired_trial_forecast_older_than_48h_is_403(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A window ending before the last 48h is a 403 for an expired trial, not a 400."""
+    app = _make_app(StorageClient(), ["read:trial"], _expired_trial_claims())
+    now = dt.datetime.now(tz=dt.UTC)
+    async with _client_for(app) as ac:
+        resp = await ac.get(
+            "/v1/GB/solar/regions/national/forecast",
+            params={
+                "start_utc": (now - dt.timedelta(days=7)).isoformat(),
+                "end_utc": (now - dt.timedelta(days=6)).isoformat(),
+            },
+        )
+    assert resp.status_code == 403
+    assert "last 48 hours" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_expired_trial_snapshot_future_time_is_403(
     isolated_cache: None,  # noqa: ARG001
 ) -> None:
