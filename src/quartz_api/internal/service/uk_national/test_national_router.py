@@ -287,11 +287,11 @@ async def test_national_forecast_expired_trial_no_future(
 
 
 @pytest.mark.asyncio
-async def test_national_forecast_expired_trial_empty_permissions_no_future(
+async def test_national_forecast_expired_trial_empty_permissions_not_clamped(
     config_all_routers: ConfigTree,
     mock_storage: AsyncMock,
 ):
-    """An expired trial with an empty permissions claim still gets nothing past now."""
+    """With no roles there's no read:trial, so a past date doesn't clamp to now."""
     mock_storage.get_locations.return_value = [gsp_id_map[0]]
     claims = {**_EXPIRED_TRIAL, "permissions": []}
     app = _v0_app(config_all_routers, mock_storage, claims)
@@ -303,8 +303,10 @@ async def test_national_forecast_expired_trial_empty_permissions_no_future(
 
     assert response.status_code == 200
     mock_storage.get_predicted_generation.assert_called()
-    for call in mock_storage.get_predicted_generation.call_args_list:
-        assert call.kwargs["window_end"] <= _FROZEN
+    assert any(
+        call.kwargs["window_end"] > _FROZEN
+        for call in mock_storage.get_predicted_generation.call_args_list
+    )
 
 
 @pytest.mark.asyncio

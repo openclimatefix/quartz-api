@@ -354,15 +354,24 @@ async def get_forecasts_at_time(
     # and a client retrying a far-future timestamp would pay for them on every attempt.
     check_intraday_datetime_limit(snapshot_time, is_intraday_only)
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
-    if trial_expired(auth, now) and snapshot_time > now:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Your trial has ended, so future forecasts are not available. "
-                f"Contact {SUPPORT_EMAIL} to upgrade."
-            ),
-        )
-    nation = await resolve_nation(db, source, country, auth)
+    if trial_expired(auth, now):
+        if snapshot_time > now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        if snapshot_time < now - dt.timedelta(hours=48):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so only the last 48 hours are available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+    nation =await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
     if rt is None:

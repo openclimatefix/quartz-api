@@ -160,27 +160,26 @@ def trial_expired(authdata: dict, now: dt.datetime) -> bool:
     app_metadata.trial_ends_at: app_metadata is only a fallback copy kept for when
     HubSpot is down, so it can be stale (e.g. a trial extended today).
 
-    No claim (paid/non-trial user) is treated the same as an unexpired trial:
-    both mean "don't clamp." Only a claim that has actually passed counts as
-    expired - except for a `read:trial` user with no usable date (missing or
-    unparseable claim, e.g. a HubSpot blip), who is treated as expired so they
-    can't get full data by losing the claim. Paying clients don't have
-    `read:trial`, so they are unaffected.
+    The date only matters for `read:trial` users: anyone else (subscribed, partner, admin, etc.)
+    is never treated as expired, even if a stale trial_ends_at claim is still on their token.
+    A `read:trial` user with no usable date (missing or unparseable claim, e.g. a HubSpot blip)
+    counts as expired, so they can't get full data by "losing" the claim.
     """
     permissions: str | list[str] = authdata.get("permissions", [])
     if isinstance(permissions, str):
         permissions = [permissions]
-    is_trial_user = "read:trial" in permissions
+    if "read:trial" not in permissions:
+        return False
 
     raw = authdata.get("trial_ends_at")
     if raw is None:
-        return is_trial_user
+        return True
     try:
         ends_at = dt.datetime.fromisoformat(str(raw))
     except ValueError:
         log.warning(f"Unparseable trial_ends_at claim: {raw!r}")
         sentry_sdk.capture_message(f"Unparseable trial_ends_at claim: {raw!r}")
-        return is_trial_user
+        return True
     if ends_at.tzinfo is None:
         ends_at = ends_at.replace(tzinfo=dt.UTC)
     return ends_at <= now

@@ -2142,6 +2142,47 @@ async def test_expired_trial_forecast_older_than_48h_is_403(
 
 
 @pytest.mark.anyio
+async def test_expired_trial_forecast_old_start_is_raised_to_48h(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A window starting before the last 48h only returns values from the last 48h."""
+    app = _make_app(StorageClient(), ["read:trial"], _expired_trial_claims())
+    before = dt.datetime.now(tz=dt.UTC)
+    async with _client_for(app) as ac:
+        resp = await ac.get(
+            "/v1/GB/solar/regions/national/forecast",
+            params={
+                "start_utc": (before - dt.timedelta(days=7)).isoformat(),
+                "end_utc": (before + dt.timedelta(days=1)).isoformat(),
+            },
+        )
+    after = dt.datetime.now(tz=dt.UTC)
+
+    assert resp.status_code == 200
+    times = [dt.datetime.fromisoformat(v["time_utc"]) for v in resp.json()["values"]]
+    assert len(times) > 0
+    assert all(t <= after for t in times)
+    # One time step of slack, as "now" is floored to the country's step.
+    assert all(t >= before - dt.timedelta(hours=48, minutes=30) for t in times)
+
+
+@pytest.mark.anyio
+async def test_expired_trial_snapshot_older_than_48h_is_403(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A time_utc before the last 48h is a 403 for an expired trial."""
+    app = _make_app(StorageClient(), ["read:trial"], _expired_trial_claims())
+    last_week = dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=7)
+    async with _client_for(app) as ac:
+        resp = await ac.get(
+            "/v1/GB/solar/forecasts/snapshot",
+            params={"region_type": "gsp", "time_utc": last_week.isoformat()},
+        )
+    assert resp.status_code == 403
+    assert "last 48 hours" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_expired_trial_snapshot_future_time_is_403(
     isolated_cache: None,  # noqa: ARG001
 ) -> None:
@@ -2211,6 +2252,22 @@ async def test_expired_trial_period_older_than_48h_is_403(
         )
     assert resp.status_code == 403
     assert "last 48 hours" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_expired_trial_period_future_start_is_403(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """A period window wholly in the future is a 403 for an expired trial."""
+    app = _make_app(FixedUUIDStorageClient(), ["read:trial"], _expired_trial_claims())
+    tomorrow = dt.datetime.now(tz=dt.UTC) + dt.timedelta(days=1)
+    async with _client_for(app) as ac:
+        resp = await ac.get(
+            "/v1/GB/solar/forecasts/period",
+            params={"region_type": "gsp", "start_utc": tomorrow.isoformat()},
+        )
+    assert resp.status_code == 403
+    assert "future forecasts are not available" in resp.json()["detail"]
 
 
 @pytest.mark.anyio
