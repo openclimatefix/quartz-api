@@ -1,11 +1,18 @@
 import datetime as dt
+import typing
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 import time_machine
+from fastapi import FastAPI
+from fastapi_cache import FastAPICache
+from httpx import ASGITransport, AsyncClient
+from pyhocon import ConfigTree
 
+from quartz_api.cmd.main import _create_server
 from quartz_api.internal import models
+from quartz_api.internal.middleware.auth import AuthDependency
 
 from .endpoint_types import gsp_id_map
 
@@ -235,3 +242,95 @@ async def test_national_last_updated_default(api_client, mock_storage: AsyncMock
     assert kwargs["window_start"] == frozen_time - dt.timedelta(minutes=30)
     assert kwargs["window_end"] == frozen_time + dt.timedelta(minutes=30)
 
+
+# ---------------------------------------------------------------------------
+# Expired trial gating
+# ---------------------------------------------------------------------------
+
+_auth_dep = typing.get_args(AuthDependency)[1].dependency
+_FROZEN = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
+_EXPIRED_TRIAL = {
+    "permissions": ["read:trial"],
+    "trial_ends_at": (_FROZEN - dt.timedelta(days=1)).isoformat(),
+}
+
+
+def _v0_app(config: ConfigTree, storage: AsyncMock, claims: dict) -> FastAPI:
+    app = _create_server(config)
+    app.dependency_overrides[models.get_storage_client] = lambda: storage
+    app.dependency_overrides[_auth_dep] = lambda: {"sub": "test|user", **claims}
+    return app
+
+
+def _client_for(app: FastAPI) -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.mark.asyncio
+async def test_national_forecast_expired_trial_no_future(
+    config_all_routers: ConfigTree,
+    mock_storage: AsyncMock,
+):
+    """An expired trial only asks the DB for data up to now."""
+    mock_storage.get_locations.return_value = [gsp_id_map[0]]
+    app = _v0_app(config_all_routers, mock_storage, _EXPIRED_TRIAL)
+    await FastAPICache.clear()
+
+    with time_machine.travel(_FROZEN, tick=False):
+        async with _client_for(app) as ac:
+            response = await ac.get("/v0/solar/GB/national/forecast")
+
+    assert response.status_code == 200
+    mock_storage.get_predicted_generation.assert_called()
+    for call in mock_storage.get_predicted_generation.call_args_list:
+        assert call.kwargs["window_end"] <= _FROZEN
+
+
+@pytest.mark.asyncio
+async def test_national_forecast_expired_trial_empty_permissions_not_clamped(
+    config_all_routers: ConfigTree,
+    mock_storage: AsyncMock,
+):
+    """With no roles there's no read:trial, so a past date doesn't clamp to now."""
+    mock_storage.get_locations.return_value = [gsp_id_map[0]]
+    claims = {**_EXPIRED_TRIAL, "permissions": []}
+    app = _v0_app(config_all_routers, mock_storage, claims)
+    await FastAPICache.clear()
+
+    with time_machine.travel(_FROZEN, tick=False):
+        async with _client_for(app) as ac:
+            response = await ac.get("/v0/solar/GB/national/forecast")
+
+    assert response.status_code == 200
+    mock_storage.get_predicted_generation.assert_called()
+    assert any(
+        call.kwargs["window_end"] > _FROZEN
+        for call in mock_storage.get_predicted_generation.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_national_forecast_expired_trial_not_served_full_access_cache(
+    config_all_routers: ConfigTree,
+    mock_storage: AsyncMock,
+):
+    """A full-access response cached for a URL is not served to an expired trial."""
+    mock_storage.get_locations.return_value = [gsp_id_map[0]]
+    url = "/v0/solar/GB/national/forecast"
+    app = _v0_app(config_all_routers, mock_storage, {"permissions": ["read:gb"]})
+    await FastAPICache.clear()
+
+    with time_machine.travel(_FROZEN, tick=False):
+        async with _client_for(app) as ac:
+            full = await ac.get(url)
+            assert full.status_code == 200
+            full_end = mock_storage.get_predicted_generation.call_args.kwargs["window_end"]
+            assert full_end > _FROZEN
+
+            app.dependency_overrides[_auth_dep] = lambda: {"sub": "test|user", **_EXPIRED_TRIAL}
+            trial = await ac.get(url)
+
+    assert trial.status_code == 200
+    # Called again rather than served from the cache, and only up to now.
+    assert mock_storage.get_predicted_generation.call_count == 2
+    assert mock_storage.get_predicted_generation.call_args.kwargs["window_end"] <= _FROZEN

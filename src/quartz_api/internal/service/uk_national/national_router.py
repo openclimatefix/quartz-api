@@ -11,7 +11,7 @@ from pydantic import AfterValidator
 from starlette import status
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from .cache import key_builder
@@ -89,7 +89,7 @@ FORECASTER_VERSION_PVNET = "2.8.0"
 async def get_national_forecast(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency,  # noqa: ARG001
+    auth: AuthDependency,
     end_datetime_utc: Annotated[
         models.UTCDatetimeDefaultWindowEndNonAware,
         Depends(limit_end_datetime_by_permissions),
@@ -142,6 +142,11 @@ async def get_national_forecast(
             start_datetime_utc = pd.Timestamp.utcnow().ceil("30min").to_pydatetime() - dt.timedelta(
                 days=3,
             )
+
+    # end_datetime_utc is already clamped to "now" for expired trials. Clamp
+    # start_datetime_utc too, so it can't end up later than end_datetime_utc.
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        start_datetime_utc = min(start_datetime_utc, end_datetime_utc)
 
     windows: list[tuple[dt.datetime, dt.datetime]] = [(start_datetime_utc, end_datetime_utc)]
     if end_datetime_utc - start_datetime_utc > dt.timedelta(days=7):

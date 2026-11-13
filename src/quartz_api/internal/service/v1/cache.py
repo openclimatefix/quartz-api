@@ -11,6 +11,7 @@ from fastapi import Request, Response
 from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
+from quartz_api.internal.middleware.auth import trial_expired
 
 from .auth_scopes import ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
@@ -102,6 +103,9 @@ async def key_builder(
     gated = _gated_permissions_key(auth)
     if gated:
         parts.append(gated)
+    # Invalidate cache if trial has expired
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        parts.append("trial_ended=true")
     return ":".join(parts)
 
 

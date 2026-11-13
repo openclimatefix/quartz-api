@@ -11,8 +11,9 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from starlette import status
 
+from quartz_api.constants import SUPPORT_EMAIL
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 
 from ..auth_scopes import ADMIN_PERMISSION
 from ..cache import (
@@ -145,6 +146,28 @@ async def get_forecast(
     now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
     win_start = start_utc or now
     win_end = end_utc or now + dt.timedelta(days=2)
+    if trial_expired(auth, now):
+        if win_end.tzinfo is None:
+            win_end = win_end.replace(tzinfo=dt.UTC)
+        if start_utc is not None and start_utc >= now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        floor = now - dt.timedelta(hours=48)
+        if win_end <= floor:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so only the last 48 hours are available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        win_start = max(start_utc or floor, floor)
+        win_end = min(win_end, now)
     validate_window(win_start, win_end)
     win_end = limit_window_end_for_intraday(win_start, win_end, is_intraday_only)
     pgvs: list = []
@@ -330,7 +353,25 @@ async def get_forecasts_at_time(
     # Ahead of the location lookups below: the 403 is an exception, so nothing caches it
     # and a client retrying a far-future timestamp would pay for them on every attempt.
     check_intraday_datetime_limit(snapshot_time, is_intraday_only)
-    nation = await resolve_nation(db, source, country, auth)
+    now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
+    if trial_expired(auth, now):
+        if snapshot_time > now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        if snapshot_time < now - dt.timedelta(hours=48):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so only the last 48 hours are available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+    nation =await resolve_nation(db, source, country, auth)
 
     rt = country.get_region_type(region_type)
     if rt is None:
@@ -458,6 +499,27 @@ async def get_forecasts_period(
         )
 
     win_start, win_end = timeseries_window(start_utc, end_utc)
+    now = country.floor_to_time_step(dt.datetime.now(tz=dt.UTC))
+    if trial_expired(auth, now):
+        if win_start >= now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so future forecasts are not available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        floor = now - dt.timedelta(hours=48)
+        if win_end <= floor:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so only the last 48 hours are available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        win_start = max(win_start, floor)
+        win_end = min(win_end, now)
     validate_window(win_start, win_end)
     win_end = limit_window_end_for_intraday(win_start, win_end, is_intraday_only)
 

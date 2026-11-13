@@ -1,14 +1,17 @@
 """Cache key builder."""
 
+import datetime as dt
 import logging
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import Request, Response
 
+from quartz_api.internal.middleware.auth import trial_expired
+
 log = logging.getLogger(__name__)
 
-cache_dependent_scopes = ["read:intraday"]
+cache_dependent_scopes = ["read:uk-intraday"]
 legacy_query_params = ["historic"]
 
 
@@ -59,6 +62,10 @@ async def key_builder(
         .replace("False", "false")
         .replace("True", "true")
     )
+
+    #Invalidate cache if trial has expired
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        key += ":trial_ended=true"
 
     log.info(f"Cache key generated: {key}")
 

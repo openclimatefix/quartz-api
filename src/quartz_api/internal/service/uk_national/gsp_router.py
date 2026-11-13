@@ -25,7 +25,7 @@ from pydantic import AfterValidator, TypeAdapter
 from starlette import status
 
 from quartz_api.internal import models
-from quartz_api.internal.middleware.auth import AuthDependency
+from quartz_api.internal.middleware.auth import AuthDependency, trial_expired
 from quartz_api.internal.service.uk_national.metadata import format_metadata
 
 from ...models.endpoint_types import default_now_window_start, default_window_end
@@ -73,7 +73,7 @@ _cache_warming: bool = False
 async def get_forecasts_for_a_specific_gsp(
     request: Request,  # noqa: ARG001
     db: models.StorageClientDependency,
-    auth: AuthDependency, # noqa: ARG001
+    auth: AuthDependency,
     gsp_id: int,
     start_datetime_utc: models.UTCDatetimeDefaultWindowStartShiftUK,
     end_datetime_utc: Annotated[
@@ -108,6 +108,11 @@ async def get_forecasts_for_a_specific_gsp(
         # According to the integration tests, we should return a 200 OK when getting a non-
         # existent GSP - so that is what is replicated here. Seems odd to me.
         return []
+
+    # end_datetime_utc is already clamped to "now" for expired trials. Clamp
+    # start_datetime_utc too, so it can't end up later than end_datetime_utc.
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        start_datetime_utc = min(start_datetime_utc, end_datetime_utc)
 
     pgvs = await db.get_predicted_generation(
         location_uuid=gsp_id_map[gsp_id].uuid,
@@ -298,7 +303,7 @@ async def get_all_available_forecasts(
     request: Request,
     background_tasks: BackgroundTasks,
     db: models.StorageClientDependency,
-    auth: AuthDependency,  # noqa: ARG001
+    auth: AuthDependency,
     start_datetime_utc: Annotated[
         models.UTCDatetimeDefaultNowWindowStart,
         AfterValidator(lambda v: pd.Timestamp(v).ceil("30min").to_pydatetime()),
@@ -329,6 +334,11 @@ async def get_all_available_forecasts(
 
     start_datetime_utc_set = start_datetime_utc != default_now_window_start()
     end_datetime_utc_set = end_datetime_utc != default_window_end()
+
+    # end_datetime_utc is already clamped to "now" for expired trials. Clamp
+    # start_datetime_utc too, so it can't end up later than end_datetime_utc.
+    if trial_expired(auth, dt.datetime.now(dt.UTC)):
+        start_datetime_utc = min(start_datetime_utc, end_datetime_utc)
 
     if gsp_ids is None and start_datetime_utc != end_datetime_utc:
             if start_datetime_utc_set or end_datetime_utc_set:
