@@ -500,7 +500,16 @@ async def get_forecasts_period(
                     f"Contact {SUPPORT_EMAIL} to upgrade."
                 ),
             )
-        win_start = max(win_start, now - dt.timedelta(hours=48))
+        floor = now - dt.timedelta(hours=48)
+        if win_end <= floor:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your trial has ended, so only the last 48 hours are available. "
+                    f"Contact {SUPPORT_EMAIL} to upgrade."
+                ),
+            )
+        win_start = max(win_start, floor)
         win_end = min(win_end, now)
     validate_window(win_start, win_end)
     win_end = limit_window_end_for_intraday(win_start, win_end, is_intraday_only)
