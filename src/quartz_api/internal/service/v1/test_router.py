@@ -21,7 +21,11 @@ from quartz_api.internal.backends.dummydb.client import StorageClient
 from quartz_api.internal.middleware.auth import AuthDependency
 
 from .country_config import COUNTRIES
-from .helpers import api_facing_model_errors, parse_forecast_metadata
+from .helpers import (
+    INTRADAY_LIMIT_HOURS,
+    api_facing_model_errors,
+    parse_forecast_metadata,
+)
 from .router import router
 
 _auth_dep = typing.get_args(AuthDependency)[1].dependency
@@ -423,6 +427,18 @@ async def intraday_client() -> AsyncGenerator[AsyncClient, None]:
     """Test client with GB intraday-only permission."""
     FastAPICache.init(InMemoryBackend(), prefix="test")
     app = _make_app(StorageClient(), ["read:uk-intraday"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def intraday_cloudcasting_client() -> AsyncGenerator[AsyncClient, None]:
+    """Test client with GB intraday-only permission plus the cloudcasting add-on."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(StorageClient(), ["read:uk-intraday", "read:gb-solar-cloudcasting"])
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -2178,10 +2194,7 @@ def test_no_default_model_is_gated() -> None:
     """The config invariant the cache depends on, across every country and region type."""
     for code, cfg in COUNTRIES.items():
         for rt in cfg.region_types:
-            defaults = [rt.default_model_api_name()]
-            if rt.intraday_default_model is not None:
-                defaults.append(rt.intraday_default_model.api_name)
-            for name in filter(None, defaults):
+            for name in filter(None, [rt.default_model_api_name()]):
                 fm = rt.get_model_by_api_name(name)
                 assert fm is None or fm.required_permission is None, (
                     f"{code}/{rt.type}: default model '{name}' needs "
@@ -2191,79 +2204,138 @@ def test_no_default_model_is_gated() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Auth — intraday model restriction
+# Auth — intraday horizon limit
 # ---------------------------------------------------------------------------
 
 
+def _utc_z(offset: dt.timedelta) -> str:
+    """now + offset as a Z-suffixed timestamp: a '+00:00' offset decodes as a space."""
+    return (dt.datetime.now(tz=dt.UTC) + offset).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 @pytest.mark.anyio
-async def test_intraday_user_forecast_defaults_to_intraday_model(
+async def test_intraday_user_forecast_defaults_to_region_default(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user gets the configured intraday default model for GSP."""
+    """The intraday tier limits the limit, not the model: the default is unchanged."""
     gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
-    assert gsp_rt is not None and gsp_rt.intraday_default_model is not None
-    expected_model = gsp_rt.intraday_default_model.api_name
+    assert gsp_rt is not None
     region_id = str(uuid4())
     resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
     assert resp.status_code == 200
-    assert resp.json()["model_name"] == expected_model
+    assert resp.json()["model_name"] == gsp_rt.default_model_api_name()
 
 
 @pytest.mark.anyio
-async def test_intraday_user_requesting_intraday_model_200(
+async def test_intraday_user_can_request_blend(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user can explicitly request any permitted intraday model → 200."""
-    gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
-    assert gsp_rt is not None and gsp_rt.intraday_models
-    # intraday_models must be a subset of forecast_models — if this fails, update the config
-    assert all(m in gsp_rt.forecast_models for m in gsp_rt.intraday_models), (
-        "intraday_models contains models absent from forecast_models; "
-        "_validate_model will reject them with 400"
-    )
-    intraday_model = gsp_rt.intraday_models[0].api_name
+    """Blend is accessible to an intraday-only caller, as it always has been in v0.
+
+    Note: this returned 403 before #430.
+    """
     region_id = str(uuid4())
     resp = await intraday_client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model={intraday_model}",
+        f"/v1/GB/solar/regions/{region_id}/forecast?model_name=blend",
     )
     assert resp.status_code == 200
+    assert resp.json()["model_name"] == "blend"
 
 
 @pytest.mark.anyio
-async def test_intraday_user_forecast_period_403(
+async def test_intraday_user_forecast_truncated_to_horizon(
     intraday_client: AsyncClient,
 ) -> None:
-    """The period matrix serves the blend only, so an intraday-only user gets 403."""
-    resp = await intraday_client.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    """The default 48-hour window is cut back to the intraday horizon."""
+    region_id = str(uuid4())
+    resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
+    assert resp.status_code == 200
+    values = resp.json()["values"]
+    assert values
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) <= limit
+
+
+@pytest.mark.anyio
+async def test_full_access_user_forecast_reaches_past_horizon(
+    client: AsyncClient,
+) -> None:
+    """The clip is the intraday tier's, not everyone's."""
+    region_id = str(uuid4())
+    resp = await client.get(f"/v1/GB/solar/regions/{region_id}/forecast")
+    assert resp.status_code == 200
+    values = resp.json()["values"]
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    assert dt.datetime.fromisoformat(values[-1]["time_utc"]) > limit
+
+
+@pytest.mark.anyio
+async def test_intraday_user_window_beyond_horizon_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """A window that starts past the horizon is a 403, not an empty series."""
+    region_id = str(uuid4())
+    start = _utc_z(dt.timedelta(hours=INTRADAY_LIMIT_HOURS + 4))
+    end = _utc_z(dt.timedelta(hours=INTRADAY_LIMIT_HOURS + 8))
+    resp = await intraday_client.get(
+        f"/v1/GB/solar/regions/{region_id}/forecast?start_utc={start}&end_utc={end}",
+    )
     assert resp.status_code == 403
-    assert "intraday-only" in resp.json()["detail"]
+    assert str(INTRADAY_LIMIT_HOURS) in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_intraday_user_snapshot_beyond_horizon_403(
+    intraday_client: AsyncClient,
+) -> None:
+    """A snapshot is one timestamp, so a time past the horizon is refused, not moved."""
+    time_utc = _utc_z(dt.timedelta(hours=INTRADAY_LIMIT_HOURS + 4))
+    resp = await intraday_client.get(
+        f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc={time_utc}",
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_intraday_user_snapshot_within_horizon_200(
+    intraday_client: AsyncClient,
+) -> None:
+    """A snapshot inside the horizon is served normally."""
+    time_utc = _utc_z(dt.timedelta(hours=1))
+    resp = await intraday_client.get(
+        f"/v1/GB/solar/forecasts/snapshot?region_type=gsp&time_utc={time_utc}",
+    )
+    assert resp.status_code == 200
 
 
 @pytest.mark.anyio
 async def test_intraday_user_generation_period_not_403(
     intraday_client: AsyncClient,
 ) -> None:
-    """Generation has no model tiering, so the intraday restriction must not leak to it."""
+    """Generation is observed data, so the horizon limit must not reach it."""
     resp = await intraday_client.get("/v1/GB/solar/generation/period?region_type=gsp")
     assert resp.status_code != 403
 
 
 @pytest.mark.anyio
-async def test_intraday_user_requesting_non_intraday_model_403(
+async def test_intraday_user_gated_model_still_403(
     intraday_client: AsyncClient,
 ) -> None:
-    """Intraday-only user requesting a model outside their permitted set → 403."""
-    gsp_rt = COUNTRIES["GB"].get_region_type("gsp")
-    assert gsp_rt is not None
-    allowed = gsp_rt.intraday_api_names()
-    restricted_model = next(
-        m.api_name for m in gsp_rt.forecast_models if m.api_name not in allowed
-    )
-    region_id = str(uuid4())
-    resp = await intraday_client.get(
-        f"/v1/GB/solar/regions/{region_id}/forecast?model={restricted_model}",
-    )
+    """Dropping the tier's model list leaves per-model permissions intact."""
+    resp = await intraday_client.get(f"{_SNAPSHOT}&model_name={_gated_gb_national_model()}")
     assert resp.status_code == 403
+    assert "subscription" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_intraday_user_with_cloudcasting_gets_it(
+    intraday_cloudcasting_client: AsyncClient,
+) -> None:
+    """An intraday subscription plus the cloudcasting add-on reaches the model."""
+    model = _gated_gb_national_model()
+    resp = await intraday_cloudcasting_client.get(f"{_SNAPSHOT}&model_name={model}")
+    assert resp.status_code == 200
+    assert resp.json()["model_name"] == model
 
 
 @pytest.mark.anyio
@@ -2274,6 +2346,102 @@ async def test_intraday_user_can_access_generation_data(
     region_id = str(uuid4())
     resp = await intraday_client.get(f"/v1/GB/solar/regions/{region_id}/generation")
     assert resp.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_intraday_window_not_served_from_a_full_callers_cache(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The clip runs behind @cache, so the tier has to be part of the cache key.
+
+    Both callers request the same URL with no params. Without the tier in the key the
+    second request is served the first's 48-hour response and never reaches the handler,
+    which hands the intraday tier the full product with nothing in the payload to show
+    it: unlike the model restriction this replaced, a leak here has no visible symptom.
+    """
+    url = f"/v1/GB/solar/regions/{uuid4()}/forecast"
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+
+    full = _make_app(StorageClient(), ["read:gb"])
+    async with AsyncClient(transport=ASGITransport(app=full), base_url="http://test") as ac:
+        first = await ac.get(url)
+    assert first.status_code == 200
+    assert dt.datetime.fromisoformat(first.json()["values"][-1]["time_utc"]) > limit
+
+    intraday = _make_app(StorageClient(), ["read:uk-intraday"])
+    async with AsyncClient(transport=ASGITransport(app=intraday), base_url="http://test") as ac:
+        second = await ac.get(url)
+    assert second.status_code == 200
+    last = dt.datetime.fromisoformat(second.json()["values"][-1]["time_utc"])
+    assert last <= limit, "served a full-access window from a full caller's cache"
+
+
+async def _seed_gsp_period_cache() -> None:
+    """Pre-warm the GB GSP period cache for one region, spanning past the horizon."""
+    prefix = FastAPICache.get_prefix()
+    backend = FastAPICache.get_backend()
+    base = f"{prefix}:v1:period:GB:solar:gsp"
+    await backend.set(
+        f"{base}:_meta",
+        json.dumps(
+            {
+                "model_name": "blend",
+                "model_version": "1",
+                "last_updated_utc": None,
+                "latest_init_utc": None,
+                "cache_updated_utc": None,
+            },
+        ).encode(),
+        expire=3600,
+    )
+    now = dt.datetime.now(tz=dt.UTC)
+    hours = (1, INTRADAY_LIMIT_HOURS + 4, INTRADAY_LIMIT_HOURS + 12)
+    await backend.set(
+        f"{base}:{_FIXED_GSP_UUID}",
+        json.dumps(
+            [
+                {
+                    "time_utc": (now + dt.timedelta(hours=h)).isoformat(),
+                    "power_kW": 100.0,
+                    "plevels_kW": {},
+                }
+                for h in hours
+            ],
+        ).encode(),
+        expire=3600,
+    )
+
+
+@pytest.mark.anyio
+async def test_intraday_period_matrix_truncated_to_horizon(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The period matrix is served to intraday callers, cut to the horizon."""
+    await _seed_gsp_period_cache()
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    app = _make_app(FixedUUIDStorageClient(), ["read:uk-intraday"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    assert resp.status_code == 200
+    times = [dt.datetime.fromisoformat(t) for t in resp.json()["times_utc"]]
+    assert times, "no values survived the clip"
+    assert max(times) <= limit
+    assert len(resp.json()["regions"][0]["power_kW"]) == len(times)
+
+
+@pytest.mark.anyio
+async def test_full_access_period_matrix_reaches_past_horizon(
+    isolated_cache: None,  # noqa: ARG001
+) -> None:
+    """The same seeded cache, uncut, so the test above pins the clip and not the seed."""
+    await _seed_gsp_period_cache()
+    limit = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=INTRADAY_LIMIT_HOURS)
+    app = _make_app(FixedUUIDStorageClient(), ["read:gb"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/v1/GB/solar/forecasts/period?region_type=gsp")
+    assert resp.status_code == 200
+    times = [dt.datetime.fromisoformat(t) for t in resp.json()["times_utc"]]
+    assert max(times) > limit
 
 
 # ---------------------------------------------------------------------------
@@ -2416,33 +2584,6 @@ def test_country_config_default_models_are_valid() -> None:
             assert rt.default_model in model_names, (
                 f"{country_code}/{rt.type}: default_model '{rt.default_model}' "
                 f"is not in forecast_models {sorted(model_names)}"
-            )
-
-
-def test_country_config_intraday_models_subset_of_forecast_models() -> None:
-    """intraday_models must be a subset of forecast_models for every region type."""
-    for country_code, cfg in COUNTRIES.items():
-        for rt in cfg.region_types:
-            for fm in rt.intraday_models:
-                assert fm in rt.forecast_models, (
-                    f"{country_code}/{rt.type}: intraday model '{fm.api_name}' "
-                    f"is absent from forecast_models"
-                )
-
-
-def test_country_config_intraday_default_in_intraday_models() -> None:
-    """A region type restricting intraday users must name a default they can have."""
-    for country_code, cfg in COUNTRIES.items():
-        for rt in cfg.region_types:
-            if not rt.intraday_models:
-                continue
-            assert rt.intraday_default_model is not None, (
-                f"{country_code}/{rt.type}: intraday_models is set but "
-                f"intraday_default_model is not"
-            )
-            assert rt.intraday_default_model in rt.intraday_models, (
-                f"{country_code}/{rt.type}: intraday_default_model "
-                f"'{rt.intraday_default_model.api_name}' is not in intraday_models"
             )
 
 
