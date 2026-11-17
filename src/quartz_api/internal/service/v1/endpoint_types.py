@@ -714,7 +714,7 @@ class SiteDetail(SiteInput):
 
     site_id: UUID
     capacity_kW: float
-    metadata: SolarMetadata | WindMetadata = Field(default_factory=SolarMetadata)
+    metadata: SolarMetadata | WindMetadata | None = None
 
 
 class SiteList(BaseModel):
