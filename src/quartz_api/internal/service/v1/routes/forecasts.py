@@ -206,9 +206,9 @@ def _forecast_value(
     status_code=status.HTTP_200_OK,
 )
 # Traders poll this to detect a new run the moment it is saved, so the hourly default
-# would cut them off mid-window. A route limit replaces the defaults rather than adding
-# to them (slowapi's override_defaults is True), leaving a per-second cap and no hourly
-# cliff. Above @cache so a cached hit still counts against the cap.
+# would cut them off mid-window. A route limit replaces the app-wide default limits
+# (slowapi's override_defaults is True), so this route gets a per-second cap and no
+# hourly one. Above @cache so a cached hit still counts against the cap.
 @limiter.limit("20/second")
 @cache(key_builder=key_builder, expire=1)
 async def get_forecast_last_updated_timestamp(

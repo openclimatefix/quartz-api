@@ -28,10 +28,9 @@ def _check_channel(channel: str) -> None:
 
 
 @router.get("/", response_model=HistoricSatelliteData)
-# Two limits in one decorator: a route limit replaces the defaults rather than adding
-# to them, so the hourly backstop has to be named here or the route has none at all.
-# Spelling it as override_defaults=False instead would pull in the default 20/second
-# and quietly cap this route below the per-second rate it asks for.
+# A route limit replaces the app-wide default limits, so the hourly cap is repeated
+# here or this route would have none. Keeping the defaults (override_defaults=False)
+# is not an option: they include 20/second, which would cap this route below 50/second.
 @limiter.limit("50/second;3600/hour")
 async def get_historic_satellite_data_url(
     request: Request, # noqa: ARG001
