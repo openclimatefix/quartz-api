@@ -2,7 +2,7 @@
 
 import datetime as dt
 import enum
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import Path, Query
@@ -700,9 +700,9 @@ class SiteInput(BaseModel):
 
     client_site_id: int | None = None
     client_site_name: str | None = None
-    status: str | None = Field(
+    status: Literal["active", "inactive", "commissioning"] | None = Field(
         None,
-        description="One of 'active', 'inactive', 'commissioning'. Unset reads as 'active'.",
+        description="Unset reads as 'active'.",
     )
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
