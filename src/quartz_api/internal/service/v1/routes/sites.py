@@ -137,6 +137,7 @@ async def create_site(
         latitude=site_input.latitude,
         longitude=site_input.longitude,
         capacity_kilowatts=site_input.capacity_kW,
+        energy_type=source,
         metadata=site_input_to_metadata(site_input),
     )
 
@@ -214,6 +215,7 @@ async def update_site(
             if site_input.capacity_kW is not None
             else existing.capacity_kilowatts
         ),
+        energy_type=source,
         metadata=new_metadata,
     )
 
