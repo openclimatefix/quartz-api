@@ -198,3 +198,52 @@ def resolve_site_forecaster(site: models.Location, site_cfg: SiteConfig) -> str:
             detail="No forecast model is configured for this site.",
         )
     return str(forecaster)
+
+
+async def list_owned_sites(
+    db: models.StorageInterface,
+    auth: AuthDependency,
+    energy_type: models.EnergyType,
+    country_code: str,
+) -> list[models.Location]:
+    """Every site the caller owns for this country and source, in a deterministic order."""
+    require_org_id(auth)
+    sites = await db.get_locations(
+        energy_type=energy_type,
+        location_type=models.LocationType.SITE,
+        authdata=auth,
+        country_code=country_code,
+    )
+    return sorted(
+        sites,
+        key=lambda site: (str(site.metadata.get("client_site_name", site.name)), str(site.uuid)),
+    )
+
+
+def select_sites_for_period(
+    sites: list[models.Location],
+    site_ids: list[UUID] | None,
+) -> list[models.Location]:
+    """Narrow an owned-site list to the ones a period request asked for."""
+    if site_ids is None:
+        if len(sites) > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"You have {len(sites)} sites; this endpoint returns at most "
+                    "10 per request. Pass site_ids to choose which, "
+                    "e.g. ?site_ids=<uuid>&site_ids=<uuid>. "
+                    "Site UUIDs come from GET /sites."
+                ),
+            )
+        return sites
+
+    sites_by_id = {site.uuid: site for site in sites}
+    missing = next((site_id for site_id in site_ids if site_id not in sites_by_id), None)
+    if missing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No site found for '{missing}'.",
+        )
+    wanted = set(site_ids)
+    return [site for site in sites if site.uuid in wanted]
