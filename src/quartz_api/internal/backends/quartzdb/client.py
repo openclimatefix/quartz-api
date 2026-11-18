@@ -332,6 +332,7 @@ class StorageClient(models.StorageInterface):
     async def put_actual_generation(
         self,
         generation_values: list[models.ActualGenerationValue],
+        location_uuid: UUID | str,
         energy_type: models.EnergyType,
         location_type: models.LocationType,
         authdata: dict[str, str],
