@@ -66,7 +66,8 @@ def require_org_id(auth: AuthDependency) -> str | None:
     if org_id == "no-org-access":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    #ocf admin returns None but have a valid org_id, added below for testing
+    # Admins get None (no org filter, so they see all sites); fall back to their own
+    # company so sites they create are owned by it.
     if org_id is None:
         app_metadata = auth.get("app_metadata", {})
         org_id = app_metadata.get("hubspot_company_id") if isinstance(app_metadata, dict) else None
