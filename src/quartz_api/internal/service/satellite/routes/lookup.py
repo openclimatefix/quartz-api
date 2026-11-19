@@ -28,7 +28,10 @@ def _check_channel(channel: str) -> None:
 
 
 @router.get("/", response_model=HistoricSatelliteData)
-@limiter.limit("50/second")
+# A route limit replaces the app-wide default limits, so the hourly cap is repeated
+# here or this route would have none. Keeping the defaults (override_defaults=False)
+# is not an option: they include 20/second, which would cap this route below 50/second.
+@limiter.limit("50/second;3600/hour")
 async def get_historic_satellite_data_url(
     request: Request, # noqa: ARG001
     channel: str,
@@ -78,7 +81,7 @@ async def get_historic_satellite_data_url(
     description=f"Get a pre-signed URL for a layer's rolling stack: "
     f"one multi-band tif of the last {BACKFILL_HOURS} h.",
 )
-@limiter.limit("20/second")
+@limiter.limit("20/second;3600/hour")
 async def get_satellite_stack_url(
     request: Request,  # noqa: ARG001
     channel: str,

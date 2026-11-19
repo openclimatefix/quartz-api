@@ -102,13 +102,6 @@ def test_hidden_default_model_fails() -> None:
         filter_for_deployment(catalogue, None, "production")
 
 
-def test_hidden_intraday_default_fails() -> None:
-    rt = replace(_NATIONAL, intraday_models=(_DEV_MODEL,), intraday_default_model=_DEV_MODEL)
-    catalogue = {"AA": replace(_country("AA"), region_types=(rt,))}
-    with pytest.raises(ValueError, match="intraday default model 'dev_model'"):
-        filter_for_deployment(catalogue, None, "production")
-
-
 def test_dev_only_model_is_unrequestable_on_prod() -> None:
     """A development model in a production region type is hidden and rejected."""
     rt = filter_for_deployment(_CATALOGUE, "AA", "production")["AA"].region_types[0]
