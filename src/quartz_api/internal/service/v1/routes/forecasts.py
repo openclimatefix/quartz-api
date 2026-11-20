@@ -552,7 +552,7 @@ async def get_forecasts_period(
                 capacity_kW=r.capacity_kilowatts,
                 power_kW=align_to_times(windowed, times, lambda v: v.power_kW),
                 plevels_kW={
-                    k: align_to_times(windowed, times, lambda v, k=k: v.plevels_kW.get(k, 0.0))
+                    k: align_to_times(windowed, times, lambda v, k=k: v.plevels_kW.get(k))
                     for k in sorted(plevel_keys, key=plevel_sort_key)
                 },
             ),

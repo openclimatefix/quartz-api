@@ -2917,7 +2917,7 @@ async def test_get_forecasts_period_aligns_regions_to_shared_times(
         base,
         _SECOND_GSP_UUID,
         [
-            {"time_utc": t2, "power_kW": 30.0, "plevels_kW": {"p10": 25.0}},
+            {"time_utc": t2, "power_kW": 30.0, "plevels_kW": {"p10": 25.0, "p90": 35.0}},
             {"time_utc": t0, "power_kW": 10.0, "plevels_kW": {"p10": 5.0}},
         ],
     )
@@ -2931,7 +2931,8 @@ async def test_get_forecasts_period_aligns_regions_to_shared_times(
     assert regions["gsp_a"]["power_kW"] == [1.0, 2.0, None]
     assert regions["gsp_a"]["plevels_kW"] == {"p10": [0.5, 1.5, None]}
     assert regions["gsp_b"]["power_kW"] == [10.0, None, 30.0]
-    assert regions["gsp_b"]["plevels_kW"] == {"p10": [5.0, None, 25.0]}
+    # p90 only at t2: t0 has a value but no p90, so null there and not 0.0
+    assert regions["gsp_b"]["plevels_kW"] == {"p10": [5.0, None, 25.0], "p90": [None, None, 35.0]}
 
 
 @pytest.mark.anyio
