@@ -12,7 +12,7 @@ from fastapi_cache import FastAPICache
 
 from quartz_api.internal import models
 
-from .auth_scopes import ALL_COUNTRY_PERMISSIONS
+from .auth_scopes import ADMIN_PERMISSION, ALL_COUNTRY_PERMISSIONS
 from .country_config import COUNTRIES
 from .helpers import internal_to_api_name, timeseries_window
 
@@ -31,6 +31,10 @@ def _country_access_tier(auth: dict, country: object) -> str:
     entry, so read:gb, read:trial, and read:partner users all hit the same key.
     """
     perms = frozenset(auth.get("permissions", []))
+    # add hidden param to cache to ensure de is not "leaked" to others
+    if getattr(country, "hidden_in_docs", False):
+        allowed = ADMIN_PERMISSION in perms or getattr(country, "permission", None) in perms
+        return "full" if allowed else "unauthorized"
     if perms & ALL_COUNTRY_PERMISSIONS:
         return "full"
     permission = getattr(country, "permission", None)

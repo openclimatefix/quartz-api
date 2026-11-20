@@ -227,7 +227,9 @@ class _CountryParam(str):
         core_schema_obj: object,
         handler: object,
     ) -> dict:
-        return {"type": "string", "enum": list(COUNTRIES.keys())}
+        # below we are filtering countries with hidden_in_docs=True - done for DE
+        visible = [c for c, cfg in COUNTRIES.items() if not cfg.hidden_in_docs]
+        return {"type": "string", "enum": visible}
 
     @property
     def code(self) -> str:

@@ -135,7 +135,8 @@ def test_server_boots_serving_only_the_deployment_countries(
     out = json.loads(result.stdout.strip().splitlines()[-1])
     assert out["enums"] == [served]
     assert out["status"] == {
-        code: 200 if code in served else 422 for code in ("GB", "NL", "DE")
+        code: 200 if code in served or code in countries else 422
+        for code in ("GB", "NL", "DE")
     }
 
 
