@@ -544,6 +544,42 @@ class ReverseOrderGSPClient(StorageClient):
         )
 
 
+_EMPTY_GSP_UUID = uuid4()
+
+
+class EmptyFirstGSPClient(FixedUUIDStorageClient):
+    """Prod's order on 2026-11-20: a GSP with no cached values listed before one with data."""
+
+    async def get_locations(  # type: ignore[override]
+        self,
+        energy_type: models.EnergyType,
+        location_type: models.LocationType | None,
+        authdata: dict,
+        location_uuid: UUID | None = None,
+        enclosing_location_uuid: UUID | None = None,
+        country_code: str | None = None,
+    ) -> list[models.Location]:
+        locations = await super().get_locations(
+            energy_type=energy_type,
+            location_type=location_type,
+            authdata=authdata,
+            location_uuid=location_uuid,
+            enclosing_location_uuid=enclosing_location_uuid,
+            country_code=country_code,
+        )
+        if location_type != models.LocationType.GSP:
+            return locations
+        empty = models.Location(
+            uuid=_EMPTY_GSP_UUID,
+            name="dube_p",
+            latitude=58.3,
+            longitude=-3.4,
+            capacity_kilowatts=0.001,
+            location_type=models.LocationType.GSP,
+        )
+        return [empty, *locations]
+
+
 class NLProvinceClient(NationNameStorageClient):
     """NL client that returns a stable UUID for the Friesland province.
 
@@ -1148,6 +1184,35 @@ async def test_get_forecasts_period_window_excludes_out_of_range_values(
     body = resp.json()
     assert body["times_utc"] == []
     assert body["regions"][0]["power_kW"] == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind", ["forecasts", "generation"])
+async def test_get_period_times_survive_empty_first_region(kind: str) -> None:
+    """An empty region listed first must not blank `times_utc` for every region."""
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+    app = _make_app(EmptyFirstGSPClient(), ["read:gb"])
+    t = dt.datetime.now(tz=dt.UTC).replace(microsecond=0)
+    value = {"time_utc": t.isoformat(), "power_kW": 1.0, "plevels_kW": {}}
+    if kind == "forecasts":
+        await _set_forecast_meta()
+        await _set_fixed_region_values([value])
+        base = f"{FastAPICache.get_prefix()}:v1:period:GB:solar:gsp"
+        query = "region_type=gsp"
+    else:
+        await _set_generation_meta()
+        await _set_fixed_generation_values([value])
+        base = f"{FastAPICache.get_prefix()}:v1:period:generation:GB:solar:gsp:pvlive_in_day"
+        query = "region_type=gsp&observer=pvlive_in_day"
+    await FastAPICache.get_backend().set(f"{base}:{_EMPTY_GSP_UUID}", b"[]", expire=3600)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get(f"/v1/GB/solar/{kind}/period?{query}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["times_utc"]) == 1
+    assert [len(r["power_kW"]) for r in body["regions"]] == [0, 1]
 
 
 # ---------------------------------------------------------------------------
