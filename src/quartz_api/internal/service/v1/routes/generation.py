@@ -397,7 +397,12 @@ async def get_generation_period(
         windowed = [v for v in all_values if win_start <= v.time_utc <= win_end]
         all_region_data.append((r, windowed))
 
-    times = [v.time_utc for v in all_region_data[0][1]] if all_region_data else []
+    # Fullest region, not the first: the first may have no values (prod GSP 92, 2026-11-20).
+    times = (
+        [v.time_utc for v in max((w for _, w in all_region_data), key=len)]
+        if all_region_data
+        else []
+    )
     region_series: list[RegionGeneration] = []
     for r, windowed in all_region_data:
         region_series.append(
